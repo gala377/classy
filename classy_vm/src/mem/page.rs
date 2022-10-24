@@ -15,23 +15,22 @@ pub struct Page {
 }
 
 impl Page {
-    pub fn new(start: NonNull<u8>, size: usize, align: usize) -> Self {
+    pub unsafe fn new(start: NonNull<u8>, size: usize, align: usize) -> Self {
         Page {
             start,
             size,
             align,
-            free: unsafe { page_free_start(start, size) } ,
+            free: page_free_start(start, size),
             owner: None,
             next: None,
         }
     }
 
-    pub fn new_linked(start: NonNull<u8>, size: usize, align: usize, next: NonNull<Page>) -> Self {
+    pub unsafe fn new_linked(start: NonNull<u8>, size: usize, align: usize, next: NonNull<Page>) -> Self {
         Page {
             next: Some(next),
             ..Page::new(start, size, align)
         }
-        
     }
 
     pub fn end(&self) -> NonNull<u8> {
@@ -43,11 +42,10 @@ impl Page {
     }
 }
 
-
 unsafe fn page_free_start(start: NonNull<u8>, size: usize) -> NonNull<u8> {
     debug_assert!(
         size >= std::mem::size_of::<Page>(),
         "the page is not big enough to hold its header"
     );
-        NonNull::new_unchecked(start.as_ptr().add(std::mem::size_of::<Page>()))
+    NonNull::new_unchecked(start.as_ptr().add(std::mem::size_of::<Page>()))
 }

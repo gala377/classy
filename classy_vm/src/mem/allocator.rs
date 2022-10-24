@@ -1,6 +1,6 @@
 use std::ptr::NonNull;
 
-use super::{ ptr::Ptr, page::Page };
+use super::{page::Page, ptr::Ptr};
 
 pub struct Allocator {
     pub pages: Ptr<Page>,
@@ -8,9 +8,7 @@ pub struct Allocator {
 
 impl Allocator {
     pub fn new() -> Allocator {
-        Allocator {
-            pages: Ptr::null(),
-        }
+        Allocator { pages: Ptr::null() }
     }
 
     pub fn allocate_page(&mut self, size: usize, align: usize) -> Ptr<Page> {
@@ -29,13 +27,16 @@ impl Allocator {
         // create page now because accessing uninitialized memory is UB
         // so we cannot just do something like (*allocated).size = size
         // as the memory under allocated is not properly initialized.
-        let page = match self.pages.inner() {
-            None => Page::new(start, size, align),
-            Some(next) => Page::new_linked(start, size, align, next),
+        // SAFETY: start + size is one allocation so this is safe.
+        let page = unsafe {
+            match self.pages.inner() {
+                None => Page::new(start, size, align),
+                Some(next) => Page::new_linked(start, size, align, next),
+            }
         };
-        
+
         let page_ptr = start.cast::<Page>();
-        // SAFETY: page_ptr is not null, properly aligned and can hold 
+        // SAFETY: page_ptr is not null, properly aligned and can hold
         // the value of the type Page.
         // This has been checked with assertions earlier.
         unsafe {
@@ -50,7 +51,7 @@ impl Allocator {
 impl Drop for Allocator {
     fn drop(&mut self) {
         while let Ptr(Some(page)) = self.pages {
-            unsafe { 
+            unsafe {
                 self.pages = Ptr((*page.as_ptr()).next);
                 let size = (*page.as_ptr()).size;
                 let align = (*page.as_ptr()).align;
@@ -61,8 +62,7 @@ impl Drop for Allocator {
     }
 }
 
-
-#[cfg(test)] 
+#[cfg(test)]
 mod tests {
     use super::Allocator;
 
@@ -80,7 +80,6 @@ mod tests {
         let mut alloc = Allocator::new();
         alloc.allocate_page(PAGE_SIZE, PAGE_ALIGN);
     }
-
 
     #[test]
     fn allocating_mutliple_pages_does_work() {
