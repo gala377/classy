@@ -1,4 +1,4 @@
 pub mod allocator;
 pub mod ptr;
-
-mod page;
+pub mod bump;
+pub mod page;

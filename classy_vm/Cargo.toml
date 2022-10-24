@@ -2,3 +2,6 @@
 name = "classy_vm"
 version = "0.1.0"
 edition = "2021"
+
+[dependencies]
+sptr = "0.3.2"

@@ -67,6 +67,9 @@ dependencies = [
 [[package]]
 name = "classy_vm"
 version = "0.1.0"
+dependencies = [
+ "sptr",
+]
 
 [[package]]
 name = "heck"
@@ -142,6 +145,12 @@ checksum = "bbe448f377a7d6961e30f5955f9b8d106c3f5e449d493ee1b125c1d43c2b5179"
 dependencies = [
  "proc-macro2",
 ]
+
+[[package]]
+name = "sptr"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b9b39299b249ad65f3b7e96443bad61c02ca5cd3589f46cb6d610a0fd6c0d6a"
 
 [[package]]
 name = "strsim"
