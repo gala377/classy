@@ -21,10 +21,14 @@ struct Args {
 }
 
 fn main() {
-    println!("Size and align of page: {} / {}", std::mem::size_of::<Page>(), std::mem::align_of::<Page>());
+    println!(
+        "Size and align of page: {} / {}",
+        std::mem::size_of::<Page>(),
+        std::mem::align_of::<Page>()
+    );
     let args = Args::parse();
     let mut alloc = Allocator::new();
-    if args.pages_count == 0{
+    if args.pages_count == 0 {
         return;
     }
     let page = alloc.allocate_page(args.page_size, args.page_align);
