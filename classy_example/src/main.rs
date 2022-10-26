@@ -42,11 +42,23 @@ fn main() {
     );
 
     println!("Allocating integers");
-    let page = page.inner().expect("should not be none");
+    let mut page = page.inner().expect("should not be none");
     let mut bump = BumpAllocator::new(page);
     for i in 0..args.allocate_integers {
         if bump.alloc::<u64>().is_null() {
-            println!("Could not allocate integer {i}");
+            println!("Requesting a new page");
+            page = match alloc.get_page(std::thread::current().id(), std::mem::size_of::<u64>()) {
+                Some(p) => p,
+                None => {
+                    println!("There is no pages left at integer {i}");
+                    break;
+                }
+            };
+            bump = BumpAllocator::new(page);
+            if bump.alloc::<u64>().is_null() {
+                panic!("should not happen");
+            }
         }
     }
+    println!("Done")
 }

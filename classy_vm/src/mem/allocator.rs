@@ -1,4 +1,4 @@
-use std::ptr::NonNull;
+use std::{ptr::NonNull, thread::ThreadId};
 
 use super::{page::Page, ptr::Ptr};
 
@@ -45,6 +45,33 @@ impl Allocator {
         let page_ptr = Ptr::new_non_null(page_ptr);
         self.pages = page_ptr;
         page_ptr
+    }
+
+    pub fn release_page(&mut self, owner: ThreadId, page: NonNull<Page>) {
+        unsafe {
+            let curret_owner = (*page.as_ptr()).owner;
+            match curret_owner {
+                Some(co) if co == owner => 
+                    (*page.as_ptr()).owner = None,
+                Some(other_owner) =>
+                    panic!("thread {owner:?} is trying to release a page of an other thread {other_owner:?}"),
+                None => panic!("thread {owner:?} releasing unassigned memory page"),
+            }
+        }
+    }
+
+    pub fn get_page(&mut self, owner: ThreadId, size: usize) -> Option<NonNull<Page>> {
+        let Ptr(mut current) = self.pages;
+        while let Some(page) = current {
+            let page_owner = unsafe { (*page.as_ptr()).owner };
+            let page_size = unsafe { (*page.as_ptr()).free_space() };
+            if page_owner.is_none() && page_size >= size {
+                unsafe { (*page.as_ptr()).owner = Some(owner) };
+                return Some(page);
+            }
+            current = unsafe { (*page.as_ptr()).next };
+        }
+        None
     }
 }
 
