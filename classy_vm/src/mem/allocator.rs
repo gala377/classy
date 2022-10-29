@@ -93,7 +93,7 @@ impl Allocator {
                     return Ptr(Some(page));
                 }
             }
-            current = unsafe { (*page.as_ptr()).next.lock().unwrap().clone() };
+            current = unsafe { (*page.as_ptr()).next };
         }
         Ptr(None)
     }
@@ -111,9 +111,10 @@ impl Drop for Allocator {
     fn drop(&mut self) {
         while let Ptr(Some(page)) = self.pages {
             unsafe {
-                self.pages = Ptr((*page.as_ptr()).next.lock().unwrap().clone() );
+                self.pages = Ptr((*page.as_ptr()).next );
                 let size = (*page.as_ptr()).size;
                 let align = (*page.as_ptr()).align;
+                std::ptr::drop_in_place(page.as_ptr());
                 let layout = std::alloc::Layout::from_size_align_unchecked(size, align);
                 std::alloc::dealloc(page.cast().as_ptr(), layout);
             }

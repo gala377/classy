@@ -11,7 +11,7 @@ pub struct Page {
     pub owner: Mutex<Option<std::thread::ThreadId>>,
 
     // Intrusive list
-    pub next: Mutex<Option<std::ptr::NonNull<Page>>>,
+    pub next: Option<std::ptr::NonNull<Page>>,
 }
 
 impl Page {
@@ -22,13 +22,13 @@ impl Page {
             align,
             free: page_free_start(start, size),
             owner: Mutex::new(None),
-            next: Mutex::new(None),
+            next: None,
         }
     }
 
     pub unsafe fn new_linked(start: NonNull<u8>, size: usize, align: usize, next: NonNull<Page>) -> Self {
         Page {
-            next: Mutex::new(Some(next)),
+            next: Some(next),
             ..Page::new(start, size, align)
         }
     }
