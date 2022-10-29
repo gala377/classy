@@ -11,6 +11,7 @@ pub struct BumpAllocator {
 
 impl BumpAllocator {
     pub fn new(alloc_page: NonNull<Page>) -> Self {
+        println!("New bump allocator with page address {:0x}", alloc_page.as_ptr() as usize);
         BumpAllocator { alloc_page }
     }
 
@@ -31,6 +32,7 @@ impl BumpAllocator {
     }
 
     pub fn alloc_layout(&mut self, layout: Layout) -> Ptr<u8> {
+        debug_assert!(self.page_as_ref().owner.lock().unwrap().is_some());
         let free = self.free();
         let end = self.end();
         let align = layout.align();
@@ -70,5 +72,13 @@ impl BumpAllocator {
             start <= ptr && ptr <= end,
             "the pointer is not a part of the page"
         );
+    }
+
+    pub fn into_inner(self) -> NonNull<Page> {
+        self.alloc_page
+    }
+
+    pub fn page_as_ref(&self) -> &Page {
+        unsafe { &*self.alloc_page.as_ptr() }
     }
 }
