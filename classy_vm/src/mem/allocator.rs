@@ -8,6 +8,9 @@ use super::{page::Page, ptr::Ptr};
 
 pub struct Allocator {
     pub pages: Ptr<Page>,
+
+    pub page_size: usize,
+    pub page_align: usize,
 }
 
 // SAFETY: We have to be very careful not to access
@@ -15,15 +18,15 @@ pub struct Allocator {
 unsafe impl Send for Allocator {}
 
 impl Allocator {
-    pub fn new() -> Allocator {
-        Allocator { pages: Ptr::null() }
+    pub fn new(page_size: usize, page_align: usize) -> Allocator {
+        Allocator { pages: Ptr::null(), page_size, page_align }
     }
 
     /// Unsafe because the returned page does not have a set owner.
     /// Because of it trying to access memory of this page might lead to data races.
     /// To get a page that is already associated with some thread use
     /// `allocate_page_for`
-    pub unsafe fn allocate_page(&mut self, size: usize, align: usize) -> Ptr<Page> {
+    pub unsafe fn allocate_custom_page(&mut self, size: usize, align: usize) -> Ptr<Page> {
         assert!(
             size >= std::mem::size_of::<Page>(),
             "Page needs to be able to store its metadata"
@@ -56,8 +59,11 @@ impl Allocator {
         page_ptr
     }
 
-    pub fn allocate_page_for(&mut self, owner: ThreadId, size: usize, align: usize) -> Ptr<Page> {
-        let page = unsafe { self.allocate_page(size, align) };
+    /// Same as `allocate_custom_page` however immediately sets the owner of the page.
+    /// This way the page cannot be given to other thread, which migh have requested 
+    /// for it with the `get_page` method.
+    pub fn allocate_custom_page_for(&mut self, owner: ThreadId, size: usize, align: usize) -> Ptr<Page> {
+        let page = unsafe { self.allocate_custom_page(size, align) };
         if let Ptr(Some(ptr)) = page {
             unsafe {
                 let mut page_owner = (*ptr.as_ptr()).owner.lock().unwrap();
@@ -67,6 +73,18 @@ impl Allocator {
         page
     }
 
+    /// Same as `allocate_custom_page` but uses allocator's settings.
+    pub unsafe fn allocate_page(&mut self) -> Ptr<Page> {
+        self.allocate_custom_page(self.page_size, self.page_align)
+    }
+
+    /// Same as `allocate_custom_page_for` but uses allocator's settings.
+    pub fn allocate_page_for(&mut self, owner: ThreadId) -> Ptr<Page> {
+        self.allocate_custom_page_for(owner, self.page_size, self.page_align)
+    }
+
+    /// Releases the page from the current owner. The page has to be owned by the
+    /// `owner` thread.
     pub fn release_page(&mut self, owner: ThreadId, page: NonNull<Page>) {
         unsafe {
             let mut current_owner = (*page.as_ptr()).owner.lock().unwrap();
@@ -80,6 +98,9 @@ impl Allocator {
         }
     }
 
+    /// Returns a pointer to the page that can be used to allocate at least
+    /// `size` amount of bytes with aligned to `align`.
+    /// The page will be owned by the requesting `owner` thread.
     pub fn get_page(&mut self, owner: ThreadId, size: usize, align: usize) -> Ptr<Page> {
         let Ptr(mut current) = self.pages;
         while let Some(page) = current {
@@ -132,22 +153,22 @@ mod tests {
 
     #[test]
     fn creating_empty_allocator_does_not_allcate() {
-        let _alloc = Allocator::new();
+        let _alloc = Allocator::new(PAGE_SIZE, PAGE_ALIGN);
     }
 
     #[test]
     fn allocating_a_page_does_work() {
-        let mut alloc = Allocator::new();
-        unsafe { alloc.allocate_page(PAGE_SIZE, PAGE_ALIGN); }
+        let mut alloc = Allocator::new(PAGE_SIZE, PAGE_ALIGN);
+        unsafe { alloc.allocate_page(); }
     }
 
     #[test]
     fn allocating_mutliple_pages_does_work() {
-        let mut alloc = Allocator::new();
+        let mut alloc = Allocator::new(PAGE_SIZE, PAGE_ALIGN);
         unsafe { 
-            alloc.allocate_page(PAGE_SIZE, PAGE_ALIGN);
-            alloc.allocate_page(PAGE_SIZE, PAGE_ALIGN);
-            alloc.allocate_page(PAGE_SIZE, PAGE_ALIGN);
+            alloc.allocate_page();
+            alloc.allocate_page();
+            alloc.allocate_page();
         }
     }
 }

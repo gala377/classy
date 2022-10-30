@@ -1,11 +1,9 @@
 use std::sync::{Arc, Mutex};
 
-use crate::mem::{self, bump::BumpAllocator, page::Page, ptr::Ptr};
+use crate::mem::{self, bump::BumpAllocator, ptr::Ptr};
 
 pub struct Thread {
     id: std::thread::ThreadId,
-    tlab_align: usize,
-    tlab_size: usize,
 
     allocator: Arc<Mutex<mem::allocator::Allocator>>,
     tlab: BumpAllocator,
@@ -14,8 +12,7 @@ pub struct Thread {
 impl Thread {
     pub fn new(
         allocator: Arc<Mutex<mem::allocator::Allocator>>,
-        tlab_size: usize,
-        tlab_align: usize,
+        initial_tlab_free_size: usize,
     ) -> Self {
         let id = std::thread::current().id();
         println!("Creating thread {id:?}");
@@ -25,7 +22,7 @@ impl Thread {
             println!("Thread {id:?} getting its page");
             // todo: get_page should not depend on the information that the page metadata
             // is stored inside the page itself.
-            let Ptr(page) = alloc.get_page(id, tlab_size - std::mem::size_of::<Page>(), tlab_align);
+            let Ptr(page) = alloc.get_page(id, initial_tlab_free_size, std::mem::align_of::<usize>());
             let page = match page {
                 Some(ptr) => {
                     println!("Thread {id:?} got page {addr:0x} from allocator", addr=ptr.as_ptr() as usize);
@@ -33,7 +30,7 @@ impl Thread {
                 }
                 None => {
                     println!("Thread: {id:?} had to allocate a new page");
-                    let Ptr(page) = alloc.allocate_page_for(id, tlab_size, tlab_align);
+                    let Ptr(page) = alloc.allocate_page_for(id);
                     page.expect("could not allocate a page for a thread")
                 }
             };
@@ -42,8 +39,6 @@ impl Thread {
         }; 
         Thread {
             id: std::thread::current().id(),
-            tlab_size,
-            tlab_align,
 
             tlab: BumpAllocator::new(tlab_page),
             allocator,
@@ -71,7 +66,7 @@ impl Thread {
             match page {
                 Some(ptr) => ptr,
                 None => {
-                    let Ptr(page) = alloc.allocate_page_for(self.id, self.tlab_size, self.tlab_align);
+                    let Ptr(page) = alloc.allocate_page_for(self.id);
                     page?
                 }
             }

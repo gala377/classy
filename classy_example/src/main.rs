@@ -40,7 +40,7 @@ fn main() {
         for _ in 0..args.threads {
             let allocator = alloctor.clone();
             scope.spawn(move ||{                
-                let mut thread = classy_vm::thread::Thread::new(allocator, args.page_size, std::mem::align_of::<usize>());
+                let mut thread = classy_vm::thread::Thread::new(allocator, args.page_size - std::mem::size_of::<Page>());
                 for _ in 0..args.allocate_integers {
                     let Ptr(ptr) = thread.alloc::<u64>();
                     ptr.expect("could not allocate");
@@ -53,12 +53,12 @@ fn main() {
 
 
 fn setup_allocator(args: &Args) -> Option<Arc<Mutex<Allocator>>> {
-    let mut alloc = Allocator::new();
+    let mut alloc = Allocator::new(args.page_size, args.page_align);
     if args.pages_count == 0 {
         return None;
     }
     for _ in 0..args.pages_count {
-        unsafe { alloc.allocate_page(args.page_size, args.page_align) };
+        unsafe { alloc.allocate_page() };
     }
     println!(
         "Allocated {n} pages. Together {sum} bytes of memeory.",
