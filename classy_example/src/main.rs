@@ -32,25 +32,28 @@ fn main() {
         std::mem::align_of::<Page>()
     );
     let args = Args::parse();
-    let alloctor = match setup_allocator(&args) {
+    let allocator = match setup_allocator(&args) {
         None => return,
         Some(a) => a,
     };
     std::thread::scope(|scope| {
         for _ in 0..args.threads {
-            let allocator = alloctor.clone();
-            scope.spawn(move ||{                
-                let mut thread = classy_vm::thread::Thread::new(allocator, args.page_size - std::mem::size_of::<Page>());
-                for _ in 0..args.allocate_integers {
-                    let Ptr(ptr) = thread.alloc::<u64>();
-                    ptr.expect("could not allocate");
-                }
-            });
+            scope.spawn(run_thread(allocator.clone(), &args));
         }
     });
     println!("Done")
 }
 
+
+fn run_thread<'a>(allocator: Arc<Mutex<Allocator>>, args: &'a Args) -> impl FnOnce() + 'a {
+    move || {
+        let mut thread = classy_vm::thread::Thread::new(allocator, args.page_size - std::mem::size_of::<Page>());
+        for _ in 0..args.allocate_integers {
+            let Ptr(ptr) = thread.alloc::<u64>();
+            ptr.expect("could not allocate");
+        }
+    }
+}
 
 fn setup_allocator(args: &Args) -> Option<Arc<Mutex<Allocator>>> {
     let mut alloc = Allocator::new(args.page_size, args.page_align);
