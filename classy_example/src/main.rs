@@ -1,4 +1,4 @@
-use std::sync::{Mutex, Arc};
+use std::sync::{Arc, Mutex};
 
 use clap::Parser;
 use classy_vm::mem::{allocator::Allocator, page::Page, ptr::Ptr};
@@ -44,10 +44,10 @@ fn main() {
     println!("Done")
 }
 
-
 fn run_thread<'a>(allocator: Arc<Mutex<Allocator>>, args: &'a Args) -> impl FnOnce() + 'a {
     move || {
-        let mut thread = classy_vm::thread::Thread::new(allocator, args.page_size - std::mem::size_of::<Page>());
+        let mut thread =
+            classy_vm::thread::Thread::new(allocator, args.page_size - std::mem::size_of::<Page>());
         for _ in 0..args.allocate_integers {
             let Ptr(ptr) = thread.alloc::<u64>();
             ptr.expect("could not allocate");
