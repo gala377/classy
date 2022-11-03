@@ -7,3 +7,13 @@
       how can we be sure that after gc there will be space left
       in the "to" space.
 4. Allocation strategy for the old space
+
+
+## To move
+1. GC
+2. Thread Manager and synchronization logic
+3. Class universe
+4. Test cases
+5. Vm logic
+6. Parser and lexer
+7. StringInst class
