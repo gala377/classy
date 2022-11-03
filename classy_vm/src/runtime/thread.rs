@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 
-use crate::mem::{self, ptr::Ptr, tlab::Tlab};
+use crate::mem::{self, ptr::Ptr};
+use crate::runtime::tlab::Tlab;
 
 pub struct Thread {
     tlab: Tlab,
