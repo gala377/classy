@@ -34,10 +34,14 @@ pub struct Class {
 }
 
 impl Class {
+    /// Unsafe becaues it reaches past the class for variadic arguments.
+    /// Can only be used on classes allocated within the managed heap.
     pub unsafe fn fields(&self) -> &[Field] {
         std::slice::from_raw_parts(self.fields_ptr(), self.fields_count())
     }
 
+    /// Unsafe becaues it reaches past the class for variadic arguments.
+    /// Can only be used on classes allocated within the managed heap.
     pub unsafe fn fields_mut(&mut self) -> &mut [Field] {
         std::slice::from_raw_parts_mut(self.fields_ptr_mut(), self.fields_count())
     }
@@ -49,12 +53,16 @@ impl Class {
         }
     }
 
+    /// Unsafe becaues it reaches past the class for variadic arguments.
+    /// Can only be used on classes allocated within the managed heap.
     pub unsafe fn fields_ptr(&self) -> *const Field {
         let ptr = self as *const Class;
         let fields_ptr = ptr.add(1) as *const Field;
         fields_ptr
     }
 
+    /// Unsafe becaues it reaches past the class for variadic arguments.
+    /// Can only be used on classes allocated within the managed heap.
     pub unsafe fn fields_ptr_mut(&mut self) -> *mut Field {
         let ptr = self as *mut Class;
         let fields_ptr = ptr.add(1) as *mut Field;
@@ -65,10 +73,11 @@ impl Class {
         (self.instance_size, self.instance_align)
     }
 
-    pub fn fields_count(&self) -> usize {
-        let fields_count = (self as *const Class as usize) - size_of::<usize>();
-        let fields_count = fields_count as *const usize;
-        unsafe { *fields_count }
+    /// Unsafe becaues it reaches to the header before the class.
+    /// Can only be used on classes allocated within the managed heap.
+    pub unsafe fn fields_count(&self) -> usize {
+        let data_ptr = (self as *const _ as *const usize).sub(1);
+        *data_ptr
     }
 
     pub fn array_element_type(&self) -> NonNullPtr<Class> {
@@ -78,6 +87,8 @@ impl Class {
         panic!("Class is not an array");
     }
 
+    /// Unsafe becaues it reaches past the class for variadic arguments.
+    /// Can only be used on classes allocated within the managed heap.
     pub unsafe fn read_field_indexed<T>(&self, instance: ErasedNonNull, index: usize) -> T {
         // todo: assert instance is this class
         let field = self.fields().index(index);
@@ -86,6 +97,8 @@ impl Class {
         field_ptr.read()
     }
 
+    /// Unsafe becaues it reaches past the class for variadic arguments.
+    /// Can only be used on classes allocated within the managed heap.
     pub unsafe fn set_field_indexed<T>(&self, instance: ErasedNonNull, index: usize, val: T) {
         // todo: assert instance is this class
         let field = self.fields().index(index);

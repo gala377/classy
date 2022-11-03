@@ -11,5 +11,6 @@ pub trait Tracer {
             self.trace_nonnull_pointer(ErasedNonNull::from_ptr(ptr))
         }
     }
+
     fn trace_nonnull_pointer(&mut self, ptr: ErasedNonNull) -> *mut ();
 }
