@@ -42,6 +42,11 @@ impl<T> Ptr<T> {
         Ptr(Some(ptr.cast()))
     }
 
+    pub fn erase(&self) -> ErasedPtr {
+        // SAFETY: Always safe, the aligment of () will always match
+        unsafe { self.cast() }
+    }
+
 }
 
 impl<T> Clone for Ptr<T> {
