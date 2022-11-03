@@ -108,6 +108,11 @@ impl<T> NonNullPtr<T> {
             NonNull::new_unchecked(header)
         }
     }
+
+    pub fn erase(&self) -> ErasedNonNull {
+        // SAFETY: Always safe, the aligment of () will always match
+        unsafe { self.cast() }
+    }
 }
 
 impl<T> Clone for NonNullPtr<T> {

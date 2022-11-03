@@ -1,17 +1,17 @@
 #![allow(unstable_name_collisions)]
 
-pub mod string;
+pub mod array;
 pub mod header;
+pub mod string;
 
-use std::fmt::Debug;
-use std::mem::size_of;
-use std::ops::Index;
+use std::{fmt::Debug, mem::size_of, ops::Index};
 
 use sptr::Strict;
 
-use crate::mem::ptr::{NonNullPtr, ErasedNonNull, ErasedPtr};
-use crate::runtime::trace::Tracer;
-use crate::runtime::class::string::StringInst;
+use crate::{
+    mem::ptr::{ErasedNonNull, ErasedPtr, NonNullPtr},
+    runtime::{class::string::StringInst, trace::Tracer},
+};
 
 /// Class is aligned to the word boundary so that
 /// value of any aligment can go right after it.
@@ -212,9 +212,7 @@ pub unsafe fn instance_trace(obj: *mut (), tracer: &mut dyn Tracer) {
     (*header.as_ptr()).class = NonNullPtr::new_unchecked(cls_forward as *mut Class);
     for field in (*cls.get()).fields().iter().filter(|f| f.reference) {
         let offset = field.offset;
-        let field_ptr = (obj.map_addr(|addr| {
-            (addr as isize + offset) as usize
-        })) as *mut ErasedPtr;
+        let field_ptr = (obj.map_addr(|addr| (addr as isize + offset) as usize)) as *mut ErasedPtr;
         let forward = tracer.trace_pointer((*field_ptr).clone());
         std::ptr::write(field_ptr, ErasedPtr::new(forward));
     }
@@ -244,25 +242,6 @@ pub unsafe fn class_trace(obj: *mut (), tracer: &mut dyn Tracer) {
         _ => (),
     }
 }
-
-// pub fn array_class_for(heap: &mut Heap, class: TypedPtr<Class>) -> Class {
-//     let name = format!("[]{}", unsafe {
-//         let name = (*class.get()).name.get();
-//         (*name).as_rust_str()
-//     });
-//     let instance_align = unsafe { (*class.get()).instance_align };
-//     Class {
-//         name: class::string::allocate(heap, &name),
-//         drop: None,
-//         trace: array::trace,
-//         instance_size: 0,
-//         instance_align,
-//         actual_instance_size: Some(array::actual_size),
-//         kind: Kind::Array {
-//             element_type: class,
-//         },
-//     }
-// }
 
 #[derive(Debug, Clone)]
 pub struct Field {
