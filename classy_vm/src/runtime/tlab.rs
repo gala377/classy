@@ -102,6 +102,8 @@ impl Tlab {
             return p.erase();
         }
         match self.get_new_tlab(layout.size(), layout.align()) {
+            // todo: at this point the caller has to perform a gc because
+            // there are no free pages left.
             None => Ptr::null(),
             Some(()) => self.local_buffer.alloc_layout(layout).erase(),
         }
