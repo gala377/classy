@@ -1,7 +1,6 @@
-
 use std::ptr::NonNull;
 
-use crate::runtime::class::{Class, header::Header};
+use crate::runtime::class::{header::Header, Class};
 
 pub struct Ptr<T>(pub Option<NonNull<T>>);
 
@@ -9,7 +8,7 @@ impl<T> Ptr<T> {
     #[inline(always)]
     pub fn new(ptr: *mut T) -> Self {
         Self(NonNull::new(ptr))
-    } 
+    }
 
     #[inline(always)]
     pub fn new_non_null(ptr: NonNull<T>) -> Self {
@@ -46,7 +45,6 @@ impl<T> Ptr<T> {
         // SAFETY: Always safe, the aligment of () will always match
         unsafe { self.cast() }
     }
-
 }
 
 impl<T> Clone for Ptr<T> {
@@ -61,11 +59,10 @@ impl<T> Copy for Ptr<T> {}
 pub struct NonNullPtr<T>(pub NonNull<T>);
 
 impl<T> NonNullPtr<T> {
-
     #[inline(always)]
     pub fn new(ptr: NonNull<T>) -> Self {
         Self(ptr)
-    } 
+    }
 
     pub unsafe fn new_unchecked(ptr: *mut T) -> Self {
         Self(NonNull::new_unchecked(ptr))
@@ -75,7 +72,7 @@ impl<T> NonNullPtr<T> {
         let Ptr(ptr) = ptr;
         match ptr {
             None => panic!("pointer is null"),
-            Some(p) => Self::new(p)
+            Some(p) => Self::new(p),
         }
     }
 
@@ -106,7 +103,7 @@ impl<T> NonNullPtr<T> {
     }
 
     pub fn header(&self) -> NonNull<Header> {
-        unsafe { 
+        unsafe {
             let header = self.0.cast::<Header>().as_ptr().sub(1);
             NonNull::new_unchecked(header)
         }
@@ -120,7 +117,6 @@ impl<T> Clone for NonNullPtr<T> {
 }
 
 impl<T> Copy for NonNullPtr<T> {}
-
 
 pub type ErasedPtr = Ptr<()>;
 

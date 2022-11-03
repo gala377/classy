@@ -21,7 +21,6 @@ pub struct Header {
 }
 
 impl Header {
-
     pub fn for_class(meta_class: NonNullPtr<Class>, fields_count: usize) -> Self {
         Self {
             class: meta_class,

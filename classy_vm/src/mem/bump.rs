@@ -11,7 +11,10 @@ pub struct BumpAllocator {
 
 impl BumpAllocator {
     pub fn new(alloc_page: NonNull<Page>) -> Self {
-        println!("New bump allocator with page address {:0x}", alloc_page.as_ptr() as usize);
+        println!(
+            "New bump allocator with page address {:0x}",
+            alloc_page.as_ptr() as usize
+        );
         BumpAllocator { alloc_page }
     }
 

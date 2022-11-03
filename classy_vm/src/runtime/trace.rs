@@ -1,9 +1,6 @@
-use crate::mem::ptr::{ErasedPtr, ErasedNonNull};
-
-
+use crate::mem::ptr::{ErasedNonNull, ErasedPtr};
 
 pub trait Tracer {
-
     fn trace_pointer(&mut self, ptr: ErasedPtr) -> *mut () {
         if ptr.is_null() {
             std::ptr::null_mut()

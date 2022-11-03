@@ -19,7 +19,11 @@ unsafe impl Send for Allocator {}
 
 impl Allocator {
     pub fn new(page_size: usize, page_align: usize) -> Allocator {
-        Allocator { pages: Ptr::null(), page_size, page_align }
+        Allocator {
+            pages: Ptr::null(),
+            page_size,
+            page_align,
+        }
     }
 
     /// Unsafe because the returned page does not have a set owner.
@@ -43,11 +47,10 @@ impl Allocator {
         // so we cannot just do something like (*allocated).size = size
         // as the memory under allocated is not properly initialized.
         // SAFETY: start + size is one allocation so this is safe.
-        let page = 
-            match self.pages.inner() {
-                None => Page::new(start, size, align),
-                Some(next) => Page::new_linked(start, size, align, next),
-            };
+        let page = match self.pages.inner() {
+            None => Page::new(start, size, align),
+            Some(next) => Page::new_linked(start, size, align, next),
+        };
 
         let page_ptr = start.cast::<Page>();
         // SAFETY: page_ptr is not null, properly aligned and can hold
@@ -60,9 +63,14 @@ impl Allocator {
     }
 
     /// Same as `allocate_custom_page` however immediately sets the owner of the page.
-    /// This way the page cannot be given to other thread, which migh have requested 
+    /// This way the page cannot be given to other thread, which migh have requested
     /// for it with the `get_page` method.
-    pub fn allocate_custom_page_for(&mut self, owner: ThreadId, size: usize, align: usize) -> Ptr<Page> {
+    pub fn allocate_custom_page_for(
+        &mut self,
+        owner: ThreadId,
+        size: usize,
+        align: usize,
+    ) -> Ptr<Page> {
         let page = unsafe { self.allocate_custom_page(size, align) };
         if let Ptr(Some(ptr)) = page {
             unsafe {
@@ -89,7 +97,7 @@ impl Allocator {
         unsafe {
             let mut current_owner = (*page.as_ptr()).owner.lock().unwrap();
             match *current_owner {
-                Some(co) if co == owner => 
+                Some(co) if co == owner =>
                     *current_owner = None,
                 Some(other_owner) =>
                     panic!("thread {owner:?} is trying to release a page of an other thread {other_owner:?}"),
@@ -132,7 +140,7 @@ impl Drop for Allocator {
     fn drop(&mut self) {
         while let Ptr(Some(page)) = self.pages {
             unsafe {
-                self.pages = Ptr((*page.as_ptr()).next );
+                self.pages = Ptr((*page.as_ptr()).next);
                 let size = (*page.as_ptr()).size;
                 let align = (*page.as_ptr()).align;
                 std::ptr::drop_in_place(page.as_ptr());
@@ -159,13 +167,15 @@ mod tests {
     #[test]
     fn allocating_a_page_does_work() {
         let mut alloc = Allocator::new(PAGE_SIZE, PAGE_ALIGN);
-        unsafe { alloc.allocate_page(); }
+        unsafe {
+            alloc.allocate_page();
+        }
     }
 
     #[test]
     fn allocating_mutliple_pages_does_work() {
         let mut alloc = Allocator::new(PAGE_SIZE, PAGE_ALIGN);
-        unsafe { 
+        unsafe {
             alloc.allocate_page();
             alloc.allocate_page();
             alloc.allocate_page();

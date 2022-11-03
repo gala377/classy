@@ -21,5 +21,4 @@ impl Thread {
     pub fn alloc<T>(&mut self) -> Ptr<T> {
         self.tlab.alloc()
     }
-
 }

@@ -26,7 +26,12 @@ impl Page {
         }
     }
 
-    pub unsafe fn new_linked(start: NonNull<u8>, size: usize, align: usize, next: NonNull<Page>) -> Self {
+    pub unsafe fn new_linked(
+        start: NonNull<u8>,
+        size: usize,
+        align: usize,
+        next: NonNull<Page>,
+    ) -> Self {
         Page {
             next: Some(next),
             ..Page::new(start, size, align)
