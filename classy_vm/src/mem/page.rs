@@ -1,4 +1,4 @@
-use std::{ptr::NonNull, sync::Mutex};
+use std::ptr::NonNull;
 
 pub struct Page {
     // Address space
@@ -8,7 +8,7 @@ pub struct Page {
     pub align: usize,
 
     // Thread data
-    pub owner: Mutex<Option<std::thread::ThreadId>>,
+    pub owner: Option<std::thread::ThreadId>,
 
     // Intrusive list
     pub next: Option<std::ptr::NonNull<Page>>,
@@ -21,7 +21,7 @@ impl Page {
             size,
             align,
             free: page_free_start(start, size),
-            owner: Mutex::new(None),
+            owner: None,
             next: None,
         }
     }

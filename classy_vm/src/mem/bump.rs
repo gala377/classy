@@ -35,7 +35,6 @@ impl BumpAllocator {
     }
 
     pub fn alloc_layout(&mut self, layout: Layout) -> Ptr<u8> {
-        debug_assert!(self.page_as_ref().owner.lock().unwrap().is_some());
         let free = self.free();
         let end = self.end();
         let align = layout.align();

@@ -63,9 +63,9 @@ impl Tlab {
     }
 
     pub fn alloc<T>(&mut self) -> Ptr<T> {
-        debug_assert!(self.local_buffer.page_as_ref().owner.lock().unwrap().unwrap() == self.id,
+        debug_assert!(self.local_buffer.page_as_ref().owner.unwrap() == self.id,
             "cannot alloc as tlab's owner is not the same as the current thred: c: {current:?} != tl: {tlab:?}",
-            current=self.id, tlab=self.local_buffer.page_as_ref().owner.lock().unwrap().unwrap());
+            current=self.id, tlab=self.local_buffer.page_as_ref().owner.unwrap());
         let ptr = self.local_buffer.alloc::<T>();
         if let p @ Ptr(Some(_)) = ptr {
             return p;
@@ -94,9 +94,9 @@ impl Tlab {
     }
 
     fn allocate_layout(&mut self, layout: Layout) -> ErasedPtr {
-        debug_assert!(self.local_buffer.page_as_ref().owner.lock().unwrap().unwrap() == self.id,
+        debug_assert!(self.local_buffer.page_as_ref().owner.unwrap() == self.id,
             "cannot alloc as tlab's owner is not the same as the current thred: c: {current:?} != tl: {tlab:?}",
-            current=self.id, tlab=self.local_buffer.page_as_ref().owner.lock().unwrap().unwrap());
+            current=self.id, tlab=self.local_buffer.page_as_ref().owner.unwrap());
         let ptr = self.local_buffer.alloc_layout(layout);
         if let p @ Ptr(Some(_)) = ptr {
             return p.erase();

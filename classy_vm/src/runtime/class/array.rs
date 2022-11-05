@@ -1,4 +1,8 @@
-use crate::{mem::ptr::{NonNullPtr, ErasedNonNull, ErasedPtr}, runtime::trace::Tracer, runtime::class::header::Header};
+use crate::{
+    mem::ptr::{ErasedNonNull, ErasedPtr, NonNullPtr},
+    runtime::class::header::Header,
+    runtime::trace::Tracer,
+};
 
 use super::Class;
 
@@ -9,9 +13,7 @@ pub struct Array<T> {
 
 impl<T> Array<T> {
     pub unsafe fn from_ptr(arr: ErasedNonNull) -> Self {
-        Self {
-            ptr: arr.cast()
-        }
+        Self { ptr: arr.cast() }
     }
 
     pub fn len(&self) -> usize {

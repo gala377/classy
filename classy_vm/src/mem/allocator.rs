@@ -73,10 +73,7 @@ impl Allocator {
     ) -> Ptr<Page> {
         let page = unsafe { self.allocate_custom_page(size, align) };
         if let Ptr(Some(ptr)) = page {
-            unsafe {
-                let mut page_owner = (*ptr.as_ptr()).owner.lock().unwrap();
-                *page_owner = Some(owner);
-            }
+            unsafe { (*ptr.as_ptr()).owner = Some(owner) }
         };
         page
     }
@@ -95,10 +92,10 @@ impl Allocator {
     /// `owner` thread.
     pub fn release_page(&mut self, owner: ThreadId, page: NonNull<Page>) {
         unsafe {
-            let mut current_owner = (*page.as_ptr()).owner.lock().unwrap();
-            match *current_owner {
+            let current_owner = (*page.as_ptr()).owner;
+            match current_owner {
                 Some(co) if co == owner =>
-                    *current_owner = None,
+                    (*page.as_ptr()).owner = None,
                 Some(other_owner) =>
                     panic!("thread {owner:?} is trying to release a page of an other thread {other_owner:?}"),
                 None => panic!("thread {owner:?} releasing unassigned memory page"),
@@ -112,13 +109,13 @@ impl Allocator {
     pub fn get_page(&mut self, owner: ThreadId, size: usize, align: usize) -> Ptr<Page> {
         let Ptr(mut current) = self.pages;
         while let Some(page) = current {
-            let mut page_owner = unsafe { (*page.as_ptr()).owner.lock().unwrap() };
+            let page_owner = unsafe { (*page.as_ptr()).owner };
             if page_owner.is_none() {
                 let end = unsafe { (*page.as_ptr()).end().as_ptr().addr() };
                 let free = unsafe { (*page.as_ptr()).free };
                 let free = round_up_to_align(free.as_ptr().addr(), align);
                 if free + size <= end {
-                    *page_owner = Some(owner);
+                    unsafe { (*page.as_ptr()).owner = Some(owner) }
                     return Ptr(Some(page));
                 }
             }
