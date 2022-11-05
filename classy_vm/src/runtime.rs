@@ -1,6 +1,5 @@
 pub mod class;
 pub mod thread;
-pub mod tlab;
 pub mod trace;
 
 use std::sync::Arc;
