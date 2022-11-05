@@ -11,6 +11,8 @@ pub struct Allocator {
 
     pub page_size: usize,
     pub page_align: usize,
+
+    pub bytes_allocated: usize,
 }
 
 // SAFETY: We have to be very careful not to access
@@ -23,6 +25,7 @@ impl Allocator {
             pages: Ptr::null(),
             page_size,
             page_align,
+            bytes_allocated: 0,
         }
     }
 
@@ -59,6 +62,7 @@ impl Allocator {
         std::ptr::write(page_ptr.as_ptr(), page);
         let page_ptr = Ptr::new_non_null(page_ptr);
         self.pages = page_ptr;
+        self.bytes_allocated += size;
         page_ptr
     }
 

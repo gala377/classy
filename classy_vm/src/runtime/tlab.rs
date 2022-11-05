@@ -7,6 +7,7 @@ use std::{
 use crate::{
     mem::{
         self,
+        allocator::Allocator,
         bump::BumpAllocator,
         ptr::{ErasedPtr, NonNullPtr, Ptr},
     },
@@ -76,8 +77,29 @@ impl Tlab {
         }
     }
 
-    fn get_new_tlab(&mut self, size: usize, align: usize) -> Option<()> {
+    pub fn get_new_tlab(&mut self, size: usize, align: usize) -> Option<()> {
         let mut alloc = self.allocator.lock().expect("mutex poisoned");
+        let new_tlab = {
+            let Ptr(page) = alloc.get_page(self.id, size, align);
+            match page {
+                Some(ptr) => ptr,
+                None => {
+                    let Ptr(page) = alloc.allocate_page_for(self.id);
+                    page?
+                }
+            }
+        };
+        let old_tlab = std::mem::replace(&mut self.local_buffer, BumpAllocator::new(new_tlab));
+        alloc.release_page(self.id, old_tlab.into_inner());
+        Some(())
+    }
+
+    pub fn get_new_tlab_locked(
+        &mut self,
+        alloc: &mut Allocator,
+        size: usize,
+        align: usize,
+    ) -> Option<()> {
         let new_tlab = {
             let Ptr(page) = alloc.get_page(self.id, size, align);
             match page {
@@ -107,6 +129,13 @@ impl Tlab {
             None => Ptr::null(),
             Some(()) => self.local_buffer.alloc_layout(layout).erase(),
         }
+    }
+
+    pub fn allocate_layout_for_heap(&mut self, layout: Layout) -> ErasedPtr {
+        debug_assert!(self.local_buffer.page_as_ref().owner.unwrap() == self.id,
+            "cannot alloc as tlab's owner is not the same as the current thred: c: {current:?} != tl: {tlab:?}",
+            current=self.id, tlab=self.local_buffer.page_as_ref().owner.unwrap());
+        self.local_buffer.alloc_layout(layout).erase()
     }
 
     // Allocate zeroed array of class `array_cls` (class of an array not array's

@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use clap::Parser;
-use classy_vm::mem::{allocator::Allocator, page::Page, ptr::Ptr};
+use classy_vm::mem::{allocator::Allocator, heap::SemiSpace, page::Page, ptr::Ptr};
 
 const PAGE_SIZE: usize = 1 << 12;
 const PAGE_ALIGN: usize = 1 << 12;
@@ -32,43 +32,52 @@ fn main() {
         std::mem::align_of::<Page>()
     );
     let args = Args::parse();
-    let allocator = match setup_allocator(&args) {
-        None => return,
-        Some(a) => a,
-    };
+    let heap = setup_semispaces(&args);
     std::thread::scope(|scope| {
         for _ in 0..args.threads {
-            scope.spawn(run_thread(allocator.clone(), &args));
+            scope.spawn(run_thread(heap.clone(), &args));
         }
     });
     println!("Done")
 }
 
-fn run_thread<'a>(allocator: Arc<Mutex<Allocator>>, args: &'a Args) -> impl FnOnce() + 'a {
+fn run_thread<'a>(
+    SemiSpaces {
+        from_space,
+        to_space,
+    }: SemiSpaces,
+    Args {
+        page_size,
+        pages_count,
+        allocate_integers,
+        ..
+    }: &'a Args,
+) -> impl FnOnce() + 'a {
     move || {
         let mut thread = classy_vm::runtime::thread::Thread::new(
-            allocator,
-            args.page_size - std::mem::size_of::<Page>(),
+            from_space,
+            to_space,
+            page_size - std::mem::size_of::<Page>(),
+            page_size * pages_count,
         );
-        for _ in 0..args.allocate_integers {
+        for _ in 0..*allocate_integers {
             let Ptr(ptr) = thread.alloc::<u64>();
             ptr.expect("could not allocate");
         }
     }
 }
 
-fn setup_allocator(args: &Args) -> Option<Arc<Mutex<Allocator>>> {
-    let mut alloc = Allocator::new(args.page_size, args.page_align);
-    if args.pages_count == 0 {
-        return None;
+#[derive(Clone)]
+struct SemiSpaces {
+    from_space: SemiSpace,
+    to_space: SemiSpace,
+}
+
+fn setup_semispaces(args: &Args) -> SemiSpaces {
+    let from_space = Allocator::new(args.page_size, args.page_align);
+    let to_space = Allocator::new(args.page_size, args.page_align);
+    SemiSpaces {
+        from_space: Arc::new(Mutex::new(from_space)),
+        to_space: Arc::new(Mutex::new(to_space)),
     }
-    for _ in 0..args.pages_count {
-        unsafe { alloc.allocate_page() };
-    }
-    println!(
-        "Allocated {n} pages. Together {sum} bytes of memeory.",
-        n = args.pages_count,
-        sum = args.pages_count * args.page_size
-    );
-    Some(Arc::new(Mutex::new(alloc)))
 }

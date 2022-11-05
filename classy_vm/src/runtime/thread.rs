@@ -1,24 +1,36 @@
-use std::sync::{Arc, Mutex};
+use std::alloc::Layout;
 
-use crate::mem::{self, ptr::Ptr};
-use crate::runtime::tlab::Tlab;
+use crate::mem::{
+    heap::{self, Heap, SemiSpace},
+    ptr::Ptr,
+};
 
 pub struct Thread {
-    tlab: Tlab,
+    heap: Heap,
 }
 
 impl Thread {
     pub fn new(
-        allocator: Arc<Mutex<mem::allocator::Allocator>>,
+        from_space: SemiSpace,
+        to_space: SemiSpace,
         initial_tlab_free_size: usize,
+        max_young_space_size: usize,
     ) -> Self {
         let id = std::thread::current().id();
         Thread {
-            tlab: Tlab::new(id, allocator, initial_tlab_free_size),
+            heap: Heap::new(
+                id,
+                from_space,
+                to_space,
+                heap::Options {
+                    initial_tlab_free_size,
+                    max_young_space_size,
+                },
+            ),
         }
     }
 
     pub fn alloc<T>(&mut self) -> Ptr<T> {
-        self.tlab.alloc()
+        unsafe { self.heap.try_allocate(Layout::new::<T>()).cast() }
     }
 }
