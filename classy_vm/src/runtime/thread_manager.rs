@@ -95,8 +95,8 @@ impl ThreadManager {
         let this = self.clone();
         let t = thread::spawn(move || {
             vm_thread();
-            while let Err(StoppedForGc) = this.clone().cleanup_thread() {
-                this.clone().stop_for_gc().unwrap();
+            while let Err(StoppedForGc) = this.cleanup_thread() {
+                this.stop_for_gc().unwrap();
             }
         });
         state.threads.insert(t.thread().id(), t);
@@ -212,8 +212,8 @@ impl ThreadManager {
         let this = this.clone();
         let t = thread::spawn(move || {
             vm_thread();
-            while let Err(StoppedForGc) = this.clone().cleanup_thread() {
-                this.clone().stop_for_gc().unwrap();
+            while let Err(StoppedForGc) = this.cleanup_thread() {
+                this.stop_for_gc().unwrap();
             }
         });
         state.threads.insert(t.thread().id(), t);
