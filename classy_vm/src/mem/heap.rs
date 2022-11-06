@@ -13,21 +13,26 @@ use crate::{
         ptr::{ErasedPtr, Ptr},
         tlab::Tlab,
     },
-    runtime::class::{self, header::Header, Class},
+    runtime::{class::{self, header::Header, Class}, thread_manager::{ThreadManager, StopRequetError}},
 };
 
 use super::ptr::NonNullPtr;
 
 pub type SemiSpace = Arc<Mutex<Allocator>>;
 
+enum ShouldPerformGc {
+    ShouldPerform,
+    ShouldWait,
+}
+
 #[allow(dead_code)]
 pub struct Heap {
     thread_id: std::thread::ThreadId,
     thread_tlab: Tlab,
+    thread_manager: Arc<ThreadManager>,
 
     // we always allocate in the from_space
     from_space: SemiSpace,
-    max_young_space_size: usize,
 
     to_space: SemiSpace,
     // old generation allocator
@@ -37,6 +42,7 @@ pub struct Heap {
     //    - we need to somehow keep track of how much is allocated in pages for the young space
     //    - keep track of which pages are to space pages and which pages are from space pages
     //    - ....
+    options: Options,
 }
 
 pub struct Options {
@@ -49,6 +55,7 @@ impl Heap {
         thread_id: ThreadId,
         from_space: SemiSpace,
         to_space: SemiSpace,
+        thread_manager: Arc<ThreadManager>,
         options: Options,
     ) -> Self {
         let thread_tlab = Tlab::new(
@@ -59,9 +66,10 @@ impl Heap {
         Self {
             thread_id,
             thread_tlab,
+            thread_manager,
             from_space,
             to_space,
-            max_young_space_size: options.max_young_space_size,
+            options,
         }
     }
 
@@ -71,7 +79,9 @@ impl Heap {
         }
         {
             let mut alloc = self.from_space.lock().unwrap();
-            if alloc.bytes_allocated < self.max_young_space_size {
+            // todo: check if we should wait for gc here before we try to allocate
+            // so that we don't need make concurrent calls to the stop_threads_for gc
+            if alloc.bytes_allocated < self.options.max_young_space_size {
                 let new_tlab =
                     self.thread_tlab
                         .get_new_tlab_locked(&mut alloc, layout.size(), layout.align());
@@ -79,24 +89,21 @@ impl Heap {
                     return self.thread_tlab.allocate(layout);
                 }
             }
-            todo!(
-                r"
-                1. signal for threads that they should synchronize for gc
-                2. wait for the threads
-            "
-            )
-        }
-        if self.should_perform_gc() {
-            self.gc_young_generation();
-        } else {
-            todo!("wait for gc to end");
-        }
+            // todo: for the check above to make sense we need the request threads stop
+            // while holding the lock for the allocator.
+        };
         // either we overallocated or we could not allocate a new tlab
-        todo!(
-            r"
-            1. remember to switch semispaces, from is now to.
-            2. also we neeed a new tlab for every thread."
-        );
+        match self.stop_threads_for_gc() {
+            ShouldPerformGc::ShouldWait => {
+                self.thread_manager.stop_for_gc().unwrap()
+            },
+            ShouldPerformGc::ShouldPerform => {
+                self.thread_manager.wait_for_all_threads_stopped().unwrap();
+                self.gc_young_generation();
+                self.thread_manager.release_stopped_threads();
+            }
+        }
+        self.swap_semispaces();
         if let ptr @ Ptr(Some(_)) = self.thread_tlab.allocate(layout) {
             return ptr;
         }
@@ -104,8 +111,18 @@ impl Heap {
         self.allocate_in_old_space(layout)
     }
 
-    fn should_perform_gc(&self) -> bool {
-        todo!("check if this is the thread that should perform the gc")
+    fn swap_semispaces(&mut self) {
+        std::mem::swap(&mut self.from_space, &mut self.to_space);
+        self.thread_tlab = Tlab::new(self.thread_id, Arc::clone(&self.from_space), self.options.initial_tlab_free_size);
+    }
+
+    fn stop_threads_for_gc(&mut self) -> ShouldPerformGc {
+        // we possibly have made multiple requests
+        match self.thread_manager.request_stop_for_gc() {
+            Err(StopRequetError::NoThreadsToStop) => { panic!("should not happen") }
+            Err(StopRequetError::AlreadyRequested) => ShouldPerformGc::ShouldWait,
+            Ok(_) => ShouldPerformGc::ShouldPerform,
+        }
     }
 
     fn gc_young_generation(&mut self) {

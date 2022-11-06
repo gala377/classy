@@ -1,9 +1,11 @@
-use std::alloc::Layout;
+use std::{alloc::Layout, sync::Arc};
 
 use crate::mem::{
     heap::{self, Heap, SemiSpace},
     ptr::Ptr,
 };
+
+use super::thread_manager::ThreadManager;
 
 pub struct Thread {
     heap: Heap,
@@ -11,6 +13,7 @@ pub struct Thread {
 
 impl Thread {
     pub fn new(
+        thread_manager: Arc<ThreadManager>,
         from_space: SemiSpace,
         to_space: SemiSpace,
         initial_tlab_free_size: usize,
@@ -22,6 +25,7 @@ impl Thread {
                 id,
                 from_space,
                 to_space,
+                thread_manager,
                 heap::Options {
                     initial_tlab_free_size,
                     max_young_space_size,

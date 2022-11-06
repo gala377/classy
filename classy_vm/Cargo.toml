@@ -4,4 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+loom = "0.5.6"
 sptr = "0.3.2"
+thiserror = "1.0.37"
