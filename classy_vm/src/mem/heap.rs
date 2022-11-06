@@ -25,7 +25,7 @@ pub struct Heap {
     thread_id: std::thread::ThreadId,
     thread_tlab: Tlab,
 
-    // we always allocate in teh from_space
+    // we always allocate in the from_space
     from_space: SemiSpace,
     max_young_space_size: usize,
 
