@@ -3,15 +3,18 @@
 pub mod array;
 pub mod header;
 pub mod string;
+pub mod klass;
 
 use std::{fmt::Debug, mem::size_of, ops::Index};
 
 use sptr::Strict;
 
 use crate::{
-    mem::ptr::{ErasedNonNull, ErasedPtr, NonNullPtr},
+    mem::ptr::{ErasedNonNull, ErasedPtr, NonNullPtr, Ptr},
     runtime::{class::string::StringInst, trace::Tracer},
 };
+
+use self::header::Header;
 
 /// Class is aligned to the word boundary so that
 /// value of any aligment can go right after it.
@@ -23,7 +26,7 @@ use crate::{
 #[derive(Clone)]
 #[repr(align(8))]
 pub struct Class {
-    pub name: NonNullPtr<StringInst>,
+    pub name: Ptr<StringInst>,
     pub drop: Option<unsafe fn(*mut ())>,
     pub trace: unsafe fn(*mut (), &mut dyn Tracer),
     pub instance_size: usize,
@@ -80,7 +83,7 @@ impl Class {
         *data_ptr
     }
 
-    pub fn array_element_type(&self) -> NonNullPtr<Class> {
+    pub fn array_element_type(&self) -> Ptr<Class> {
         if let Kind::Array { ref element_type } = self.kind {
             return element_type.clone();
         }
@@ -119,25 +122,33 @@ impl Class {
 
     pub fn array_element_size(&self) -> usize {
         let el_ty = self.array_element_type();
-        unsafe {
-            if (*el_ty.get()).is_reference_class() {
-                size_of::<*mut ()>()
-            } else {
-                // non reference types cannot be variable sized
-                (*el_ty.get()).instance_size
+        match el_ty {
+            Ptr(Some(el_ptr)) => unsafe {
+                if (*el_ptr.as_ptr()).is_reference_class() {
+                    size_of::<*mut ()>()
+                } else {
+                    // non reference types cannot be variable sized
+                    (*el_ptr.as_ptr()).instance_size
+                }
             }
+            Ptr(None) => panic!("Array does not have an element type set")
         }
     }
 
     pub fn name(&self) -> &str {
-        unsafe { (*self.name.get()).as_rust_str() }
+        match self.name {
+            Ptr(Some(inner)) => {
+                unsafe { (*inner.as_ptr()).as_rust_str() }
+            }
+            Ptr(None) => "<null string ptr>"
+        }
     }
 }
 
 impl Debug for Class {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Class")
-            .field("name", unsafe { &(*self.name.get()).as_rust_str() })
+            .field("name", &self.name())
             .field("drop", &self.drop)
             .field("trace", &"<trace-function>")
             .field("instance_size", &self.instance_size)
@@ -157,7 +168,7 @@ pub enum Kind {
     Byte,
     Usize,
     Char,
-    Array { element_type: NonNullPtr<Class> },
+    Array { element_type: Ptr<Class> },
 }
 
 macro_rules! trivial_kind_predicate {
@@ -220,8 +231,8 @@ pub unsafe fn instance_trace(obj: *mut (), tracer: &mut dyn Tracer) {
 
 pub unsafe fn class_trace(obj: *mut (), tracer: &mut dyn Tracer) {
     let this = obj as *mut Class;
-    let name = tracer.trace_nonnull_pointer((*this).name.as_untyped());
-    (*this).name = NonNullPtr::new_unchecked(name as *mut StringInst);
+    let name = tracer.trace_pointer((*this).name.erase());
+    (*this).name = Ptr::new(name as *mut StringInst);
     let kind = (*this).kind.clone();
     match kind {
         Kind::Instance => {
@@ -233,14 +244,31 @@ pub unsafe fn class_trace(obj: *mut (), tracer: &mut dyn Tracer) {
             }
         }
         Kind::Array { element_type } => {
-            let forward = tracer.trace_nonnull_pointer(element_type.as_untyped()) as *mut Class;
+            let forward = tracer.trace_pointer(element_type.erase()) as *mut Class;
             (*this).kind = Kind::Array {
-                element_type: NonNullPtr::new_unchecked(forward),
+                element_type: Ptr::new(forward),
             };
         }
         // Other class kinds don't have anything to scan.
         _ => (),
     }
+}
+
+unsafe fn drop_class(cls: *mut ()) {
+    let cls = cls as *mut Class;
+    let mut fields_ptr = (*cls).fields_ptr_mut();
+    let fields_count = (*cls).fields_count();
+    std::ptr::drop_in_place(cls);
+    for _ in 0..fields_count {
+        std::ptr::drop_in_place(fields_ptr);
+        fields_ptr = fields_ptr.offset(1);
+    }
+}
+
+unsafe fn actual_class_size(cls: *const ()) -> usize {
+    let header = (cls as *const Header).sub(1);
+    let fields_count = (*header).data;
+    size_of::<Class>() + fields_count * size_of::<Field>()
 }
 
 #[derive(Debug, Clone)]

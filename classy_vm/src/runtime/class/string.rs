@@ -1,4 +1,21 @@
-use crate::{mem::ptr::NonNullPtr, runtime::class::header::Header};
+use std::mem::align_of;
+
+use crate::{mem::ptr::{NonNullPtr, Ptr}, runtime::class::header::Header};
+
+use super::{Class, Kind, array};
+
+pub const STRING_CLASS: Class = Class {
+    name: Ptr::null(),
+    instance_size: 0,
+    instance_align: align_of::<u8>(),
+    drop: None,
+    kind: Kind::Array {
+        element_type: Ptr::null(),
+    },
+    actual_instance_size: Some(array::actual_size),
+    trace: array::trace,
+};
+
 
 #[derive(Debug)]
 pub struct StringInst;

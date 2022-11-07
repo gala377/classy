@@ -2,6 +2,7 @@ use std::ptr::NonNull;
 
 use crate::runtime::class::{header::Header, Class};
 
+#[derive(Debug)]
 pub struct Ptr<T>(pub Option<NonNull<T>>);
 
 impl<T> Ptr<T> {
@@ -16,7 +17,7 @@ impl<T> Ptr<T> {
     }
 
     #[inline(always)]
-    pub fn null() -> Self {
+    pub const fn null() -> Self {
         Self(None)
     }
 
