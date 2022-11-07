@@ -1,8 +1,6 @@
-use std::ptr::NonNull;
 
-use crate::mem::ptr::NonNullPtr;
+use crate::{mem::ptr::NonNullPtr, runtime::class::Class};
 
-use super::Class;
 
 pub enum Flags {
     Forwards = 1,
