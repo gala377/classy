@@ -22,3 +22,17 @@ pub struct RuntimeClasses {
     // pub int: NonNullPtr<class::Int>,
     // pub bool: NonNullPtr<class::Bool>,
 }
+
+// we need something like
+// impl RuntimeClasses {
+//
+// pub fn init_runtime_classes(h: &mut Heap) -> RuntimeClasses
+//   let klass = h.alloc_class_in_old_space(klass::KLASS_CLASS)
+//   let string_class = Class { class: klass, ..string::STRING_CLASS};
+//   let string_class_ptr = h.alloc_class_in_old_space(string_class);
+//   let klass_name = h.allocate_string_in_old_space("klass");
+//   (*klass.as_ptr()).name = klass_name;
+//   // init the rest of the classes
+//
+//   RuntimeClasses { klass, string, ... }
+//}
