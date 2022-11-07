@@ -1,3 +1,5 @@
+use std::ptr::NonNull;
+
 use crate::mem::ptr::NonNullPtr;
 
 use super::Class;
@@ -43,5 +45,9 @@ impl Header {
             flags: Flags::empty(),
             data: 0,
         }
+    }
+
+    pub unsafe fn data_from_nonnull<T>(ptr: NonNullPtr<T>) -> usize {
+        (*ptr.get().cast::<Header>().sub(1)).data
     }
 }
