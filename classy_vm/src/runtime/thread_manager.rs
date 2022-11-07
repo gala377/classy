@@ -191,11 +191,10 @@ impl ThreadManager {
             if state.parked_threads == state.count {
                 return Ok(());
             }
-        } 
+        }
         self.wait_for_all_threads_stopped_from_unmanaged_thread();
         Ok(())
     }
-
 }
 
 #[cfg(loom)]

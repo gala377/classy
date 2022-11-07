@@ -1,6 +1,4 @@
-
 use crate::{mem::ptr::NonNullPtr, runtime::class::Class};
-
 
 pub enum Flags {
     Forwards = 1,

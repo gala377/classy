@@ -1,7 +1,7 @@
 pub mod class;
 pub mod thread;
-pub mod trace;
 pub mod thread_manager;
+pub mod trace;
 
 use std::sync::Arc;
 

@@ -1,6 +1,5 @@
 use crate::{mem::ptr::NonNullPtr, runtime::class::header::Header};
 
-
 #[derive(Debug)]
 pub struct StringInst;
 
@@ -10,9 +9,9 @@ impl StringInst {
         // We cast reference to a *mut Self which would be illegal but we
         // never derefernce it as mutable, only as immutable so this is fine.
         unsafe {
-            as_rust_string({ NonNullPtr::new_unchecked(
-                self as *const StringInst as *mut StringInst,
-            )})
+            as_rust_string({
+                NonNullPtr::new_unchecked(self as *const StringInst as *mut StringInst)
+            })
         }
     }
     pub fn as_rust_str(&self) -> &str {

@@ -13,7 +13,10 @@ use crate::{
         ptr::{ErasedPtr, Ptr},
         tlab::Tlab,
     },
-    runtime::{class::{self, header::Header, Class}, thread_manager::{ThreadManager, StopRequetError}},
+    runtime::{
+        class::{self, header::Header, Class},
+        thread_manager::{StopRequetError, ThreadManager},
+    },
 };
 
 use super::ptr::NonNullPtr;
@@ -94,9 +97,7 @@ impl Heap {
         };
         // either we overallocated or we could not allocate a new tlab
         match self.stop_threads_for_gc() {
-            ShouldPerformGc::ShouldWait => {
-                self.thread_manager.stop_for_gc().unwrap()
-            },
+            ShouldPerformGc::ShouldWait => self.thread_manager.stop_for_gc().unwrap(),
             ShouldPerformGc::ShouldPerform => {
                 self.thread_manager.wait_for_all_threads_stopped().unwrap();
                 self.gc_young_generation();
@@ -113,13 +114,19 @@ impl Heap {
 
     fn swap_semispaces(&mut self) {
         std::mem::swap(&mut self.from_space, &mut self.to_space);
-        self.thread_tlab = Tlab::new(self.thread_id, Arc::clone(&self.from_space), self.options.initial_tlab_free_size);
+        self.thread_tlab = Tlab::new(
+            self.thread_id,
+            Arc::clone(&self.from_space),
+            self.options.initial_tlab_free_size,
+        );
     }
 
     fn stop_threads_for_gc(&mut self) -> ShouldPerformGc {
         // we possibly have made multiple requests
         match self.thread_manager.request_stop_for_gc() {
-            Err(StopRequetError::NoThreadsToStop) => { panic!("should not happen") }
+            Err(StopRequetError::NoThreadsToStop) => {
+                panic!("should not happen")
+            }
             Err(StopRequetError::AlreadyRequested) => ShouldPerformGc::ShouldWait,
             Ok(_) => ShouldPerformGc::ShouldPerform,
         }
