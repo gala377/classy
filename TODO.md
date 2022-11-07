@@ -5,7 +5,7 @@
 
 ## To move
 1. GC
-3. Class universe
+3. Class universe aka vm runtime
 4. Test cases
 5. Vm logic
 6. Parser and lexer
