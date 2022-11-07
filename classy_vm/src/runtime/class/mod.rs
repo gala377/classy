@@ -2,8 +2,8 @@
 
 pub mod array;
 pub mod header;
-pub mod string;
 pub mod klass;
+pub mod string;
 
 use std::{fmt::Debug, mem::size_of, ops::Index};
 
@@ -130,17 +130,15 @@ impl Class {
                     // non reference types cannot be variable sized
                     (*el_ptr.as_ptr()).instance_size
                 }
-            }
-            Ptr(None) => panic!("Array does not have an element type set")
+            },
+            Ptr(None) => panic!("Array does not have an element type set"),
         }
     }
 
     pub fn name(&self) -> &str {
         match self.name {
-            Ptr(Some(inner)) => {
-                unsafe { (*inner.as_ptr()).as_rust_str() }
-            }
-            Ptr(None) => "<null string ptr>"
+            Ptr(Some(inner)) => unsafe { (*inner.as_ptr()).as_rust_str() },
+            Ptr(None) => "<null string ptr>",
         }
     }
 }

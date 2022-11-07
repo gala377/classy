@@ -29,7 +29,7 @@ impl<T> Array<T> {
     }
 
     pub fn element_class(&self) -> NonNullPtr<Class> {
-        unsafe { 
+        unsafe {
             let el_type = (*self.class().get()).array_element_type();
             NonNullPtr::from_ptr(el_type)
         }

@@ -1,8 +1,11 @@
 use std::mem::align_of;
 
-use crate::{mem::ptr::{NonNullPtr, Ptr}, runtime::class::header::Header};
+use crate::{
+    mem::ptr::{NonNullPtr, Ptr},
+    runtime::class::header::Header,
+};
 
-use super::{Class, Kind, array};
+use super::{array, Class, Kind};
 
 pub const STRING_CLASS: Class = Class {
     name: Ptr::null(),
@@ -15,7 +18,6 @@ pub const STRING_CLASS: Class = Class {
     actual_instance_size: Some(array::actual_size),
     trace: array::trace,
 };
-
 
 #[derive(Debug)]
 pub struct StringInst;

@@ -46,4 +46,37 @@ impl Header {
     pub unsafe fn data_from_nonnull<T>(ptr: NonNullPtr<T>) -> usize {
         (*ptr.get().cast::<Header>().sub(1)).data
     }
+
+    pub fn permament_allocation(&self) -> bool {
+        debug_assert!(self.forward_address().is_none());
+        (self.flags & (Flags::PermamentHeap as usize)) != 0
+    }
+
+    pub fn set_permament_allocation(&mut self) {
+        debug_assert!(
+            self.forward_address().is_none(),
+            "Trying to access flag on a forward address"
+        );
+        self.flags = self.flags | (Flags::PermamentHeap as usize)
+    }
+
+    pub fn forward_address(&self) -> Option<usize> {
+        if (self.flags & (Flags::Forwards as usize)) != 0 {
+            Some(self.flags & (!(Flags::Forwards as usize)))
+        } else {
+            None
+        }
+    }
+
+    // Sets forward address on a header that can be retrived with
+    // `forward_address` function. Forward address overrides any other
+    // flags that were there.
+    pub fn set_forward_address(&mut self, address: usize) {
+        debug_assert_eq!(
+            address & (Flags::Forwards as usize),
+            0,
+            "flagging bit of forward address has to be zero"
+        );
+        self.flags = address | (Flags::Forwards as usize);
+    }
 }

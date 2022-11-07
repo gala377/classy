@@ -3,6 +3,7 @@ use std::{alloc::Layout, sync::Arc};
 use crate::mem::{
     heap::{self, Heap, SemiSpace},
     ptr::Ptr,
+    ObjectAllocator,
 };
 
 use super::thread_manager::ThreadManager;
