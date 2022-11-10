@@ -4,6 +4,7 @@ pub mod array;
 pub mod header;
 pub mod klass;
 pub mod string;
+pub mod byte;
 
 use std::{fmt::Debug, mem::size_of, ops::Index};
 
@@ -42,7 +43,7 @@ impl Class {
     }
 
 
-    pub fn array_element_type(&self) -> Ptr<Class> {
+    pub fn array_element_type(&self) -> NonNullPtr<Class> {
         if let Kind::Array { ref element_type } = self.kind {
             return element_type.clone();
         }
@@ -59,17 +60,14 @@ impl Class {
     }
 
     pub fn array_element_size(&self) -> usize {
-        let el_ty = self.array_element_type();
-        match el_ty {
-            Ptr(Some(el_ptr)) => unsafe {
-                if (*el_ptr.as_ptr()).is_reference_class() {
-                    size_of::<*mut ()>()
-                } else {
-                    // non reference types cannot be variable sized
-                    (*el_ptr.as_ptr()).instance_size
-                }
-            },
-            Ptr(None) => panic!("Array does not have an element type set"),
+        let el_ty = self.array_element_type().get();
+        unsafe {
+            if (*el_ty).is_reference_class() {
+                size_of::<*mut ()>()
+            } else {
+                // non reference types cannot be variable sized
+                (*el_ty).instance_size
+            }
         }
     }
 
@@ -170,7 +168,7 @@ pub enum Kind {
     Byte,
     Usize,
     Char,
-    Array { element_type: Ptr<Class> },
+    Array { element_type: NonNullPtr<Class> },
 }
 
 macro_rules! trivial_kind_predicate {
@@ -247,9 +245,9 @@ pub unsafe fn class_trace(obj: *mut (), tracer: &mut dyn Tracer) {
             }
         }
         Kind::Array { element_type } => {
-            let forward = tracer.trace_pointer(element_type.erase()) as *mut Class;
+            let forward = tracer.trace_nonnull_pointer(element_type.erase()) as *mut Class;
             (*this).kind = Kind::Array {
-                element_type: Ptr::new(forward),
+                element_type: NonNullPtr::new_unchecked(forward),
             };
         }
         // Other class kinds don't have anything to scan.
@@ -274,6 +272,8 @@ unsafe fn actual_class_size(cls: *const ()) -> usize {
     let fields_count = (*header).data;
     size_of::<Class>() + fields_count * size_of::<Field>()
 }
+
+pub unsafe fn trace_none(_obj: *mut (), _tracer: &mut dyn Tracer) {}
 
 #[derive(Debug, Clone)]
 pub struct Field {

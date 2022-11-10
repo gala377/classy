@@ -30,8 +30,7 @@ impl<T> Array<T> {
 
     pub fn element_class(&self) -> NonNullPtr<Class> {
         unsafe {
-            let el_type = (*self.class().get()).array_element_type();
-            NonNullPtr::from_ptr(el_type)
+            (*self.class().get()).array_element_type()
         }
     }
 }
@@ -81,8 +80,7 @@ pub unsafe fn trace(arr: *mut (), tracer: &mut dyn Tracer) {
     let el_type = (*cls.get()).array_element_type();
     let size = (*arr.header().as_ptr()).data;
     let el_size = (*cls.get()).array_element_size();
-    let el_type_ptr = el_type.inner().unwrap();
-    if (*el_type_ptr.as_ptr()).is_reference_class() {
+    if (*el_type.get()).is_reference_class() {
         for i in 0..size {
             let offset = i * el_size;
             let pointer_to_element = (arr.get() as *mut u8).add(offset) as *mut ErasedPtr;
@@ -91,7 +89,7 @@ pub unsafe fn trace(arr: *mut (), tracer: &mut dyn Tracer) {
             pointer_to_element.write(ErasedPtr::new(forward));
         }
     } else {
-        let el_trace = (*el_type_ptr.as_ptr()).trace;
+        let el_trace = (*el_type.get()).trace;
         for i in 0..size {
             let offset = i * el_size;
             let obj = (arr.get() as *mut u8).add(offset) as *mut ();
