@@ -1,36 +1,34 @@
-use std::{
-    alloc::Layout,
-    sync::{Arc, Mutex},
-};
+use std::alloc::Layout;
 
 use crate::mem::{
-    self,
     allocator::Allocator,
     bump::BumpAllocator,
+    heap::SemiSpace,
     ptr::{ErasedPtr, Ptr},
 };
 
 pub struct Tlab {
     id: std::thread::ThreadId,
-    allocator: Arc<Mutex<mem::allocator::Allocator>>,
+    semi_space: SemiSpace,
     local_buffer: BumpAllocator,
 }
 
 impl Tlab {
     pub fn new(
         id: std::thread::ThreadId,
-        allocator: Arc<Mutex<mem::allocator::Allocator>>,
+        semi_space: SemiSpace,
         initial_tlab_free_size: usize,
     ) -> Self {
         println!("Creating thread {id:?}");
         let tlab_page = {
-            println!("Thrad {id:?} waiting for its page");
-            let mut alloc = allocator.lock().expect("mutex poisoned");
+            println!("Thread {id:?} waiting for its page");
+            let mut semi = semi_space.lock().expect("mutex poisoned");
             println!("Thread {id:?} getting its page");
             // todo: get_page should not depend on the information that the page metadata
             // is stored inside the page itself.
             let Ptr(page) =
-                alloc.get_page(id, initial_tlab_free_size, std::mem::align_of::<usize>());
+                semi.allocator
+                    .get_page(id, initial_tlab_free_size, std::mem::align_of::<usize>());
             let page = match page {
                 Some(ptr) => {
                     println!(
@@ -41,7 +39,7 @@ impl Tlab {
                 }
                 None => {
                     println!("Thread: {id:?} had to allocate a new page");
-                    let Ptr(page) = alloc.allocate_page_for(id);
+                    let Ptr(page) = semi.allocator.allocate_page_for(id);
                     page.expect("could not allocate a page for a thread")
                 }
             };
@@ -53,26 +51,26 @@ impl Tlab {
         };
         Self {
             id,
-            allocator,
+            semi_space,
 
             local_buffer: BumpAllocator::new(tlab_page),
         }
     }
 
     pub fn get_new_tlab(&mut self, size: usize, align: usize) -> Option<()> {
-        let mut alloc = self.allocator.lock().expect("mutex poisoned");
+        let mut semi = self.semi_space.lock().expect("mutex poisoned");
         let new_tlab = {
-            let Ptr(page) = alloc.get_page(self.id, size, align);
+            let Ptr(page) = semi.allocator.get_page(self.id, size, align);
             match page {
                 Some(ptr) => ptr,
                 None => {
-                    let Ptr(page) = alloc.allocate_page_for(self.id);
+                    let Ptr(page) = semi.allocator.allocate_page_for(self.id);
                     page?
                 }
             }
         };
         let old_tlab = std::mem::replace(&mut self.local_buffer, BumpAllocator::new(new_tlab));
-        alloc.release_page(self.id, old_tlab.into_inner());
+        semi.allocator.release_page(self.id, old_tlab.into_inner());
         Some(())
     }
 

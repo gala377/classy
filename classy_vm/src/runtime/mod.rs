@@ -25,6 +25,14 @@ pub struct Runtime {
     pub classes: Arc<RuntimeClasses>,
 }
 
+impl Runtime {
+    pub fn init<Heap: ObjectAllocator>(heap: &mut Heap) -> Self {
+        Self {
+            classes: Arc::new(RuntimeClasses::init_runtime_classes(heap)),
+        }
+    }
+}
+
 pub struct RuntimeClasses {
     pub klass: NonNullPtr<Class>,
     pub string: NonNullPtr<Class>,
@@ -34,7 +42,9 @@ pub struct RuntimeClasses {
 }
 
 // classes are immutable after being initialized
+// it is a pinky promise as we cannot guarantee it
 unsafe impl Send for RuntimeClasses {}
+unsafe impl Sync for RuntimeClasses {}
 
 impl RuntimeClasses {
     pub fn init_runtime_classes<Heap: ObjectAllocator>(heap: &mut Heap) -> RuntimeClasses {

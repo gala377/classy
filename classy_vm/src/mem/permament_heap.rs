@@ -10,6 +10,11 @@ pub struct PermamentHeap {
     allocated_addresses: Vec<(*mut u8, Layout)>,
 }
 
+// We do not access allocated addresses, only on drop.
+// But the heap is shared via the Arc so there is no conflict.
+unsafe impl Send for PermamentHeap {}
+unsafe impl Sync for PermamentHeap {}
+
 impl PermamentHeap {
     pub fn new() -> Self {
         Self {

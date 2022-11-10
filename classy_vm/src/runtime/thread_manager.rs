@@ -56,7 +56,7 @@ impl SyncBarrier {
 struct ThreadsState {
     count: usize,
     stop_for_gc: bool,
-    threads: HashMap<ThreadId, thread::JoinHandle<()>>,
+    threads: HashMap<ThreadId, Option<thread::JoinHandle<()>>>,
     parked_threads: usize,
 }
 
@@ -99,7 +99,29 @@ impl ThreadManager {
                 this.stop_for_gc().unwrap();
             }
         });
-        state.threads.insert(t.thread().id(), t);
+
+        println!("New thread with id {:?} count is {}", t.thread().id(), state.count);
+        state.threads.insert(t.thread().id(), Some(t));
+        Ok(())
+    }
+
+    /// Register thread with the id to the thread manager.
+    /// This thread is then responsible for cleaning itself up when it dies or
+    /// stopping in case of a gc request.
+    ///
+    /// This method should be used if one wants their non-runtime thread to
+    /// be tracked for the purpose of gc or vm shutdown.
+    pub fn manually_register_thread(
+        self: &Arc<Self>,
+        id: std::thread::ThreadId,
+    ) -> Result<(), StoppedForGc> {
+        let mut state = self.state.lock().unwrap();
+        if state.stop_for_gc {
+            return Err(StoppedForGc);
+        }
+        state.count += 1;
+        println!("Registering thread with id {id:?} count is {}", state.count);
+        state.threads.insert(id, None);
         Ok(())
     }
 
@@ -115,6 +137,7 @@ impl ThreadManager {
             Err(StoppedForGc)
         } else {
             state.count -= 1;
+            println!("Cleaning up thread {id:?} the count is {}", state.count);
             state.threads.remove(&id);
             Ok(())
         }

@@ -16,7 +16,42 @@ use crate::{
     runtime::thread_manager::{StopRequetError, ThreadManager},
 };
 
-pub type SemiSpace = Arc<Mutex<Allocator>>;
+#[derive(Clone, Copy)]
+pub enum SemiSpaceKind {
+    FromSpace,
+    ToSpace,
+}
+
+pub type SemiSpace = Arc<Mutex<SemiSpaceImpl>>;
+
+pub struct SemiSpaceImpl {
+    pub kind: SemiSpaceKind,
+    pub allocator: Allocator,
+}
+
+impl SemiSpaceImpl {
+    pub fn new_from_space(aloc: Allocator) -> SemiSpace {
+        Arc::new(Mutex::new(Self {
+            kind: SemiSpaceKind::FromSpace,
+            allocator: aloc,
+        }))
+    }
+
+    pub fn new_to_space(aloc: Allocator) -> SemiSpace {
+        Arc::new(Mutex::new(Self {
+            kind: SemiSpaceKind::ToSpace,
+            allocator: aloc,
+        }))
+    }
+
+    fn toggle_kind(&mut self) {
+        use SemiSpaceKind::*;
+        self.kind = match self.kind {
+            FromSpace => ToSpace,
+            ToSpace => FromSpace,
+        }
+    }
+}
 
 enum ShouldPerformGc {
     ShouldPerform,
@@ -58,7 +93,7 @@ impl Heap {
     ) -> Self {
         let thread_tlab = Tlab::new(
             thread_id,
-            from_space.clone(),
+            Arc::clone(&from_space),
             options.initial_tlab_free_size,
         );
         Self {
@@ -110,13 +145,15 @@ impl ObjectAllocator for Heap {
             return ptr;
         }
         {
-            let mut alloc = self.from_space.lock().unwrap();
+            let mut semi_space = self.from_space.lock().unwrap();
             // todo: check if we should wait for gc here before we try to allocate
             // so that we don't need make concurrent calls to the stop_threads_for gc
-            if alloc.bytes_allocated < self.options.max_young_space_size {
-                let new_tlab =
-                    self.thread_tlab
-                        .get_new_tlab_locked(&mut alloc, layout.size(), layout.align());
+            if semi_space.allocator.bytes_allocated < self.options.max_young_space_size {
+                let new_tlab = self.thread_tlab.get_new_tlab_locked(
+                    &mut semi_space.allocator,
+                    layout.size(),
+                    layout.align(),
+                );
                 if new_tlab.is_some() {
                     return self.thread_tlab.allocate(layout);
                 }
@@ -130,6 +167,11 @@ impl ObjectAllocator for Heap {
             ShouldPerformGc::ShouldPerform => {
                 self.thread_manager.wait_for_all_threads_stopped().unwrap();
                 self.gc_young_generation();
+                // todo: might be unnecessary and slow down collection
+                // so maybe remove this later? Only needed for the Vm struct
+                // but I don't think the vm struct is actually needed.
+                self.from_space.lock().unwrap().toggle_kind();
+                self.to_space.lock().unwrap().toggle_kind();
                 self.thread_manager.release_stopped_threads();
             }
         }
