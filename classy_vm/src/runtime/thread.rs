@@ -1,12 +1,13 @@
 use std::{alloc::Layout, sync::Arc};
 
-use crate::mem::{
-    heap::{self, Heap, SemiSpace},
-    ptr::Ptr,
-    ObjectAllocator,
+use crate::{
+    mem::{
+        heap::{self, Heap, SemiSpace},
+        ptr::Ptr,
+        ObjectAllocator,
+    },
+    runtime::thread_manager::ThreadManager,
 };
-
-use super::thread_manager::ThreadManager;
 
 pub struct Thread {
     heap: Heap,

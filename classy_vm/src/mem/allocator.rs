@@ -4,7 +4,7 @@ use std::{ptr::NonNull, thread::ThreadId};
 
 use sptr::Strict;
 
-use super::{page::Page, ptr::Ptr};
+use crate::mem::{page::Page, ptr::Ptr};
 
 pub struct Allocator {
     pub pages: Ptr<Page>,

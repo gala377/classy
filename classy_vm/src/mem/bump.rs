@@ -3,7 +3,7 @@ use sptr::Strict;
 
 use std::{alloc::Layout, ptr::NonNull};
 
-use super::{page::Page, ptr::Ptr};
+use crate::mem::{page::Page, ptr::Ptr};
 
 pub struct BumpAllocator {
     alloc_page: NonNull<Page>,

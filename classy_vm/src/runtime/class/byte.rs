@@ -1,8 +1,9 @@
 use std::mem::{align_of, size_of};
 
-use crate::mem::ptr::Ptr;
-
-use super::{trace_none, Class, Kind};
+use crate::{
+    mem::ptr::Ptr,
+    runtime::class::{trace_none, Class, Kind},
+};
 
 pub const BYTE_CLASS: Class = Class {
     name: Ptr::null(),

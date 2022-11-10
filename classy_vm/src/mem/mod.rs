@@ -1,12 +1,3 @@
-use std::{
-    alloc::Layout,
-    mem::{align_of, size_of},
-};
-
-use crate::runtime::class::{self, header::Header, Class};
-
-use self::ptr::{ErasedPtr, NonNullPtr, Ptr};
-
 pub mod allocator;
 pub mod bump;
 pub mod heap;
@@ -14,6 +5,16 @@ pub mod page;
 pub mod permament_heap;
 pub mod ptr;
 pub mod tlab;
+
+use std::{
+    alloc::Layout,
+    mem::{align_of, size_of},
+};
+
+use crate::{
+    mem::ptr::{ErasedPtr, NonNullPtr, Ptr},
+    runtime::class::{self, header::Header, Class},
+};
 
 pub trait ObjectAllocator {
     fn try_allocate(&mut self, layout: Layout) -> ErasedPtr;

@@ -2,9 +2,10 @@
 
 use std::mem::{align_of, size_of};
 
-use crate::mem::ptr::Ptr;
-
-use super::{actual_class_size, class_trace, drop_class, Class, Kind};
+use crate::{
+    mem::ptr::Ptr,
+    runtime::class::{actual_class_size, class_trace, drop_class, Class, Kind},
+};
 
 pub const KLASS_CLASS: Class = Class {
     name: Ptr::null(),

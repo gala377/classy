@@ -14,10 +14,11 @@ use crate::{
         ptr::{NonNullPtr, Ptr},
         ObjectAllocator,
     },
-    runtime::class::header::{self, Header},
+    runtime::class::{
+        header::{self, Header},
+        Class,
+    },
 };
-
-use self::class::Class;
 
 #[derive(Clone)]
 pub struct Runtime {
@@ -145,13 +146,17 @@ pub fn setup_string_class<Heap: ObjectAllocator>(
 
 #[cfg(test)]
 mod tests {
-    use std::{mem::align_of, mem::size_of, sync::Arc};
+    use std::{
+        mem::{align_of, size_of},
+        sync::Arc,
+    };
 
-    use crate::mem::{permament_heap::PermamentHeap, ptr::Ptr, ObjectAllocator};
-
-    use super::{
-        class::{self, drop_instance, instance_trace, Class},
-        Runtime, RuntimeClasses,
+    use crate::{
+        mem::{permament_heap::PermamentHeap, ptr::Ptr, ObjectAllocator},
+        runtime::{
+            class::{self, Class},
+            Runtime, RuntimeClasses,
+        },
     };
 
     #[test]

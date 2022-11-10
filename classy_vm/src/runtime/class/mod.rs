@@ -1,5 +1,4 @@
 #![allow(unstable_name_collisions)]
-
 pub mod array;
 pub mod byte;
 pub mod header;
@@ -12,10 +11,8 @@ use sptr::Strict;
 
 use crate::{
     mem::ptr::{ErasedNonNull, ErasedPtr, NonNullPtr, Ptr},
-    runtime::{class::string::StringInst, trace::Tracer},
+    runtime::{class::string::StringInst, header::Header, trace::Tracer},
 };
-
-use self::header::Header;
 
 /// Class is aligned to the word boundary so that
 /// value of any aligment can go right after it.

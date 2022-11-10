@@ -1,10 +1,8 @@
 use crate::{
     mem::ptr::{ErasedNonNull, ErasedPtr, NonNullPtr},
-    runtime::class::header::Header,
+    runtime::class::{header::Header, Class},
     runtime::trace::Tracer,
 };
-
-use super::Class;
 
 #[repr(transparent)]
 pub struct Array<T> {

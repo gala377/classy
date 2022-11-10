@@ -1,8 +1,9 @@
 use std::alloc::Layout;
 
-use crate::runtime::class::{self, header::Header};
-
-use super::{ptr::ErasedPtr, ObjectAllocator};
+use crate::{
+    mem::{ptr::ErasedPtr, ObjectAllocator},
+    runtime::class::{self, header::Header},
+};
 
 pub struct PermamentHeap {
     allocated_bytes: usize,
