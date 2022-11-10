@@ -37,51 +37,10 @@ pub struct Class {
 }
 
 impl Class {
-    /// Unsafe becaues it reaches past the class for variadic arguments.
-    /// Can only be used on classes allocated within the managed heap.
-    pub unsafe fn fields(&self) -> &[Field] {
-        std::slice::from_raw_parts(self.fields_ptr(), self.fields_count())
-    }
-
-    /// Unsafe becaues it reaches past the class for variadic arguments.
-    /// Can only be used on classes allocated within the managed heap.
-    pub unsafe fn fields_mut(&mut self) -> &mut [Field] {
-        std::slice::from_raw_parts_mut(self.fields_ptr_mut(), self.fields_count())
-    }
-
-    pub unsafe fn drop_instance(&self, instance: *mut ()) {
-        // todo: assert instance class is self
-        if let Some(drop) = self.drop {
-            drop(instance);
-        }
-    }
-
-    /// Unsafe becaues it reaches past the class for variadic arguments.
-    /// Can only be used on classes allocated within the managed heap.
-    pub unsafe fn fields_ptr(&self) -> *const Field {
-        let ptr = self as *const Class;
-        let fields_ptr = ptr.add(1) as *const Field;
-        fields_ptr
-    }
-
-    /// Unsafe becaues it reaches past the class for variadic arguments.
-    /// Can only be used on classes allocated within the managed heap.
-    pub unsafe fn fields_ptr_mut(&mut self) -> *mut Field {
-        let ptr = self as *mut Class;
-        let fields_ptr = ptr.add(1) as *mut Field;
-        fields_ptr
-    }
-
     pub fn size_align(&self) -> (usize, usize) {
         (self.instance_size, self.instance_align)
     }
 
-    /// Unsafe becaues it reaches to the header before the class.
-    /// Can only be used on classes allocated within the managed heap.
-    pub unsafe fn fields_count(&self) -> usize {
-        let data_ptr = (self as *const _ as *const usize).sub(1);
-        *data_ptr
-    }
 
     pub fn array_element_type(&self) -> Ptr<Class> {
         if let Kind::Array { ref element_type } = self.kind {
@@ -90,27 +49,6 @@ impl Class {
         panic!("Class is not an array");
     }
 
-    /// Unsafe becaues it reaches past the class for variadic arguments.
-    /// Can only be used on classes allocated within the managed heap.
-    pub unsafe fn read_field_indexed<T>(&self, instance: ErasedNonNull, index: usize) -> T {
-        // todo: assert instance is this class
-        let field = self.fields().index(index);
-        let offset: isize = field.offset * size_of::<usize>() as isize;
-        let field_ptr: *const T = (instance.get() as *const u8).offset(offset).cast();
-        field_ptr.read()
-    }
-
-    /// Unsafe becaues it reaches past the class for variadic arguments.
-    /// Can only be used on classes allocated within the managed heap.
-    pub unsafe fn set_field_indexed<T>(&self, instance: ErasedNonNull, index: usize, val: T) {
-        // todo: assert instance is this class
-        let field = self.fields().index(index);
-        // todo: special cases for pointers.
-        // if field.is_reference then field size is size_of(usize) end
-        let offset: isize = field.offset * size_of::<usize>() as isize;
-        let field_ptr: *mut T = (instance.get() as *mut u8).offset(offset).cast();
-        field_ptr.write(val)
-    }
 
     pub fn is_reference_class(&self) -> bool {
         use Kind::*;
@@ -141,6 +79,72 @@ impl Class {
             Ptr(None) => "<null string ptr>",
         }
     }
+}
+
+// has to be a free standing function because Klass drops itself
+pub unsafe fn drop_instance(class: NonNullPtr<Class>, instance: *mut ()) {
+    let drop = (*class.get()).drop;
+    // todo: assert instance class is self
+    if let Some(drop) = drop {
+        drop(instance);
+    }
+}
+
+/// Unsafe because it reaches past the class for variadic arguments.
+/// Can only be used on classes allocated within the managed heap.
+pub unsafe fn fields<'a>(this: NonNullPtr<Class>) -> &'a [Field] {
+    std::slice::from_raw_parts(fields_ptr(this), fields_count(this))
+}
+
+/// Unsafe because it reaches past the class for variadic arguments.
+/// Can only be used on classes allocated within the managed heap.
+pub unsafe fn fields_mut<'a>(this: NonNullPtr<Class>) -> &'a mut [Field] {
+    std::slice::from_raw_parts_mut(fields_ptr_mut(this), fields_count(this))
+}
+
+/// Unsafe becaues it reaches past the class for variadic arguments.
+/// Can only be used on classes allocated within the managed heap.
+pub unsafe fn fields_ptr(this: NonNullPtr<Class>) -> *const Field {
+    let ptr = this.get();
+    let fields_ptr = ptr.add(1) as *const Field;
+    fields_ptr
+}
+
+/// Unsafe becaues it reaches past the class for variadic arguments.
+/// Can only be used on classes allocated within the managed heap.
+pub unsafe fn fields_ptr_mut(this: NonNullPtr<Class>) -> *mut Field {
+    let ptr = this.get();
+    let fields_ptr = ptr.add(1) as *mut Field;
+    fields_ptr
+}
+
+/// Unsafe becaues it reaches past the class for variadic arguments.
+/// Can only be used on classes allocated within the managed heap.
+pub unsafe fn read_field_indexed<T>(this: NonNullPtr<Class>, instance: ErasedNonNull, index: usize) -> T {
+    // todo: assert instance is this class
+    let field = fields(this).index(index);
+    let offset: isize = field.offset * size_of::<usize>() as isize;
+    let field_ptr: *const T = (instance.get() as *const u8).offset(offset).cast();
+    field_ptr.read()
+}
+
+/// Unsafe becaues it reaches past the class for variadic arguments.
+/// Can only be used on classes allocated within the managed heap.
+pub unsafe fn set_field_indexed<T>(this: NonNullPtr<Class>, instance: ErasedNonNull, index: usize, val: T) {
+    // todo: assert instance is this class
+    let field = fields(this).index(index);
+    // todo: special cases for pointers.
+    // if field.is_reference then field size is size_of(usize) end
+    let offset: isize = field.offset * size_of::<usize>() as isize;
+    let field_ptr: *mut T = (instance.get() as *mut u8).offset(offset).cast();
+    field_ptr.write(val)
+}
+
+/// Unsafe becaues it reaches to the header before the class.
+/// Can only be used on classes allocated within the managed heap.
+pub unsafe fn fields_count(this: NonNullPtr<Class>) -> usize {
+    let data_ptr = (this.get() as *const usize).sub(1);
+    *data_ptr
 }
 
 impl Debug for Class {
@@ -219,7 +223,7 @@ pub unsafe fn instance_trace(obj: *mut (), tracer: &mut dyn Tracer) {
     let cls_forward = tracer.trace_nonnull_pointer(cls.as_untyped());
     let header = ptr.header();
     (*header.as_ptr()).class = NonNullPtr::new_unchecked(cls_forward as *mut Class);
-    for field in (*cls.get()).fields().iter().filter(|f| f.reference) {
+    for field in fields(cls).iter().filter(|f| f.reference) {
         let offset = field.offset;
         let field_ptr = (obj.map_addr(|addr| (addr as isize + offset) as usize)) as *mut ErasedPtr;
         let forward = tracer.trace_pointer((*field_ptr).clone());
@@ -232,9 +236,10 @@ pub unsafe fn class_trace(obj: *mut (), tracer: &mut dyn Tracer) {
     let name = tracer.trace_pointer((*this).name.erase());
     (*this).name = Ptr::new(name as *mut StringInst);
     let kind = (*this).kind.clone();
+    let this_nonnull = NonNullPtr::new_unchecked(this);
     match kind {
         Kind::Instance => {
-            for field in (*this).fields_mut() {
+            for field in fields_mut(this_nonnull) {
                 let forward = tracer.trace_nonnull_pointer(field.class.as_untyped());
                 field.class = NonNullPtr::new_unchecked(forward as *mut Class);
                 let name = tracer.trace_nonnull_pointer(field.name.as_untyped());
@@ -254,8 +259,9 @@ pub unsafe fn class_trace(obj: *mut (), tracer: &mut dyn Tracer) {
 
 unsafe fn drop_class(cls: *mut ()) {
     let cls = cls as *mut Class;
-    let mut fields_ptr = (*cls).fields_ptr_mut();
-    let fields_count = (*cls).fields_count();
+    let cls_nonnull = NonNullPtr::new_unchecked(cls);
+    let mut fields_ptr = fields_ptr_mut(cls_nonnull);
+    let fields_count = fields_count(cls_nonnull);
     std::ptr::drop_in_place(cls);
     for _ in 0..fields_count {
         std::ptr::drop_in_place(fields_ptr);

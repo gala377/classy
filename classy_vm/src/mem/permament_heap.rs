@@ -1,6 +1,6 @@
 use std::alloc::Layout;
 
-use crate::runtime::class::header::Header;
+use crate::runtime::class::{header::Header, self};
 
 use super::{ptr::ErasedPtr, ObjectAllocator};
 
@@ -37,7 +37,8 @@ impl PermamentHeap {
 unsafe fn run_drop(addr: *mut u8) {
     let header = (addr as *mut Header).read();
     let obj = (addr as *mut Header).add(1) as _;
-    (*header.class.get()).drop_instance(obj);
+    let class = header.class;
+    class::drop_instance(class, obj);
 }
 
 impl ObjectAllocator for PermamentHeap {
@@ -58,5 +59,56 @@ impl ObjectAllocator for PermamentHeap {
 impl Drop for PermamentHeap {
     fn drop(&mut self) {
         self.free_allocated();
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use std::{alloc::Layout, mem::size_of, mem::align_of};
+
+    use crate::{mem::{ObjectAllocator, ptr::{NonNullPtr, Ptr}}, runtime::class::{self, header::{Header, self}, Class}};
+
+    use super::PermamentHeap;
+
+    fn setup_klass(heap: &mut PermamentHeap) -> NonNullPtr<Class> {
+        unsafe {
+            let layout = Layout::from_size_align(
+                size_of::<Header>() + size_of::<Class>(), align_of::<Header>())
+                .unwrap();
+            let klass_ptr = heap.try_allocate(layout);
+            assert!(!klass_ptr.is_null());
+            let klass_ptr = match klass_ptr {
+                Ptr(Some(ptr)) => ptr,
+                Ptr(None) => unreachable!("checked that it's not null"),
+            };
+            let header_ptr = klass_ptr.as_ptr() as *mut Header;
+            let class_ptr = header_ptr.add(1) as *mut Class;
+            let header = Header {
+                class: NonNullPtr::new_unchecked(class_ptr),
+                flags: header::Flags::PermamentHeap as usize,
+                data: 0
+            };
+            let klass = class::klass::KLASS_CLASS;
+            std::ptr::write(header_ptr, header);
+            std::ptr::write(class_ptr, klass);
+            NonNullPtr::new_unchecked(class_ptr)
+        }
+    }
+
+    #[test]
+    fn test_simple_allocation_in_a_permament_heap() {
+        let mut heap = PermamentHeap::new();
+        let klass = setup_klass(&mut heap);
+        let test_class = Class {
+            name: Ptr::null(),
+            drop: None,
+            trace: class::instance_trace,
+            instance_size: 3 * size_of::<usize>(),
+            instance_align: align_of::<usize>(),
+            actual_instance_size: None,
+            kind: class::Kind::Instance,
+        };
+        let _ = heap.allocate_class(test_class, &[], klass);
     }
 }
