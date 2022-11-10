@@ -51,6 +51,7 @@ impl RuntimeClasses {
         let klass = setup_klass(heap);
         let byte = setup_byte_class(heap, klass);
         let string = setup_string_class(heap, klass, byte);
+        fill_in_class_names(heap, klass, byte, string);
         RuntimeClasses {
             klass,
             string,
@@ -140,6 +141,17 @@ pub fn setup_string_class<Heap: ObjectAllocator>(
     }
 }
 
+fn fill_in_class_names<Heap: ObjectAllocator>(heap: &mut Heap, klass: NonNullPtr<Class>, byte: NonNullPtr<Class>, string: NonNullPtr<Class>) {
+    let klass_name = heap.allocate_static_string(string, "Klass");
+    let byte_name = heap.allocate_static_string(string, "Byte");
+    let string_name = heap.allocate_static_string(string, "String");
+    unsafe { 
+        (*klass.get()).name = klass_name;
+        (*byte.get()).name = byte_name;
+        (*string.get()).name = string_name;
+    }
+}
+
 // we need something like
 // impl RuntimeClasses {
 //
@@ -162,7 +174,7 @@ mod tests {
     };
 
     use crate::{
-        mem::{permament_heap::PermamentHeap, ptr::Ptr, ObjectAllocator},
+        mem::{permament_heap::PermamentHeap, ObjectAllocator},
         runtime::{
             class::{self, Class},
             Runtime, RuntimeClasses,
@@ -184,8 +196,10 @@ mod tests {
         let runtime = Runtime {
             classes: Arc::new(RuntimeClasses::init_runtime_classes(&mut heap)),
         };
+        let name = heap.allocate_static_string(
+            runtime.classes.string, "TestClass");
         let class = Class {
-            name: Ptr::null(),
+            name,
             drop: None,
             trace: class::instance_trace,
             instance_size: 10 * size_of::<usize>(),

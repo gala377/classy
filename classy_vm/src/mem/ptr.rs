@@ -46,6 +46,13 @@ impl<T> Ptr<T> {
         // SAFETY: Always safe, the aligment of () will always match
         unsafe { self.cast() }
     }
+
+    pub fn unwrap(&self) -> *mut T {
+        match self.inner() {
+            None => panic!("null ptr"),
+            Some(ptr) => ptr.as_ptr(),
+        }
+    }
 }
 
 impl<T> Clone for Ptr<T> {

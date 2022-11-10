@@ -13,7 +13,7 @@ use std::{
 
 use crate::{
     mem::ptr::{ErasedPtr, NonNullPtr, Ptr},
-    runtime::class::{self, header::Header, Class},
+    runtime::class::{self, header::Header, string::StringInst, Class},
 };
 
 pub trait ObjectAllocator {
@@ -91,6 +91,23 @@ pub trait ObjectAllocator {
                 }
                 cls_ptr
             },
+        }
+    }
+
+    fn allocate_static_string(&mut self, strcls: NonNullPtr<Class>, val: &str) -> Ptr<StringInst> {
+        let buff = self.allocate_array(strcls, val.as_bytes().len());
+        unsafe {
+            match buff.inner() {
+                None => buff.cast(),
+                Some(ptr) => {
+                    std::ptr::copy_nonoverlapping(
+                        val.as_ptr(),
+                        ptr.as_ptr() as *mut u8,
+                        val.as_bytes().len(),
+                    );
+                    buff.cast()
+                }
+            }
         }
     }
 

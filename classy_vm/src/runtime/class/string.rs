@@ -21,8 +21,16 @@ pub fn make_string_class(bytes: NonNullPtr<Class>) -> Class {
     }
 }
 
-#[derive(Debug)]
 pub struct StringInst;
+
+impl std::fmt::Debug for StringInst {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let contents = self.as_rust_str();
+        f.debug_tuple("String")
+            .field(&contents)
+            .finish()
+    }
+}
 
 impl StringInst {
     pub fn as_rust_string(&self) -> String {
