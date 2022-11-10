@@ -29,9 +29,7 @@ impl<T> Array<T> {
     }
 
     pub fn element_class(&self) -> NonNullPtr<Class> {
-        unsafe {
-            (*self.class().get()).array_element_type()
-        }
+        unsafe { (*self.class().get()).array_element_type() }
     }
 }
 

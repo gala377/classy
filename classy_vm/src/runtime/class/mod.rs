@@ -1,10 +1,10 @@
 #![allow(unstable_name_collisions)]
 
 pub mod array;
+pub mod byte;
 pub mod header;
 pub mod klass;
 pub mod string;
-pub mod byte;
 
 use std::{fmt::Debug, mem::size_of, ops::Index};
 
@@ -42,14 +42,12 @@ impl Class {
         (self.instance_size, self.instance_align)
     }
 
-
     pub fn array_element_type(&self) -> NonNullPtr<Class> {
         if let Kind::Array { ref element_type } = self.kind {
             return element_type.clone();
         }
         panic!("Class is not an array");
     }
-
 
     pub fn is_reference_class(&self) -> bool {
         use Kind::*;
@@ -118,7 +116,11 @@ pub unsafe fn fields_ptr_mut(this: NonNullPtr<Class>) -> *mut Field {
 
 /// Unsafe becaues it reaches past the class for variadic arguments.
 /// Can only be used on classes allocated within the managed heap.
-pub unsafe fn read_field_indexed<T>(this: NonNullPtr<Class>, instance: ErasedNonNull, index: usize) -> T {
+pub unsafe fn read_field_indexed<T>(
+    this: NonNullPtr<Class>,
+    instance: ErasedNonNull,
+    index: usize,
+) -> T {
     // todo: assert instance is this class
     let field = fields(this).index(index);
     let offset: isize = field.offset * size_of::<usize>() as isize;
@@ -128,7 +130,12 @@ pub unsafe fn read_field_indexed<T>(this: NonNullPtr<Class>, instance: ErasedNon
 
 /// Unsafe becaues it reaches past the class for variadic arguments.
 /// Can only be used on classes allocated within the managed heap.
-pub unsafe fn set_field_indexed<T>(this: NonNullPtr<Class>, instance: ErasedNonNull, index: usize, val: T) {
+pub unsafe fn set_field_indexed<T>(
+    this: NonNullPtr<Class>,
+    instance: ErasedNonNull,
+    index: usize,
+    val: T,
+) {
     // todo: assert instance is this class
     let field = fields(this).index(index);
     // todo: special cases for pointers.

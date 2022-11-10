@@ -1,6 +1,6 @@
 use std::alloc::Layout;
 
-use crate::runtime::class::{header::Header, self};
+use crate::runtime::class::{self, header::Header};
 
 use super::{ptr::ErasedPtr, ObjectAllocator};
 
@@ -62,20 +62,31 @@ impl Drop for PermamentHeap {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use std::{alloc::Layout, mem::size_of, mem::align_of};
+    use std::{alloc::Layout, mem::align_of, mem::size_of};
 
-    use crate::{mem::{ObjectAllocator, ptr::{NonNullPtr, Ptr}}, runtime::class::{self, header::{Header, self}, Class}};
+    use crate::{
+        mem::{
+            ptr::{NonNullPtr, Ptr},
+            ObjectAllocator,
+        },
+        runtime::class::{
+            self,
+            header::{self, Header},
+            Class,
+        },
+    };
 
     use super::PermamentHeap;
 
     fn setup_klass(heap: &mut PermamentHeap) -> NonNullPtr<Class> {
         unsafe {
             let layout = Layout::from_size_align(
-                size_of::<Header>() + size_of::<Class>(), align_of::<Header>())
-                .unwrap();
+                size_of::<Header>() + size_of::<Class>(),
+                align_of::<Header>(),
+            )
+            .unwrap();
             let klass_ptr = heap.try_allocate(layout);
             assert!(!klass_ptr.is_null());
             let klass_ptr = match klass_ptr {
@@ -87,7 +98,7 @@ mod tests {
             let header = Header {
                 class: NonNullPtr::new_unchecked(class_ptr),
                 flags: header::Flags::PermamentHeap as usize,
-                data: 0
+                data: 0,
             };
             let klass = class::klass::KLASS_CLASS;
             std::ptr::write(header_ptr, header);

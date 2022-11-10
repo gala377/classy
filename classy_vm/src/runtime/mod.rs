@@ -3,9 +3,19 @@ pub mod thread;
 pub mod thread_manager;
 pub mod trace;
 
-use std::{sync::Arc, alloc::Layout, mem::{size_of, align_of}};
+use std::{
+    alloc::Layout,
+    mem::{align_of, size_of},
+    sync::Arc,
+};
 
-use crate::{mem::{ptr::{NonNullPtr, Ptr}, ObjectAllocator}, runtime::class::header::{Header, self}};
+use crate::{
+    mem::{
+        ptr::{NonNullPtr, Ptr},
+        ObjectAllocator,
+    },
+    runtime::class::header::{self, Header},
+};
 
 use self::class::Class;
 
@@ -30,7 +40,11 @@ impl RuntimeClasses {
         let klass = setup_klass(heap);
         let byte = setup_byte_class(heap, klass);
         let string = setup_string_class(heap, klass, byte);
-        RuntimeClasses { klass, string, byte }
+        RuntimeClasses {
+            klass,
+            string,
+            byte,
+        }
     }
 }
 
@@ -46,17 +60,23 @@ fn setup_klass<Heap: ObjectAllocator>(heap: &mut Heap) -> NonNullPtr<Class> {
         };
         let header_ptr = klass_ptr.as_ptr() as *mut Header;
         let class_ptr = header_ptr.add(1) as *mut Class;
-        std::ptr::write(header_ptr, Header {
-            class: NonNullPtr::new_unchecked(class_ptr),
-            flags: header::Flags::PermamentHeap as usize,
-            data: 0
-        });
+        std::ptr::write(
+            header_ptr,
+            Header {
+                class: NonNullPtr::new_unchecked(class_ptr),
+                flags: header::Flags::PermamentHeap as usize,
+                data: 0,
+            },
+        );
         std::ptr::write(class_ptr, class::klass::KLASS_CLASS);
         NonNullPtr::new_unchecked(class_ptr)
     }
 }
-fn setup_byte_class<Heap: ObjectAllocator>(heap: &mut Heap, klass: NonNullPtr<Class>) -> NonNullPtr<Class> {
-    unsafe { 
+fn setup_byte_class<Heap: ObjectAllocator>(
+    heap: &mut Heap,
+    klass: NonNullPtr<Class>,
+) -> NonNullPtr<Class> {
+    unsafe {
         let size = size_of::<Header>() + size_of::<Class>();
         let layout = Layout::from_size_align(size, align_of::<Header>()).unwrap();
         let allocation = heap.try_allocate(layout);
@@ -66,37 +86,47 @@ fn setup_byte_class<Heap: ObjectAllocator>(heap: &mut Heap, klass: NonNullPtr<Cl
             Ptr(None) => unreachable!("checked that it's not null"),
         };
         let header_ptr = ptr.as_ptr() as *mut Header;
-        std::ptr::write(header_ptr, Header {
-            class: klass,
-            flags: header::Flags::PermamentHeap as usize,
-            data: 0,
-        });
+        std::ptr::write(
+            header_ptr,
+            Header {
+                class: klass,
+                flags: header::Flags::PermamentHeap as usize,
+                data: 0,
+            },
+        );
         let class_ptr = header_ptr.add(1) as *mut Class;
         std::ptr::write(class_ptr, class::byte::BYTE_CLASS);
         NonNullPtr::new_unchecked(class_ptr)
     }
 }
 
-pub fn setup_string_class<Heap: ObjectAllocator>(heap: &mut Heap, klass: NonNullPtr<Class>, bytes: NonNullPtr<Class>) -> NonNullPtr<Class> {
+pub fn setup_string_class<Heap: ObjectAllocator>(
+    heap: &mut Heap,
+    klass: NonNullPtr<Class>,
+    bytes: NonNullPtr<Class>,
+) -> NonNullPtr<Class> {
     unsafe {
-    let size = size_of::<Header>() + size_of::<Class>();
-    let layout = Layout::from_size_align(size, align_of::<Header>()).unwrap();
-    let allocation = heap.try_allocate(layout);
-    assert!(!allocation.is_null());
-    let ptr = match allocation {
-        Ptr(Some(ptr)) => ptr,
-        Ptr(None) => unreachable!("checked that it's not null"),
-    };
-    let header_ptr = ptr.as_ptr() as *mut Header;
-    std::ptr::write(header_ptr, Header {
-        class: klass,
-        flags: header::Flags::PermamentHeap as usize,
-        data: 0,
-    });
-    let class_ptr = header_ptr.add(1) as *mut Class;
-    std::ptr::write(class_ptr, class::string::make_string_class(bytes));
-    NonNullPtr::new_unchecked(class_ptr)
-}
+        let size = size_of::<Header>() + size_of::<Class>();
+        let layout = Layout::from_size_align(size, align_of::<Header>()).unwrap();
+        let allocation = heap.try_allocate(layout);
+        assert!(!allocation.is_null());
+        let ptr = match allocation {
+            Ptr(Some(ptr)) => ptr,
+            Ptr(None) => unreachable!("checked that it's not null"),
+        };
+        let header_ptr = ptr.as_ptr() as *mut Header;
+        std::ptr::write(
+            header_ptr,
+            Header {
+                class: klass,
+                flags: header::Flags::PermamentHeap as usize,
+                data: 0,
+            },
+        );
+        let class_ptr = header_ptr.add(1) as *mut Class;
+        std::ptr::write(class_ptr, class::string::make_string_class(bytes));
+        NonNullPtr::new_unchecked(class_ptr)
+    }
 }
 
 // we need something like
@@ -115,11 +145,14 @@ pub fn setup_string_class<Heap: ObjectAllocator>(heap: &mut Heap, klass: NonNull
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::Arc, mem::size_of, mem::align_of};
+    use std::{mem::align_of, mem::size_of, sync::Arc};
 
     use crate::mem::{permament_heap::PermamentHeap, ptr::Ptr, ObjectAllocator};
 
-    use super::{RuntimeClasses, Runtime, class::{Class, drop_instance, instance_trace, self}};
+    use super::{
+        class::{self, drop_instance, instance_trace, Class},
+        Runtime, RuntimeClasses,
+    };
 
     #[test]
     fn setup_runtime_in_permament_heap() {
