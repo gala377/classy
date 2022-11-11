@@ -100,7 +100,11 @@ impl ThreadManager {
             }
         });
 
-        println!("New thread with id {:?} count is {}", t.thread().id(), state.count);
+        println!(
+            "New thread with id {:?} count is {}",
+            t.thread().id(),
+            state.count
+        );
         state.threads.insert(t.thread().id(), Some(t));
         Ok(())
     }

@@ -94,10 +94,8 @@ mod tests {
             )
             .unwrap();
             let klass_ptr = heap.try_allocate(layout);
-            assert!(!klass_ptr.is_null());
-            let klass_ptr = match klass_ptr {
-                Ptr(Some(ptr)) => ptr,
-                Ptr(None) => unreachable!("checked that it's not null"),
+            let Some(klass_ptr) = klass_ptr.inner() else {
+                panic!("Could not allocate Klass inside the permament heap")
             };
             let header_ptr = klass_ptr.as_ptr() as *mut Header;
             let class_ptr = header_ptr.add(1) as *mut Class;

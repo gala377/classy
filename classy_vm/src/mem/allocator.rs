@@ -130,9 +130,8 @@ impl Allocator {
 }
 
 const fn round_up_to_align(addr: usize, align: usize) -> usize {
-    let addr = match addr.checked_add(align - 1) {
-        None => panic!("overflow"),
-        Some(v) => v,
+    let Some(addr) = addr.checked_add(align - 1) else {
+        panic!("overflow")
     };
     addr & !(align - 1)
 }

@@ -30,9 +30,8 @@ impl<T> Ptr<T> {
     }
 
     pub unsafe fn cast<U>(&self) -> Ptr<U> {
-        let ptr = match self.0 {
-            None => return Ptr(None),
-            Some(v) => v,
+        let Some(ptr) = self.0 else {
+            return Ptr(None)
         };
         assert!(
             (ptr.as_ptr() as usize) % std::mem::align_of::<U>() == 0,

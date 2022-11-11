@@ -77,51 +77,49 @@ pub trait ObjectAllocator {
     ) -> *mut Class {
         let mut header = Header::for_class(meta_class, fields.len());
         self.adjust_header(&mut header);
-        match allocation.inner() {
-            None => std::ptr::null_mut(),
-            Some(ptr) => unsafe {
-                let header_ptr = ptr.as_ptr() as *mut Header;
-                header_ptr.write(header);
-                let cls_ptr = header_ptr.add(1) as *mut Class;
-                cls_ptr.write(cls);
-                let mut fields_ptr = cls_ptr.add(1) as *mut class::Field;
-                for val in fields.iter().cloned() {
-                    fields_ptr.write(val);
-                    fields_ptr = fields_ptr.add(1);
-                }
-                cls_ptr
-            },
+        let Some(ptr) = allocation.inner() else {
+            return std::ptr::null_mut()
+        };
+        unsafe {
+            let header_ptr = ptr.as_ptr() as *mut Header;
+            header_ptr.write(header);
+            let cls_ptr = header_ptr.add(1) as *mut Class;
+            cls_ptr.write(cls);
+            let mut fields_ptr = cls_ptr.add(1) as *mut class::Field;
+            for val in fields.iter().cloned() {
+                fields_ptr.write(val);
+                fields_ptr = fields_ptr.add(1);
+            }
+            cls_ptr
         }
     }
 
     fn allocate_static_string(&mut self, strcls: NonNullPtr<Class>, val: &str) -> Ptr<StringInst> {
         let buff = self.allocate_array(strcls, val.as_bytes().len());
         unsafe {
-            match buff.inner() {
-                None => buff.cast(),
-                Some(ptr) => {
-                    std::ptr::copy_nonoverlapping(
-                        val.as_ptr(),
-                        ptr.as_ptr() as *mut u8,
-                        val.as_bytes().len(),
-                    );
-                    buff.cast()
-                }
-            }
+            let Some(ptr) = buff.inner() else {
+                return buff.cast()
+            };
+            std::ptr::copy_nonoverlapping(
+                val.as_ptr(),
+                ptr.as_ptr() as *mut u8,
+                val.as_bytes().len(),
+            );
+            buff.cast()
         }
     }
 
     fn initialize_instance(&mut self, allocation: ErasedPtr, cls: NonNullPtr<Class>) -> *mut () {
         let mut header = Header::for_instance(cls);
         self.adjust_header(&mut header);
-        match allocation.inner() {
-            None => std::ptr::null_mut(),
-            Some(ptr) => unsafe {
-                let header_ptr = ptr.as_ptr() as *mut Header;
-                header_ptr.write(header);
-                let obj_ptr = header_ptr.add(1) as *mut ();
-                obj_ptr
-            },
+        let Some(ptr) = allocation.inner() else {
+            return std::ptr::null_mut()
+        };
+        unsafe {
+            let header_ptr = ptr.as_ptr() as *mut Header;
+            header_ptr.write(header);
+            let obj_ptr = header_ptr.add(1) as *mut ();
+            obj_ptr
         }
     }
 
@@ -134,15 +132,15 @@ pub trait ObjectAllocator {
     ) -> *mut () {
         let mut header = Header::for_array(array_cls, size);
         self.adjust_header(&mut header);
-        match allocation.inner() {
-            None => std::ptr::null_mut(),
-            Some(ptr) => unsafe {
-                let header_ptr = ptr.as_ptr() as *mut Header;
-                header_ptr.write(header);
-                let arr_ptr: *mut u8 = header_ptr.add(1).cast();
-                std::ptr::write_bytes(arr_ptr, 0, size * el_size);
-                arr_ptr.cast()
-            },
+        let Some(ptr) = allocation.inner() else {
+            return std::ptr::null_mut()
+        };
+        unsafe {
+            let header_ptr = ptr.as_ptr() as *mut Header;
+            header_ptr.write(header);
+            let arr_ptr: *mut u8 = header_ptr.add(1).cast();
+            std::ptr::write_bytes(arr_ptr, 0, size * el_size);
+            arr_ptr.cast()
         }
     }
 }

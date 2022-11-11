@@ -88,7 +88,7 @@ impl Vm {
 impl Drop for Vm {
     fn drop(&mut self) {
         if std::thread::current().id() != self.original_thread_id {
-            return
+            return;
         }
         while let Err(_) = self.thread_manager.cleanup_thread() {
             self.thread_manager.stop_for_gc().unwrap();

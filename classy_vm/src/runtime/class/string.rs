@@ -26,9 +26,7 @@ pub struct StringInst;
 impl std::fmt::Debug for StringInst {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let contents = self.as_rust_str();
-        f.debug_tuple("String")
-            .field(&contents)
-            .finish()
+        f.debug_tuple("String").field(&contents).finish()
     }
 }
 

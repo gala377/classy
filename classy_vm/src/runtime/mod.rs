@@ -11,7 +11,7 @@ use std::{
 
 use crate::{
     mem::{
-        ptr::{NonNullPtr, Ptr},
+        ptr::NonNullPtr,
         ObjectAllocator,
     },
     runtime::class::{
@@ -65,10 +65,8 @@ fn setup_klass<Heap: ObjectAllocator>(heap: &mut Heap) -> NonNullPtr<Class> {
         let size = size_of::<Header>() + size_of::<Class>();
         let layout = Layout::from_size_align(size, align_of::<Header>()).unwrap();
         let klass_ptr = heap.try_allocate(layout);
-        assert!(!klass_ptr.is_null());
-        let klass_ptr = match klass_ptr {
-            Ptr(Some(ptr)) => ptr,
-            Ptr(None) => unreachable!("checked that it's not null"),
+        let Some(klass_ptr) = klass_ptr.inner() else {
+            panic!("could not allocate klass inside the permament heap")
         };
         let header_ptr = klass_ptr.as_ptr() as *mut Header;
         let class_ptr = header_ptr.add(1) as *mut Class;
@@ -93,9 +91,8 @@ fn setup_byte_class<Heap: ObjectAllocator>(
         let layout = Layout::from_size_align(size, align_of::<Header>()).unwrap();
         let allocation = heap.try_allocate(layout);
         assert!(!allocation.is_null());
-        let ptr = match allocation {
-            Ptr(Some(ptr)) => ptr,
-            Ptr(None) => unreachable!("checked that it's not null"),
+        let Some(ptr) = allocation.inner() else {
+            panic!("cannot allocate a bute class inside the permament heap")
         };
         let header_ptr = ptr.as_ptr() as *mut Header;
         std::ptr::write(
@@ -121,10 +118,8 @@ pub fn setup_string_class<Heap: ObjectAllocator>(
         let size = size_of::<Header>() + size_of::<Class>();
         let layout = Layout::from_size_align(size, align_of::<Header>()).unwrap();
         let allocation = heap.try_allocate(layout);
-        assert!(!allocation.is_null());
-        let ptr = match allocation {
-            Ptr(Some(ptr)) => ptr,
-            Ptr(None) => unreachable!("checked that it's not null"),
+        let Some(ptr) = allocation.inner() else {
+            panic!("Could not allocate a string class inside the permament heap")
         };
         let header_ptr = ptr.as_ptr() as *mut Header;
         std::ptr::write(
@@ -141,11 +136,16 @@ pub fn setup_string_class<Heap: ObjectAllocator>(
     }
 }
 
-fn fill_in_class_names<Heap: ObjectAllocator>(heap: &mut Heap, klass: NonNullPtr<Class>, byte: NonNullPtr<Class>, string: NonNullPtr<Class>) {
+fn fill_in_class_names<Heap: ObjectAllocator>(
+    heap: &mut Heap,
+    klass: NonNullPtr<Class>,
+    byte: NonNullPtr<Class>,
+    string: NonNullPtr<Class>,
+) {
     let klass_name = heap.allocate_static_string(string, "Klass");
     let byte_name = heap.allocate_static_string(string, "Byte");
     let string_name = heap.allocate_static_string(string, "String");
-    unsafe { 
+    unsafe {
         (*klass.get()).name = klass_name;
         (*byte.get()).name = byte_name;
         (*string.get()).name = string_name;
@@ -196,8 +196,7 @@ mod tests {
         let runtime = Runtime {
             classes: Arc::new(RuntimeClasses::init_runtime_classes(&mut heap)),
         };
-        let name = heap.allocate_static_string(
-            runtime.classes.string, "TestClass");
+        let name = heap.allocate_static_string(runtime.classes.string, "TestClass");
         let class = Class {
             name,
             drop: None,

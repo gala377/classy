@@ -40,20 +40,18 @@ impl BumpAllocator {
         let align = layout.align();
         let size = layout.size();
         unsafe {
-            let mut ptr = free.as_ptr().addr();
-            ptr = match ptr.checked_add(align - 1) {
-                None => return Ptr::null(),
-                Some(v) => v,
+            let ptr = free.as_ptr().addr();
+            let Some(ptr) = ptr.checked_add(align - 1) else {
+                return Ptr::null()
             };
             let aligned = ptr & !(align - 1);
-            let new_ptr = match aligned.checked_add(size) {
-                None => return Ptr::null(),
-                Some(v) => v,
+            let Some(ptr) = aligned.checked_add(size) else {
+                return Ptr::null()
             };
-            if new_ptr > end.as_ptr().addr() {
+            if ptr > end.as_ptr().addr() {
                 return Ptr::null();
             }
-            self.set_free(self.add_provenance(new_ptr));
+            self.set_free(self.add_provenance(ptr));
             Ptr::new_non_null(NonNull::new_unchecked(self.add_provenance(aligned)))
         }
     }
