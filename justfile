@@ -18,7 +18,6 @@ miri_quick:
         --threads 3
 
 mtest:
-    RUST_BACKTRACE=1 MIRIFLAGS=-Zmiri-backtrace=full \
     cargo +nightly miri test 
 
 run_release:
