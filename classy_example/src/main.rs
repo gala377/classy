@@ -45,14 +45,18 @@ fn main() {
     for _ in 0..args.threads {
         start_thread(&vm, &args);
     }
-    wait_for_all_threads(vm.thread_manager());
+    wait_for_all_threads(vm);
     println!("Done")
 }
 
-fn wait_for_all_threads(thread_manager: Arc<ThreadManager>) {
+fn wait_for_all_threads(vm: Vm) {
     // we need to count that vm registers current thread
-    while thread_manager.current_threads_count() > 1 {
-        std::thread::yield_now();
+    while vm.thread_manager().current_threads_count() > 1 {
+        if vm.thread_manager().should_stop_thread_for_gc() {
+            vm.thread_manager().stop_for_gc().unwrap()
+        } else {
+            std::thread::yield_now()
+        }
     }
 }
 
