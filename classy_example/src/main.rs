@@ -1,9 +1,8 @@
-use std::sync::Arc;
-
 use clap::Parser;
+
 use classy_vm::{
     mem::{page::Page, ptr::Ptr},
-    runtime::thread_manager::{self, ThreadManager},
+    runtime::thread_manager,
     vm::{self, Vm},
 };
 

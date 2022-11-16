@@ -10,10 +10,7 @@ use std::{
 };
 
 use crate::{
-    mem::{
-        ptr::NonNullPtr,
-        ObjectAllocator,
-    },
+    mem::{ptr::NonNullPtr, ObjectAllocator},
     runtime::class::{
         header::{self, Header},
         Class,
