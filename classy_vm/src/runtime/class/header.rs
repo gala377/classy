@@ -11,7 +11,7 @@ impl Flags {
     }
 }
 
-#[repr(align(8))]
+#[repr(C, align(8))]
 pub struct Header {
     pub class: NonNullPtr<Class>,
     pub flags: usize,
