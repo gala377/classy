@@ -56,10 +56,10 @@ impl<'a> Gc<'a> {
         println!("\n\n\nTracing heap\n\n\n");
         while let Some(ptr) = self.worklist.pop_front() {
             if let Some(ptr) = ptr.inner() {
-                    let header = (ptr.as_ptr() as *mut Header).sub(1);
-                    let class = (*header).class;
-                    let trace = (*class.get()).trace;
-                    trace(ptr.as_ptr(), self);
+                let header = (ptr.as_ptr() as *mut Header).sub(1);
+                let class = (*header).class;
+                let trace = (*class.get()).trace;
+                trace(ptr.as_ptr(), self);
             }
         }
         println!("Done");

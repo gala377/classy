@@ -2,18 +2,23 @@
 
 use std::{
     alloc::Layout,
+    ptr::{addr_of, NonNull},
     sync::{Arc, Mutex},
-    thread::ThreadId, ptr::{NonNull, addr_of},
+    thread::ThreadId,
 };
 
 use crate::{
     mem::{
         allocator::Allocator,
-        ptr::{ErasedPtr, Ptr, ErasedNonNull, NonNullPtr},
+        handle::Handle,
+        ptr::{ErasedPtr, NonNullPtr, Ptr},
         tlab::Tlab,
-        ObjectAllocator, handle::Handle,
+        ObjectAllocator,
     },
-    runtime::{thread_manager::{StopRequetError, ThreadManager}, trace::Gc},
+    runtime::{
+        thread_manager::{StopRequetError, ThreadManager},
+        trace::Gc,
+    },
 };
 
 #[derive(Clone, Copy)]
@@ -59,7 +64,7 @@ enum ShouldPerformGc {
 }
 
 /// Represents the whole heap of the virtual machine's instance.
-/// Acts as a monitor on the heap. It should be cloned and used directly. 
+/// Acts as a monitor on the heap. It should be cloned and used directly.
 /// Do not put behind Mutex or Arc.
 ///
 /// This struct is per thread, meaning that each thread holds its own copy.
@@ -79,10 +84,8 @@ pub struct Heap {
 
     // todo: old generation allocator and collection
     // promotion from the young space to the old space.
-
     /// A list existing handles;
     handles: Arc<Mutex<Option<NonNull<HandleNode>>>>,
-
 }
 
 pub struct Options {
@@ -148,7 +151,7 @@ impl Heap {
         let handles = self.handles.lock().unwrap();
         let mut curr = handles.clone();
         while let Some(node) = curr {
-            unsafe { 
+            unsafe {
                 let ptr_addr = addr_of!((*node.as_ptr()).ptr) as *mut _;
                 roots.push(ptr_addr);
                 curr = (*node.as_ptr()).next.clone();
@@ -178,7 +181,7 @@ impl Heap {
                 (*new_node.as_ptr()).next = Some(curr_head_ptr);
                 (*curr_head_ptr.as_ptr()).prev = Some(new_node);
                 *head = Some(new_node);
-            }
+            },
         }
         handle
     }
@@ -240,12 +243,11 @@ impl Drop for Heap {
         let mut head = self.handles.lock().unwrap();
         let mut curr = head.take();
         while let Some(ptr) = curr {
-            unsafe { 
+            unsafe {
                 curr = (*ptr.as_ptr()).next;
                 drop(Box::from_raw(ptr.as_ptr()));
             }
         }
-    
     }
 }
 

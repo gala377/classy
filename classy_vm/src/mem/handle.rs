@@ -1,4 +1,4 @@
-use crate::mem::ptr::{NonNullPtr, Ptr};
+use crate::mem::ptr::Ptr;
 
 pub struct Handle<T>(pub *mut Ptr<T>);
 

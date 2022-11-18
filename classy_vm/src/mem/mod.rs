@@ -1,11 +1,11 @@
 pub mod allocator;
 pub mod bump;
+pub mod handle;
 pub mod heap;
 pub mod page;
 pub mod permament_heap;
 pub mod ptr;
 pub mod tlab;
-pub mod handle;
 
 use std::{
     alloc::Layout,
