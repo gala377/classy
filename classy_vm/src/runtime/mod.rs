@@ -10,7 +10,10 @@ use std::{
 };
 
 use crate::{
-    mem::{ptr::NonNullPtr, ObjectAllocator},
+    mem::{
+        ptr::{NonNullPtr, Ptr},
+        ObjectAllocator,
+    },
     runtime::class::{
         header::{self, Header},
         Class,
@@ -34,7 +37,7 @@ pub struct RuntimeClasses {
     pub klass: NonNullPtr<Class>,
     pub string: NonNullPtr<Class>,
     pub byte: NonNullPtr<Class>,
-    // pub int: NonNullPtr<class::Int>,
+    pub int: NonNullPtr<Class>,
     // pub bool: NonNullPtr<class::Bool>,
 }
 
@@ -49,10 +52,19 @@ impl RuntimeClasses {
         let byte = setup_byte_class(heap, klass);
         let string = setup_string_class(heap, klass, byte);
         fill_in_class_names(heap, klass, byte, string);
+        let int = setup_class(
+            heap,
+            klass,
+            string,
+            "Integer",
+            &class::integer::INTEGER_CLASS,
+            &[],
+        );
         RuntimeClasses {
             klass,
             string,
             byte,
+            int,
         }
     }
 }
@@ -89,7 +101,7 @@ fn setup_byte_class<Heap: ObjectAllocator>(
         let allocation = heap.try_allocate(layout);
         assert!(!allocation.is_null());
         let Some(ptr) = allocation.inner() else {
-            panic!("cannot allocate a bute class inside the permament heap")
+            panic!("cannot allocate a byte class inside the permament heap")
         };
         let header_ptr = ptr.as_ptr() as *mut Header;
         std::ptr::write(
@@ -131,6 +143,25 @@ pub fn setup_string_class<Heap: ObjectAllocator>(
         std::ptr::write(class_ptr, class::string::make_string_class(bytes));
         NonNullPtr::new_unchecked(class_ptr)
     }
+}
+
+fn setup_class<Heap: ObjectAllocator>(
+    heap: &mut Heap,
+    klass: NonNullPtr<Class>,
+    strcls: NonNullPtr<Class>,
+    name: &str,
+    class: &Class,
+    fields: &[class::Field],
+) -> NonNullPtr<Class> {
+    let class_name = heap.allocate_static_string(strcls, name);
+    let class = Class {
+        name: class_name,
+        ..*class
+    };
+    let Ptr(Some(cls_ptr)) = heap.allocate_class(class, fields, klass) else {
+        panic!("could not allocate {name} class in the permament heap");
+    };
+    NonNullPtr::new(cls_ptr)
 }
 
 fn fill_in_class_names<Heap: ObjectAllocator>(

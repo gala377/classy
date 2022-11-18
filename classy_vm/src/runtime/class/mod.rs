@@ -4,6 +4,7 @@ pub mod byte;
 pub mod header;
 pub mod klass;
 pub mod string;
+pub mod integer;
 
 use std::{fmt::Debug, mem::size_of, ops::Index};
 
@@ -162,7 +163,7 @@ impl Debug for Class {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum Kind {
     Klass,
     Instance,
