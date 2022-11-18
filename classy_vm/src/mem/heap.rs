@@ -58,24 +58,28 @@ enum ShouldPerformGc {
     ShouldWait,
 }
 
+/// Represents the whole heap of the virtual machine's instance.
+/// Acts as a monitor on the heap. It should be cloned and used directly. 
+/// Do not put behind Mutex or Arc.
+///
+/// This struct is per thread, meaning that each thread holds its own copy.
+/// It is safe to clone and send to another thread, though the thread_id and a tlab
+/// have to be recomputed for the new thread.
 #[allow(dead_code)]
 pub struct Heap {
     thread_id: std::thread::ThreadId,
     thread_tlab: Tlab,
     thread_manager: Arc<ThreadManager>,
-
-    // we always allocate in the from_space
-    from_space: SemiSpace,
-
-    to_space: SemiSpace,
-    // old generation allocator
-
-    // new generation allocator
-    // what do we need?
-    //    - we need to somehow keep track of how much is allocated in pages for the young space
-    //    - keep track of which pages are to space pages and which pages are from space pages
-    //    - ....
     options: Options,
+
+    // Young space.
+    // We always allocate in the from_space
+    from_space: SemiSpace,
+    to_space: SemiSpace,
+
+    // todo: old generation allocator and collection
+    // promotion from the young space to the old space.
+
 }
 
 pub struct Options {
@@ -130,7 +134,8 @@ impl Heap {
         todo!(
             r"perform the gc for the young generation.
             go through the pages of the from space and copy everything 
-            from the from space to the to space"
+            from the from space to the to space, well, that's the easy part
+            we somehow need to provide roots"
         )
     }
 
