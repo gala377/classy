@@ -45,22 +45,21 @@ impl<'a> Gc<'a> {
         }
     }
 
-    pub fn collect(&mut self, roots: &mut [ErasedPtr]) {
+    /// Pointers passed as roots have to be nonull
+    pub unsafe fn collect(&mut self, roots: &[*mut ErasedPtr]) {
         println!("\n\n\nTracing roots\n\n\n");
-        for root in roots.iter_mut() {
-            let ptr = ErasedPtr::new(self.trace_pointer(root.clone()));
+        for root in roots.iter().cloned() {
+            let ptr = ErasedPtr::new(self.trace_pointer(*root));
             *root = ptr;
             self.worklist.push_back(ptr);
         }
         println!("\n\n\nTracing heap\n\n\n");
         while let Some(ptr) = self.worklist.pop_front() {
             if let Some(ptr) = ptr.inner() {
-                unsafe {
                     let header = (ptr.as_ptr() as *mut Header).sub(1);
                     let class = (*header).class;
                     let trace = (*class.get()).trace;
                     trace(ptr.as_ptr(), self);
-                }
             }
         }
         println!("Done");

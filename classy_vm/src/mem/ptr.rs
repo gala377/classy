@@ -137,6 +137,12 @@ impl<T> Clone for NonNullPtr<T> {
 
 impl<T> Copy for NonNullPtr<T> {}
 
+impl<T> From<NonNullPtr<T>> for Ptr<T> {
+    fn from(ptr: NonNullPtr<T>) -> Self {
+        Self(Some(ptr.0))
+    }
+}
+
 pub type ErasedPtr = Ptr<()>;
 
 pub type ErasedNonNull = NonNullPtr<()>;

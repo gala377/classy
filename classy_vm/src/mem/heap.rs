@@ -3,17 +3,17 @@
 use std::{
     alloc::Layout,
     sync::{Arc, Mutex},
-    thread::ThreadId,
+    thread::ThreadId, ptr::{NonNull, addr_of},
 };
 
 use crate::{
     mem::{
         allocator::Allocator,
-        ptr::{ErasedPtr, Ptr},
+        ptr::{ErasedPtr, Ptr, ErasedNonNull, NonNullPtr},
         tlab::Tlab,
-        ObjectAllocator,
+        ObjectAllocator, handle::Handle,
     },
-    runtime::thread_manager::{StopRequetError, ThreadManager},
+    runtime::{thread_manager::{StopRequetError, ThreadManager}, trace::Gc},
 };
 
 #[derive(Clone, Copy)]
@@ -80,6 +80,9 @@ pub struct Heap {
     // todo: old generation allocator and collection
     // promotion from the young space to the old space.
 
+    /// A list existing handles;
+    handles: Arc<Mutex<Option<NonNull<HandleNode>>>>,
+
 }
 
 pub struct Options {
@@ -107,6 +110,7 @@ impl Heap {
             from_space,
             to_space,
             options,
+            handles: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -131,16 +135,58 @@ impl Heap {
     }
 
     fn gc_young_generation(&mut self) {
-        todo!(
-            r"perform the gc for the young generation.
-            go through the pages of the from space and copy everything 
-            from the from space to the to space, well, that's the easy part
-            we somehow need to provide roots"
-        )
+        let mut roots = Vec::new();
+        self.collect_handles_to_roots(&mut roots);
+        {
+            let mut to_space = self.to_space.lock().unwrap();
+            let mut gc = Gc::new(&mut to_space.allocator);
+            unsafe { gc.collect(&roots) };
+        }
+    }
+
+    fn collect_handles_to_roots(&mut self, roots: &mut Vec<*mut ErasedPtr>) {
+        let handles = self.handles.lock().unwrap();
+        let mut curr = handles.clone();
+        while let Some(node) = curr {
+            unsafe { 
+                let ptr_addr = addr_of!((*node.as_ptr()).ptr) as *mut _;
+                roots.push(ptr_addr);
+                curr = (*node.as_ptr()).next.clone();
+            }
+        }
     }
 
     pub fn allocate_in_old_space(&mut self, _layout: Layout) -> ErasedPtr {
         todo!("Use old space allocator to allocate the layout")
+    }
+
+    pub fn create_handle<T>(&mut self, to: NonNullPtr<T>) -> Handle<T> {
+        self.check_if_gc_requested();
+        let node = Box::into_raw(Box::new(HandleNode {
+            ptr: to.erase().into(),
+            next: None,
+            prev: None,
+        }));
+        let handle = Handle(unsafe { addr_of!((*node).ptr) as *mut _ });
+        let new_node = NonNull::new(node).unwrap();
+        let mut head = self.handles.lock().unwrap();
+        match *head {
+            None => {
+                *head = Some(new_node);
+            }
+            Some(curr_head_ptr) => unsafe {
+                (*new_node.as_ptr()).next = Some(curr_head_ptr);
+                (*curr_head_ptr.as_ptr()).prev = Some(new_node);
+                *head = Some(new_node);
+            }
+        }
+        handle
+    }
+
+    fn check_if_gc_requested(&mut self) {
+        while self.thread_manager.should_stop_thread_for_gc() {
+            self.thread_manager.stop_for_gc().unwrap()
+        }
     }
 }
 
@@ -187,4 +233,24 @@ impl ObjectAllocator for Heap {
         // after gc can still not have enough space
         self.allocate_in_old_space(layout)
     }
+}
+
+impl Drop for Heap {
+    fn drop(&mut self) {
+        let mut head = self.handles.lock().unwrap();
+        let mut curr = head.take();
+        while let Some(ptr) = curr {
+            unsafe { 
+                curr = (*ptr.as_ptr()).next;
+                drop(Box::from_raw(ptr.as_ptr()));
+            }
+        }
+    
+    }
+}
+
+struct HandleNode {
+    ptr: ErasedPtr,
+    prev: Option<NonNull<HandleNode>>,
+    next: Option<NonNull<HandleNode>>,
 }
