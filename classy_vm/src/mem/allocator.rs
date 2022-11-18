@@ -111,6 +111,11 @@ impl Allocator {
     /// `size` amount of bytes with aligned to `align`.
     /// The page will be owned by the requesting `owner` thread.
     pub fn get_page(&mut self, owner: ThreadId, size: usize, align: usize) -> Ptr<Page> {
+        let page = self.get_page_unowned(size, align);
+        page.with_ptr(|ptr| unsafe { (*ptr.as_ptr()).owner = Some(owner) })
+    }
+
+    pub fn get_page_unowned(&mut self, size: usize, align: usize) -> Ptr<Page> {
         let Ptr(mut current) = self.pages;
         while let Some(page) = current {
             let page_owner = unsafe { (*page.as_ptr()).owner };
@@ -119,7 +124,6 @@ impl Allocator {
                 let free = unsafe { (*page.as_ptr()).free };
                 let free = round_up_to_align(free.as_ptr().addr(), align);
                 if free + size <= end {
-                    unsafe { (*page.as_ptr()).owner = Some(owner) }
                     return Ptr(Some(page));
                 }
             }

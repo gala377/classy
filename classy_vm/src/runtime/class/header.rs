@@ -1,4 +1,9 @@
-use crate::{mem::ptr::NonNullPtr, runtime::class::Class};
+use std::ptr::NonNull;
+
+use crate::{
+    mem::ptr::{ErasedNonNull, NonNullPtr},
+    runtime::class::Class,
+};
 
 pub enum Flags {
     Forwards = 1,
@@ -78,5 +83,13 @@ impl Header {
             "flagging bit of forward address has to be zero"
         );
         self.flags = address | (Flags::Forwards as usize);
+    }
+
+    pub fn class(header: NonNull<Header>) -> NonNullPtr<Class> {
+        unsafe { (*header.as_ptr()).class }
+    }
+
+    pub fn object_ptr(header: NonNull<Header>) -> ErasedNonNull {
+        unsafe { ErasedNonNull::new_unchecked(header.as_ptr().add(1) as *mut _) }
     }
 }

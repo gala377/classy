@@ -52,6 +52,13 @@ impl<T> Ptr<T> {
             Some(ptr) => ptr.as_ptr(),
         }
     }
+
+    pub fn with_ptr(&self, f: impl FnOnce(NonNull<T>)) -> Ptr<T> {
+        if let Some(inner) = self.inner() {
+            f(inner)
+        }
+        self.clone()
+    }
 }
 
 impl<T> Clone for Ptr<T> {
