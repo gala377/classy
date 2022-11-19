@@ -38,7 +38,11 @@ impl Vm {
             .expect("gc should not be requested before the vm is created");
         Self {
             original_thread_id: std::thread::current().id(),
-            semispaces: setup_semispaces(options.page_size, options.page_align, options.young_space_size),
+            semispaces: setup_semispaces(
+                options.page_size,
+                options.page_align,
+                options.young_space_size,
+            ),
             permament_heap: Arc::new(permament_heap),
             runtime,
             options,
@@ -107,8 +111,10 @@ struct SemiSpaces {
 }
 
 fn setup_semispaces(page_size: usize, page_align: usize, allocated_limit: usize) -> SemiSpaces {
-    let from_space = heap::SemiSpaceImpl::new_from_space(Allocator::new(page_size, page_align, allocated_limit));
-    let to_space = heap::SemiSpaceImpl::new_to_space(Allocator::new(page_size, page_align, allocated_limit));
+    let from_space =
+        heap::SemiSpaceImpl::new_from_space(Allocator::new(page_size, page_align, allocated_limit));
+    let to_space =
+        heap::SemiSpaceImpl::new_to_space(Allocator::new(page_size, page_align, allocated_limit));
     SemiSpaces {
         from_space,
         to_space,
@@ -117,9 +123,15 @@ fn setup_semispaces(page_size: usize, page_align: usize, allocated_limit: usize)
 
 #[cfg(test)]
 mod tests {
-    use std::{mem::{align_of, size_of}};
+    use std::mem::{align_of, size_of};
 
-    use crate::{mem::{page::Page, ptr::{Ptr, NonNullPtr}}, vm::{Vm, self}};
+    use crate::{
+        mem::{
+            page::Page,
+            ptr::{NonNullPtr, Ptr},
+        },
+        vm::{self, Vm},
+    };
 
     fn setup_vm(page_size: usize, page_count: usize) -> Vm {
         let actual_page_size = size_of::<Page>() + page_size;

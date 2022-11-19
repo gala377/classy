@@ -140,7 +140,7 @@ impl Allocator {
     pub fn reset_all_pages(&mut self) {
         let mut curr = self.pages.inner();
         while let Some(inner) = curr {
-            unsafe { 
+            unsafe {
                 (*inner.as_ptr()).reset_page();
                 curr = (*inner.as_ptr()).next.clone();
             }

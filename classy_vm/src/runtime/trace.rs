@@ -37,10 +37,11 @@ pub struct Gc<'a> {
 impl<'a> Gc<'a> {
     pub fn new(to_space: &'a mut Allocator, initial_tlab_size: usize) -> Self {
         // this cannot use allocate_page as the pages could already be allocated
-        let to_page = unsafe { 
-            let page = to_space.get_page_unowned(initial_tlab_size, align_of::<usize>())
+        let to_page = unsafe {
+            let page = to_space
+                .get_page_unowned(initial_tlab_size, align_of::<usize>())
                 .inner()
-                .or_else(|| {to_space.allocate_page_unowned().inner()})
+                .or_else(|| to_space.allocate_page_unowned().inner())
                 .expect("Could not get a page from the to space");
             NonNullPtr::new(page)
         };
