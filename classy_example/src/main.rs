@@ -1,7 +1,10 @@
 use clap::Parser;
 
 use classy_vm::{
-    mem::{page::Page, ptr::Ptr},
+    mem::{
+        page::Page,
+        ptr::{ErasedNonNull, NonNullPtr, Ptr},
+    },
     runtime::thread_manager,
     vm::{self, Vm},
 };
@@ -26,6 +29,9 @@ struct Args {
 
     #[arg(long, default_value_t = 1)]
     threads: usize,
+
+    #[arg(long)]
+    create_handle_every: Option<usize>,
 }
 
 fn main() {
@@ -71,15 +77,27 @@ fn start_thread(vm: &Vm, args: &Args) {
 fn make_thread_loop(
     mut vm: Vm,
     Args {
-        allocate_integers, ..
+        allocate_integers,
+        create_handle_every,
+        ..
     }: &Args,
 ) -> impl FnOnce() + Send + 'static {
     let allocate_integers = *allocate_integers;
+    let create_handle_every = *create_handle_every;
     move || {
         let mut thread = vm.create_evaluation_thread();
-        for _ in 0..allocate_integers {
-            let Ptr(ptr) = thread.alloc::<u64>();
-            ptr.expect("could not allocate");
+        let runtime = vm.runtime();
+        let mut handles = Vec::new();
+        for i in 0..allocate_integers {
+            let Ptr(ptr) = unsafe { thread.allocate_instance::<isize>(runtime.classes.int) };
+            let ptr = ptr.expect("could not allocate");
+            let Some(modulo) = create_handle_every else {
+                continue;
+            };
+            if i % modulo == 0 {
+                //println!("Creating handle");
+                handles.push(unsafe { thread.create_handle(NonNullPtr::new(ptr)) });
+            }
         }
     }
 }

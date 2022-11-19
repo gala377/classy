@@ -38,7 +38,7 @@ impl Vm {
             .expect("gc should not be requested before the vm is created");
         Self {
             original_thread_id: std::thread::current().id(),
-            semispaces: setup_semispaces(options.page_size, options.page_align),
+            semispaces: setup_semispaces(options.page_size, options.page_align, options.young_space_size),
             permament_heap: Arc::new(permament_heap),
             runtime,
             options,
@@ -83,6 +83,10 @@ impl Vm {
     pub fn thread_manager(&self) -> Arc<ThreadManager> {
         self.thread_manager.clone()
     }
+
+    pub fn runtime(&self) -> Runtime {
+        self.runtime.clone()
+    }
 }
 
 impl Drop for Vm {
@@ -102,9 +106,9 @@ struct SemiSpaces {
     to_space: heap::SemiSpace,
 }
 
-fn setup_semispaces(page_size: usize, page_align: usize) -> SemiSpaces {
-    let from_space = heap::SemiSpaceImpl::new_from_space(Allocator::new(page_size, page_align));
-    let to_space = heap::SemiSpaceImpl::new_to_space(Allocator::new(page_size, page_align));
+fn setup_semispaces(page_size: usize, page_align: usize, allocated_limit: usize) -> SemiSpaces {
+    let from_space = heap::SemiSpaceImpl::new_from_space(Allocator::new(page_size, page_align, allocated_limit));
+    let to_space = heap::SemiSpaceImpl::new_to_space(Allocator::new(page_size, page_align, allocated_limit));
     SemiSpaces {
         from_space,
         to_space,

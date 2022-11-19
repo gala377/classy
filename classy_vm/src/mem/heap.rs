@@ -56,6 +56,10 @@ impl SemiSpaceImpl {
             ToSpace => FromSpace,
         }
     }
+    
+    fn reset_all_pages(&mut self) {
+        self.allocator.reset_all_pages()
+    }
 }
 
 enum ShouldPerformGc {
@@ -142,9 +146,10 @@ impl Heap {
         self.collect_handles_to_roots(&mut roots);
         {
             let mut to_space = self.to_space.lock().unwrap();
-            let mut gc = Gc::new(&mut to_space.allocator);
+            let mut gc = Gc::new(&mut to_space.allocator, self.options.initial_tlab_free_size);
             unsafe { gc.collect(&roots) };
         }
+        self.from_space.lock().unwrap().reset_all_pages();
     }
 
     fn collect_handles_to_roots(&mut self, roots: &mut Vec<*mut ErasedPtr>) {
@@ -164,7 +169,6 @@ impl Heap {
     }
 
     pub fn create_handle<T>(&mut self, to: NonNullPtr<T>) -> Handle<T> {
-        self.check_if_gc_requested();
         let node = Box::into_raw(Box::new(HandleNode {
             ptr: to.erase().into(),
             next: None,
@@ -185,12 +189,6 @@ impl Heap {
         }
         handle
     }
-
-    fn check_if_gc_requested(&mut self) {
-        while self.thread_manager.should_stop_thread_for_gc() {
-            self.thread_manager.stop_for_gc().unwrap()
-        }
-    }
 }
 
 impl ObjectAllocator for Heap {
@@ -202,15 +200,13 @@ impl ObjectAllocator for Heap {
             let mut semi_space = self.from_space.lock().unwrap();
             // todo: check if we should wait for gc here before we try to allocate
             // so that we don't need make concurrent calls to the stop_threads_for gc
-            if semi_space.allocator.bytes_allocated < self.options.max_young_space_size {
-                let new_tlab = self.thread_tlab.get_new_tlab_locked(
-                    &mut semi_space.allocator,
-                    layout.size(),
-                    layout.align(),
-                );
-                if new_tlab.is_some() {
-                    return self.thread_tlab.allocate(layout);
-                }
+            let new_tlab = self.thread_tlab.get_new_tlab_locked(
+                &mut semi_space.allocator,
+                layout.size(),
+                layout.align(),
+            );
+            if new_tlab.is_some() {
+                return self.thread_tlab.allocate(layout);
             }
             // todo: for the check above to make sense we need the request threads stop
             // while holding the lock for the allocator.

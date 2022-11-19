@@ -13,9 +13,10 @@ miri_quick:
     cargo +nightly miri run -- \
         --page-size 2048 \
         --page-align 8 \
-        --pages-count 2 \
-        --allocate-integers 100 \
-        --threads 3
+        --pages-count 10 \
+        --allocate-integers 10000 \
+        --threads 3 \
+        --create-handle-every 1
 
 mtest:
     cargo +nightly miri test 

@@ -35,9 +35,15 @@ pub struct Gc<'a> {
 }
 
 impl<'a> Gc<'a> {
-    pub fn new(to_space: &'a mut Allocator) -> Self {
+    pub fn new(to_space: &'a mut Allocator, initial_tlab_size: usize) -> Self {
         // this cannot use allocate_page as the pages could already be allocated
-        let to_page = unsafe { NonNullPtr::from_ptr(to_space.allocate_page()) };
+        let to_page = unsafe { 
+            let page = to_space.get_page_unowned(initial_tlab_size, align_of::<usize>())
+                .inner()
+                .or_else(|| {to_space.allocate_page().inner()})
+                .expect("Could not get a page from the to space");
+            NonNullPtr::new(page)
+        };
         Self {
             to_space,
             to_page: BumpAllocator::new(to_page.inner()),
@@ -73,7 +79,7 @@ impl Tracer for Gc<'_> {
     /// It can be null.
     fn trace_nonnull_pointer(&mut self, ptr: ErasedNonNull) -> *mut () {
         unsafe {
-            println!("Tracing pointer");
+            //println!("Tracing pointer");
             let header = ptr.header();
             if let Some(address) = (*header.as_ptr()).forward_address() {
                 println!("Forward address is {address:018x}");

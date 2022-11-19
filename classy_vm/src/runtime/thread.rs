@@ -2,12 +2,13 @@ use std::{alloc::Layout, sync::Arc};
 
 use crate::{
     mem::{
+        handle::Handle,
         heap::{self, Heap, SemiSpace},
         permament_heap,
-        ptr::Ptr,
+        ptr::{NonNullPtr, Ptr},
         ObjectAllocator,
     },
-    runtime::{thread_manager::ThreadManager, Runtime},
+    runtime::{class::Class, thread_manager::ThreadManager, Runtime},
 };
 
 pub struct Thread {
@@ -47,5 +48,14 @@ impl Thread {
 
     pub fn alloc<T>(&mut self) -> Ptr<T> {
         unsafe { self.heap.try_allocate(Layout::new::<T>()).cast() }
+    }
+
+    // returned instance type T must be valid with the given class.
+    pub unsafe fn allocate_instance<T>(&mut self, cls: NonNullPtr<Class>) -> Ptr<T> {
+        unsafe { self.heap.allocate_instance(cls).cast() }
+    }
+
+    pub unsafe fn create_handle<T>(&mut self, ptr: NonNullPtr<T>) -> Handle<T> {
+        self.heap.create_handle(ptr)
     }
 }

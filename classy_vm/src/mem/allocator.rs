@@ -13,6 +13,7 @@ pub struct Allocator {
     pub page_align: usize,
 
     pub bytes_allocated: usize,
+    pub allocated_limit: usize,
 }
 
 // SAFETY: We have to be very careful not to access
@@ -20,12 +21,13 @@ pub struct Allocator {
 unsafe impl Send for Allocator {}
 
 impl Allocator {
-    pub fn new(page_size: usize, page_align: usize) -> Allocator {
+    pub fn new(page_size: usize, page_align: usize, allocated_limit: usize) -> Allocator {
         Allocator {
             pages: Ptr::null(),
             page_size,
             page_align,
             bytes_allocated: 0,
+            allocated_limit,
         }
     }
 
@@ -34,6 +36,9 @@ impl Allocator {
     /// To get a page that is already associated with some thread use
     /// `allocate_page_for`
     pub unsafe fn allocate_custom_page(&mut self, size: usize, align: usize) -> Ptr<Page> {
+        if self.bytes_allocated > self.allocated_limit {
+            return Ptr::null();
+        }
         assert!(
             size >= std::mem::size_of::<Page>(),
             "Page needs to be able to store its metadata"
@@ -131,6 +136,16 @@ impl Allocator {
         }
         Ptr(None)
     }
+
+    pub fn reset_all_pages(&mut self) {
+        let mut curr = self.pages.inner();
+        while let Some(inner) = curr {
+            unsafe { 
+                (*inner.as_ptr()).reset_page();
+                curr = (*inner.as_ptr()).next.clone();
+            }
+        }
+    }
 }
 
 const fn round_up_to_align(addr: usize, align: usize) -> usize {
@@ -162,15 +177,16 @@ mod tests {
     // 4kb
     const PAGE_SIZE: usize = 1 << 12;
     const PAGE_ALIGN: usize = 1 << 12;
+    const ALLOCATION_LIMIT: usize = 1 << 32;
 
     #[test]
     fn creating_empty_allocator_does_not_allcate() {
-        let _alloc = Allocator::new(PAGE_SIZE, PAGE_ALIGN);
+        let _alloc = Allocator::new(PAGE_SIZE, PAGE_ALIGN, ALLOCATION_LIMIT);
     }
 
     #[test]
     fn allocating_a_page_does_work() {
-        let mut alloc = Allocator::new(PAGE_SIZE, PAGE_ALIGN);
+        let mut alloc = Allocator::new(PAGE_SIZE, PAGE_ALIGN, ALLOCATION_LIMIT);
         unsafe {
             alloc.allocate_page();
         }
@@ -178,7 +194,7 @@ mod tests {
 
     #[test]
     fn allocating_mutliple_pages_does_work() {
-        let mut alloc = Allocator::new(PAGE_SIZE, PAGE_ALIGN);
+        let mut alloc = Allocator::new(PAGE_SIZE, PAGE_ALIGN, ALLOCATION_LIMIT);
         unsafe {
             alloc.allocate_page();
             alloc.allocate_page();

@@ -45,6 +45,11 @@ impl Page {
     pub fn free_space(&self) -> usize {
         self.end().as_ptr() as usize - self.free.as_ptr() as usize
     }
+
+    pub fn reset_page(&mut self) {
+        self.owner = None;
+        self.free = unsafe { page_free_start(self.start, self.size) };
+    }
 }
 
 unsafe fn page_free_start(start: NonNull<u8>, size: usize) -> NonNull<u8> {
