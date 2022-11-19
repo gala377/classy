@@ -5,7 +5,7 @@ use clap::Parser;
 use classy_vm::{
     mem::{
         page::Page,
-        ptr::{ErasedNonNull, NonNullPtr, Ptr},
+        ptr::{NonNullPtr, Ptr},
     },
     runtime::thread_manager,
     vm::{self, Vm},
