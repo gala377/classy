@@ -1,2 +1,6 @@
 [workspace]
-members = ["classy_vm", "classy_example"]
+members = [
+    "classy_vm",
+    "classy_example",
+    "classy_c",
+]

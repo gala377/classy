@@ -1,0 +1,10 @@
+[package]
+name = "classy_c"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bitvec = "1.0.1"
+lazy_static = "1.4.0"
+logos = "0.12.1"
+thiserror = "1.0.37"
