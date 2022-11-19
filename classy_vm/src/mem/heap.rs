@@ -124,11 +124,7 @@ impl Heap {
     fn swap_semispaces(&mut self, new_tlab_size: usize, new_tlab_align: usize) {
         assert!(new_tlab_align <= std::mem::align_of::<usize>());
         std::mem::swap(&mut self.from_space, &mut self.to_space);
-        self.thread_tlab = Tlab::new(
-            self.thread_id,
-            Arc::clone(&self.from_space),
-            new_tlab_size,
-        );
+        self.thread_tlab = Tlab::new(self.thread_id, Arc::clone(&self.from_space), new_tlab_size);
     }
 
     fn stop_threads_for_gc(&mut self) -> ShouldPerformGc {
@@ -188,6 +184,29 @@ impl Heap {
             },
         }
         handle
+    }
+
+    pub fn revoke_handle<T>(&mut self, handle: Handle<T>) {
+        unsafe {
+            let mut head = self.handles.lock().unwrap();
+            let mut curr = head.clone();
+            while let Some(ptr) = curr {
+                if addr_of!((*ptr.as_ptr()).ptr) as *mut _ == handle.0 {
+                    let prev = (*ptr.as_ptr()).prev;
+                    let next = (*ptr.as_ptr()).next;
+                    match prev {
+                        None => *head = next,
+                        Some(prev_ptr) => (*prev_ptr.as_ptr()).next = next,
+                    }
+                    if let Some(next_ptr) = next {
+                        (*next_ptr.as_ptr()).prev = prev;
+                    }
+                    drop(Box::from_raw(ptr.as_ptr()));
+                    return;
+                }
+                curr = (*ptr.as_ptr()).next;
+            }
+        }
     }
 
     pub fn gc_young_space(&mut self, new_tlab_size: usize, new_tlab_align: usize) {
