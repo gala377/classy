@@ -17,7 +17,7 @@ pub struct Allocator {
 }
 
 // SAFETY: We have to be very careful not to access
-// contentents of pages that have an owner.
+// contents of a pages that already has an owner.
 unsafe impl Send for Allocator {}
 
 impl Allocator {
