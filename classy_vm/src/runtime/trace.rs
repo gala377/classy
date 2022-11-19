@@ -124,6 +124,14 @@ unsafe fn copy_to_space(
     };
     std::ptr::copy_nonoverlapping(header.as_ptr() as *const u8, ptr as *mut u8, size);
     let new_ptr = ptr.cast::<Header>().add(1);
+    /*
+    We are giving away strict provenance in the name of memory. We need to expose the address
+    to store it in teh flags as usize (because flags are usize). When we reconstruct the address
+    we don't know to which does it belong (we could bu that would require us to iterate over all pages
+    for each reference which is madness) so we need to call from_exposed_address.
+    This could be addressed by, instead of storing forward address in flags, store it as a separate
+    field with type *mut (). However that makes header 3 word wide instead of just 2.
+    */
     (*header.as_ptr()).set_forward_address(new_ptr.expose_addr());
     new_ptr as *mut ()
 }
