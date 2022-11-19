@@ -226,6 +226,19 @@ impl Heap {
         }
         self.swap_semispaces(new_tlab_size, new_tlab_align);
     }
+
+    pub fn young_space_allocated(&self) -> usize {
+        let from_space = self.from_space.lock().unwrap();
+        let mut res = 0;
+        let mut curr = from_space.allocator.pages.inner();
+        while let Some(page) = curr {
+            unsafe {
+                res += (*page.as_ptr()).allocated();
+                curr = (*page.as_ptr()).next
+            }
+        }
+        res
+    }
 }
 
 impl ObjectAllocator for Heap {

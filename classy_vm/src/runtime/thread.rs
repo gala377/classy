@@ -59,7 +59,15 @@ impl Thread {
         self.heap.create_handle(ptr)
     }
 
+    pub unsafe fn revoke_handle<T>(&mut self, handle: Handle<T>) {
+        self.heap.revoke_handle(handle);
+    }
+
     pub fn run_young_gc(&mut self) {
         self.heap.gc_young_space(0, 0);
+    }
+
+    pub fn young_space_allocated(&self) -> usize {
+        self.heap.young_space_allocated()
     }
 }

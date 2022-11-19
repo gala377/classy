@@ -152,11 +152,30 @@ mod tests {
             assert!(!ptr.is_null());
             (*ptr.unwrap()) = 123456;
             let handle = t.create_handle(NonNullPtr::from_ptr(ptr));
+            let expected = t.young_space_allocated();
             assert_eq!((*handle.as_ptr()), 123456);
             assert_eq!(handle.as_ptr(), ptr.unwrap());
             t.run_young_gc();
+            let actual = t.young_space_allocated();
             assert_eq!((*handle.as_ptr()), 123456);
             assert_ne!(handle.as_ptr(), ptr.unwrap());
+            assert_eq!(expected, actual);
+        }
+    }
+
+    #[test]
+    fn revoking_a_handle_allows_gc_to_collect_garbage() {
+        let mut vm = setup_vm(4 * size_of::<usize>(), 1);
+        let mut t = vm.create_evaluation_thread();
+        unsafe {
+            let ptr: Ptr<isize> = t.allocate_instance(vm.runtime.classes.int);
+            assert!(!ptr.is_null());
+            let expected = t.young_space_allocated();
+            let handle = t.create_handle(NonNullPtr::from_ptr(ptr));
+            t.revoke_handle(handle);
+            t.run_young_gc();
+            let actual = t.young_space_allocated();
+            assert_eq!(actual, expected - 4 * size_of::<usize>());
         }
     }
 }

@@ -1,4 +1,8 @@
+#![allow(unstable_name_collisions)]
+
 use std::ptr::NonNull;
+
+use sptr::Strict;
 
 pub struct Page {
     // Address space
@@ -43,7 +47,11 @@ impl Page {
         unsafe { NonNull::new_unchecked(self.start.as_ptr().add(self.size)) }
     }
     pub fn free_space(&self) -> usize {
-        self.end().as_ptr() as usize - self.free.as_ptr() as usize
+        self.end().as_ptr().addr() - self.free.as_ptr().addr()
+    }
+
+    pub fn allocated(&self) -> usize {
+        self.free.as_ptr().addr() - (self.start.as_ptr().addr() + std::mem::size_of::<Page>())
     }
 
     pub fn reset_page(&mut self) {
