@@ -60,6 +60,6 @@ impl Thread {
     }
 
     pub fn run_young_gc(&mut self) {
-        self.heap.manually_gc_young_space();
+        self.heap.gc_young_space(0, 0);
     }
 }

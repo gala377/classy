@@ -35,7 +35,7 @@ impl Allocator {
     /// Because of it trying to access memory of this page might lead to data races.
     /// To get a page that is already associated with some thread use
     /// `allocate_page_for`
-    pub unsafe fn allocate_custom_page(&mut self, size: usize, align: usize) -> Ptr<Page> {
+    pub unsafe fn allocate_custom_page_unowned(&mut self, size: usize, align: usize) -> Ptr<Page> {
         if self.bytes_allocated + size > self.allocated_limit {
             return Ptr::null();
         }
@@ -74,13 +74,13 @@ impl Allocator {
     /// Same as `allocate_custom_page` however immediately sets the owner of the page.
     /// This way the page cannot be given to other thread, which migh have requested
     /// for it with the `get_page` method.
-    pub fn allocate_custom_page_for(
+    pub fn allocate_custom_page(
         &mut self,
         owner: ThreadId,
         size: usize,
         align: usize,
     ) -> Ptr<Page> {
-        let page = unsafe { self.allocate_custom_page(size, align) };
+        let page = unsafe { self.allocate_custom_page_unowned(size, align) };
         if let Ptr(Some(ptr)) = page {
             unsafe { (*ptr.as_ptr()).owner = Some(owner) }
         };
@@ -88,13 +88,13 @@ impl Allocator {
     }
 
     /// Same as `allocate_custom_page` but uses allocator's settings.
-    pub unsafe fn allocate_page(&mut self) -> Ptr<Page> {
-        self.allocate_custom_page(self.page_size, self.page_align)
+    pub unsafe fn allocate_page_unowned(&mut self) -> Ptr<Page> {
+        self.allocate_custom_page_unowned(self.page_size, self.page_align)
     }
 
     /// Same as `allocate_custom_page_for` but uses allocator's settings.
-    pub fn allocate_page_for(&mut self, owner: ThreadId) -> Ptr<Page> {
-        self.allocate_custom_page_for(owner, self.page_size, self.page_align)
+    pub fn allocate_page(&mut self, owner: ThreadId) -> Ptr<Page> {
+        self.allocate_custom_page(owner, self.page_size, self.page_align)
     }
 
     /// Releases the page from the current owner. The page has to be owned by the
@@ -188,7 +188,7 @@ mod tests {
     fn allocating_a_page_does_work() {
         let mut alloc = Allocator::new(PAGE_SIZE, PAGE_ALIGN, ALLOCATION_LIMIT);
         unsafe {
-            alloc.allocate_page();
+            alloc.allocate_page_unowned();
         }
     }
 
@@ -196,9 +196,9 @@ mod tests {
     fn allocating_mutliple_pages_does_work() {
         let mut alloc = Allocator::new(PAGE_SIZE, PAGE_ALIGN, ALLOCATION_LIMIT);
         unsafe {
-            alloc.allocate_page();
-            alloc.allocate_page();
-            alloc.allocate_page();
+            alloc.allocate_page_unowned();
+            alloc.allocate_page_unowned();
+            alloc.allocate_page_unowned();
         }
     }
 }

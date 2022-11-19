@@ -121,12 +121,13 @@ impl Heap {
         }
     }
 
-    fn swap_semispaces(&mut self) {
+    fn swap_semispaces(&mut self, new_tlab_size: usize, new_tlab_align: usize) {
+        assert!(new_tlab_align <= std::mem::align_of::<usize>());
         std::mem::swap(&mut self.from_space, &mut self.to_space);
         self.thread_tlab = Tlab::new(
             self.thread_id,
             Arc::clone(&self.from_space),
-            self.options.initial_tlab_free_size,
+            new_tlab_size,
         );
     }
 
@@ -141,7 +142,7 @@ impl Heap {
         }
     }
 
-    fn gc_young_generation(&mut self) {
+    fn scavenge_young_generation(&mut self) {
         let mut roots = Vec::new();
         self.collect_handles_to_roots(&mut roots);
         {
@@ -149,7 +150,6 @@ impl Heap {
             let mut gc = Gc::new(&mut to_space.allocator, self.options.initial_tlab_free_size);
             unsafe { gc.collect(&roots) };
         }
-        self.from_space.lock().unwrap().reset_all_pages();
     }
 
     fn collect_handles_to_roots(&mut self, roots: &mut Vec<*mut ErasedPtr>) {
@@ -190,12 +190,13 @@ impl Heap {
         handle
     }
 
-    pub fn manually_gc_young_space(&mut self) {
+    pub fn gc_young_space(&mut self, new_tlab_size: usize, new_tlab_align: usize) {
         match self.stop_threads_for_gc() {
             ShouldPerformGc::ShouldWait => self.thread_manager.stop_for_gc().unwrap(),
             ShouldPerformGc::ShouldPerform => {
                 self.thread_manager.wait_for_all_threads_stopped().unwrap();
-                self.gc_young_generation();
+                self.scavenge_young_generation();
+                self.from_space.lock().unwrap().reset_all_pages();
                 // todo: might be unnecessary and slow down collection
                 // so maybe remove this later? Only needed for the Vm struct
                 // but I don't think the vm struct is actually needed.
@@ -204,7 +205,7 @@ impl Heap {
                 self.thread_manager.release_stopped_threads();
             }
         }
-        self.swap_semispaces();
+        self.swap_semispaces(new_tlab_size, new_tlab_align);
     }
 }
 
@@ -229,7 +230,7 @@ impl ObjectAllocator for Heap {
             // while holding the lock for the allocator.
         };
         // either we overallocated or we could not allocate a new tlab
-        self.manually_gc_young_space();
+        self.gc_young_space(layout.size(), layout.align());
         if let ptr @ Ptr(Some(_)) = self.thread_tlab.allocate(layout) {
             return ptr;
         }

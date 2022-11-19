@@ -39,10 +39,11 @@ impl Tlab {
                 }
                 None => {
                     println!("Thread: {id:?} had to allocate a new page");
-                    let Ptr(page) = semi.allocator.allocate_page_for(id);
+                    let Ptr(page) = semi.allocator.allocate_page(id);
                     page.expect("could not allocate a page for a thread")
                 }
             };
+            unsafe { assert_eq!((*page.as_ptr()).owner, Some(id)) };
             println!(
                 "Thread {id:?} done got page {addr:0x}",
                 addr = page.as_ptr() as usize
@@ -64,7 +65,7 @@ impl Tlab {
             match page {
                 Some(ptr) => ptr,
                 None => {
-                    let Ptr(page) = semi.allocator.allocate_page_for(self.id);
+                    let Ptr(page) = semi.allocator.allocate_page(self.id);
                     page?
                 }
             }
@@ -85,7 +86,7 @@ impl Tlab {
             match page {
                 Some(ptr) => ptr,
                 None => {
-                    let Ptr(page) = alloc.allocate_page_for(self.id);
+                    let Ptr(page) = alloc.allocate_page(self.id);
                     page?
                 }
             }

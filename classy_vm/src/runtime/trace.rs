@@ -40,7 +40,7 @@ impl<'a> Gc<'a> {
         let to_page = unsafe { 
             let page = to_space.get_page_unowned(initial_tlab_size, align_of::<usize>())
                 .inner()
-                .or_else(|| {to_space.allocate_page().inner()})
+                .or_else(|| {to_space.allocate_page_unowned().inner()})
                 .expect("Could not get a page from the to space");
             NonNullPtr::new(page)
         };
@@ -111,7 +111,7 @@ unsafe fn copy_to_space(
             let new_page = to_space
                 .get_page_unowned(size, align)
                 .inner()
-                .or_else(|| to_space.allocate_page().inner())
+                .or_else(|| to_space.allocate_page_unowned().inner())
                 .expect("to space cannot contain an object from a from space");
             *to_page = BumpAllocator::new(new_page);
             to_page
