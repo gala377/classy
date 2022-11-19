@@ -114,3 +114,37 @@ fn setup_semispaces(page_size: usize, page_align: usize, allocated_limit: usize)
         to_space,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{mem::{align_of, size_of}};
+
+    use crate::{mem::{page::Page, ptr::{Ptr, NonNullPtr}}, vm::{Vm, self}};
+
+    fn setup_vm(page_size: usize, page_count: usize) -> Vm {
+        let actual_page_size = size_of::<Page>() + page_size;
+        Vm::new_default(vm::Options {
+            page_size: actual_page_size,
+            page_align: align_of::<usize>(),
+            young_space_size: actual_page_size * page_count,
+            initial_tlab_size: page_size,
+        })
+    }
+
+    #[test]
+    fn gc_changes_the_handles_address_but_preserves_the_value() {
+        let mut vm = setup_vm(4 * size_of::<usize>(), 1);
+        let mut t = vm.create_evaluation_thread();
+        unsafe {
+            let ptr: Ptr<isize> = t.allocate_instance(vm.runtime.classes.int);
+            assert!(!ptr.is_null());
+            (*ptr.unwrap()) = 123456;
+            let handle = t.create_handle(NonNullPtr::from_ptr(ptr));
+            assert_eq!((*handle.as_ptr()), 123456);
+            assert_eq!(handle.as_ptr(), ptr.unwrap());
+            t.run_young_gc();
+            assert_eq!((*handle.as_ptr()), 123456);
+            assert_ne!(handle.as_ptr(), ptr.unwrap());
+        }
+    }
+}

@@ -36,7 +36,7 @@ impl Allocator {
     /// To get a page that is already associated with some thread use
     /// `allocate_page_for`
     pub unsafe fn allocate_custom_page(&mut self, size: usize, align: usize) -> Ptr<Page> {
-        if self.bytes_allocated > self.allocated_limit {
+        if self.bytes_allocated + size > self.allocated_limit {
             return Ptr::null();
         }
         assert!(

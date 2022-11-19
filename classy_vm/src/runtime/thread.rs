@@ -58,4 +58,8 @@ impl Thread {
     pub unsafe fn create_handle<T>(&mut self, ptr: NonNullPtr<T>) -> Handle<T> {
         self.heap.create_handle(ptr)
     }
+
+    pub fn run_young_gc(&mut self) {
+        self.heap.manually_gc_young_space();
+    }
 }

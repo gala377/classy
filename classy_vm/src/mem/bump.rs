@@ -81,4 +81,8 @@ impl BumpAllocator {
     pub fn page_as_ref(&self) -> &Page {
         unsafe { &*self.alloc_page.as_ptr() }
     }
+
+    pub fn page_as_ptr(&self) -> NonNull<Page> {
+        self.alloc_page
+    }
 }

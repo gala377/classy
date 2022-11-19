@@ -101,4 +101,12 @@ impl Tlab {
             current=self.id, tlab=self.local_buffer.page_as_ref().owner.unwrap());
         self.local_buffer.alloc_layout(layout).erase()
     }
+
+    pub unsafe fn release_current_page(&mut self) {
+        self.semi_space
+            .lock()
+            .unwrap()
+            .allocator
+            .release_page(self.id, self.local_buffer.page_as_ptr());
+    }
 }

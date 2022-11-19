@@ -56,7 +56,7 @@ impl SemiSpaceImpl {
             ToSpace => FromSpace,
         }
     }
-    
+
     fn reset_all_pages(&mut self) {
         self.allocator.reset_all_pages()
     }
@@ -189,6 +189,23 @@ impl Heap {
         }
         handle
     }
+
+    pub fn manually_gc_young_space(&mut self) {
+        match self.stop_threads_for_gc() {
+            ShouldPerformGc::ShouldWait => self.thread_manager.stop_for_gc().unwrap(),
+            ShouldPerformGc::ShouldPerform => {
+                self.thread_manager.wait_for_all_threads_stopped().unwrap();
+                self.gc_young_generation();
+                // todo: might be unnecessary and slow down collection
+                // so maybe remove this later? Only needed for the Vm struct
+                // but I don't think the vm struct is actually needed.
+                self.from_space.lock().unwrap().toggle_kind();
+                self.to_space.lock().unwrap().toggle_kind();
+                self.thread_manager.release_stopped_threads();
+            }
+        }
+        self.swap_semispaces();
+    }
 }
 
 impl ObjectAllocator for Heap {
@@ -212,20 +229,7 @@ impl ObjectAllocator for Heap {
             // while holding the lock for the allocator.
         };
         // either we overallocated or we could not allocate a new tlab
-        match self.stop_threads_for_gc() {
-            ShouldPerformGc::ShouldWait => self.thread_manager.stop_for_gc().unwrap(),
-            ShouldPerformGc::ShouldPerform => {
-                self.thread_manager.wait_for_all_threads_stopped().unwrap();
-                self.gc_young_generation();
-                // todo: might be unnecessary and slow down collection
-                // so maybe remove this later? Only needed for the Vm struct
-                // but I don't think the vm struct is actually needed.
-                self.from_space.lock().unwrap().toggle_kind();
-                self.to_space.lock().unwrap().toggle_kind();
-                self.thread_manager.release_stopped_threads();
-            }
-        }
-        self.swap_semispaces();
+        self.manually_gc_young_space();
         if let ptr @ Ptr(Some(_)) = self.thread_tlab.allocate(layout) {
             return ptr;
         }
@@ -236,10 +240,13 @@ impl ObjectAllocator for Heap {
 
 impl Drop for Heap {
     fn drop(&mut self) {
-        let mut head = self.handles.lock().unwrap();
-        let mut curr = head.take();
-        while let Some(ptr) = curr {
-            unsafe {
+        unsafe {
+            // we need to release the page
+            self.thread_tlab.release_current_page();
+            // drop handles
+            let mut head = self.handles.lock().unwrap();
+            let mut curr = head.take();
+            while let Some(ptr) = curr {
                 curr = (*ptr.as_ptr()).next;
                 drop(Box::from_raw(ptr.as_ptr()));
             }

@@ -1,3 +1,5 @@
+use std::mem::size_of;
+
 use clap::Parser;
 
 use classy_vm::{
@@ -35,17 +37,12 @@ struct Args {
 }
 
 fn main() {
-    println!(
-        "Size and align of page: {} / {}",
-        std::mem::size_of::<Page>(),
-        std::mem::align_of::<Page>()
-    );
     let args = Args::parse();
     let vm = Vm::new_default(vm::Options {
-        page_size: args.page_size,
+        page_size: args.page_size + size_of::<Page>(),
         page_align: args.page_align,
-        young_space_size: args.page_size * args.pages_count,
-        initial_tlab_size: args.page_size - std::mem::size_of::<Page>(),
+        young_space_size: (args.page_size + size_of::<Page>()) * args.pages_count,
+        initial_tlab_size: args.page_size,
     });
     for _ in 0..args.threads {
         start_thread(&vm, &args);
