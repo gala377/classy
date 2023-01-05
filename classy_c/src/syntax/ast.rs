@@ -1,5 +1,13 @@
 use std::ops::Range;
 
+// cargo is actually wrong about this, it confuses
+// usage of this function with unstable feature
+// we did not enable
+#[allow(dead_code)]
+fn default<T: Default>() -> T {
+    Default::default()
+}
+
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct Program {
@@ -96,6 +104,24 @@ impl Builder {
         self
     }
 
+    pub fn func_def(
+        mut self,
+        name: impl Into<String>,
+        parameters: impl FnOnce(TypedNameListBuilder) -> TypedNameListBuilder,
+        body: impl FnOnce(ExprBuilder) -> ExprBuilder,
+    ) -> Self {
+        let parameters = parameters(default()).build();
+        let body = body(default()).build();
+        self.res
+            .items
+            .push(TopLevelItem::FunctionDefinition(FunctionDefinition {
+                name: name.into(),
+                parameters,
+                body,
+            }));
+        self
+    }
+
     pub fn build(self) -> Program {
         self.res
     }
@@ -132,5 +158,40 @@ impl StructDefBuilder {
 
     pub fn build(self) -> StructDefinition {
         self.res
+    }
+}
+
+#[derive(Default)]
+pub struct TypedNameListBuilder {
+    res: Vec<TypedName>,
+}
+
+impl TypedNameListBuilder {
+    pub fn name(mut self, name: impl Into<String>, typ: impl Into<String>) -> Self {
+        self.res.push(TypedName {
+            name: name.into(),
+            typ: Typ::Name(typ.into()),
+        });
+        self
+    }
+
+    pub fn build(self) -> Vec<TypedName> {
+        self.res
+    }
+}
+
+#[derive(Default)]
+pub struct ExprBuilder {
+    res: Option<Expr>,
+}
+
+impl ExprBuilder {
+    pub fn integer(mut self, val: isize) -> Self {
+        self.res = Some(Expr::IntConst(val));
+        self
+    }
+
+    pub fn build(self) -> Expr {
+        self.res.unwrap()
     }
 }

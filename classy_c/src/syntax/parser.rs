@@ -247,8 +247,10 @@ mod tests {
     use super::*;
     use crate::syntax::ast;
 
+    type TestRes = Result<(), Vec<SyntaxError>>;
+
     #[test]
-    fn test_empty_struct_definition() -> Result<(), Vec<SyntaxError>> {
+    fn test_empty_struct_definition() -> TestRes {
         let source = r#"
             struct Foo {}
             struct Bar {
@@ -266,7 +268,7 @@ mod tests {
     }
 
     #[test]
-    fn test_struct_definition_with_simple_fields() -> Result<(), Vec<SyntaxError>> {
+    fn test_struct_definition_with_simple_fields() -> TestRes {
         let source = r#"
             struct Foo { x: typ1; y: typ2 }
             struct Bar {
@@ -279,6 +281,34 @@ mod tests {
         let expected = ast::Builder::new()
             .struct_def("Foo", |s| s.field("x", "typ1").field("y", "typ2"))
             .struct_def("Bar", |s| s.field("foo", "typ_1"))
+            .build();
+        assert_eq!(expected, actual);
+        Ok(())
+    }
+
+    #[test]
+    fn test_function_definition_with_no_arguments() -> TestRes {
+        let source = r#"func foo 10;"#;
+        let lexer = Lexer::new(source);
+        let actual = Parser::new(lexer).parse()?;
+        let expected = ast::Builder::new()
+            .func_def("foo", |args| args, |body| body.integer(10))
+            .build();
+        assert_eq!(expected, actual);
+        Ok(())
+    }
+
+    #[test]
+    fn test_function_definition_with_arguments() -> TestRes {
+        let source = r#"func foo(a:b, c:d) 10;"#;
+        let lexer = Lexer::new(source);
+        let actual = Parser::new(lexer).parse()?;
+        let expected = ast::Builder::new()
+            .func_def(
+                "foo",
+                |a| a.name("a", "b").name("c", "d"),
+                |b| b.integer(10),
+            )
             .build();
         assert_eq!(expected, actual);
         Ok(())
