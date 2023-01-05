@@ -75,10 +75,6 @@ impl<'source> Parser<'source> {
         }
     }
 
-    fn eof(&self) -> bool {
-        self.lexer.current().typ == TokenType::Eof
-    }
-
     fn parse_struct_definition(&mut self) -> ParseRes<ast::StructDefinition> {
         let beg = self.curr_pos();
         self.match_token(TokenType::Struct)?;
@@ -97,8 +93,28 @@ impl<'source> Parser<'source> {
     }
 
     fn parse_function_definition(&mut self) -> ParseRes<ast::FunctionDefinition> {
+        let beg = self.curr_pos();
         self.match_token(TokenType::Function)?;
-        Err(ParseErr::WrongRule)
+        let name = self
+            .parse_identifier()
+            .error(self, beg, "Expected a function name")?;
+        let parameters = self.parse_argument_list()?;
+        let body = self.parse_expr()?;
+        let _ = self.expect_token(TokenType::Semicolon);
+        Ok(ast::FunctionDefinition {
+            name,
+            parameters,
+            body,
+        })
+    }
+
+    fn parse_argument_list(&mut self) -> ParseRes<Vec<ast::TypedName>> {
+        if self.match_token(TokenType::LParen).is_err() {
+            return Ok(Vec::new());
+        }
+        let args = self.parse_delimited(Self::parse_typed_identifier, TokenType::Comma);
+        let _ = self.expect_token(TokenType::RParen);
+        Ok(args)
     }
 
     fn parse_typed_identifier(&mut self) -> ParseRes<TypedName> {
@@ -128,7 +144,7 @@ impl<'source> Parser<'source> {
                 _ => unreachable!("we already checked that this token is an identifier"),
             }
         } else {
-            Err(ParseErr::WrongRule)
+            wrong_rule()
         }
     }
 
@@ -147,6 +163,23 @@ impl<'source> Parser<'source> {
         }
         items
     }
+
+    fn parse_expr(&mut self) -> ParseRes<ast::Expr> {
+        match self.lexer.current().clone() {
+            Token {
+                typ: TokenType::Integer(val),
+                ..
+            } => {
+                self.lexer.advance();
+                Ok(ast::Expr::IntConst(val))
+            }
+            _ => wrong_rule(),
+        }
+    }
+}
+
+fn wrong_rule<T>() -> ParseRes<T> {
+    Err(ParseErr::WrongRule)
 }
 
 impl<'source> Parser<'source> {
@@ -155,6 +188,10 @@ impl<'source> Parser<'source> {
             lexer,
             errors: Vec::new(),
         }
+    }
+
+    fn eof(&self) -> bool {
+        self.lexer.current().typ == TokenType::Eof
     }
 
     #[inline(always)]
@@ -200,7 +237,7 @@ impl<'source> Parser<'source> {
         if self.lexer.current().typ == typ {
             Ok(self.lexer.advance())
         } else {
-            Err(ParseErr::WrongRule)
+            wrong_rule()
         }
     }
 }

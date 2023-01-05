@@ -26,6 +26,14 @@ fn main() {
         }
         struct Baz {     x : String
                          y : Int }
+
+        func FooBar 10
+        func FooBar2() 20
+        func FooBar3(a: b) 20
+        func FooBar3(
+            a: b,
+            b: c,
+        ) 20
         "#;
     let lex = Lexer::new(source);
     let mut parser = Parser::new(lex);
