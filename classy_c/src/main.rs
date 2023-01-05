@@ -28,21 +28,6 @@ fn main() {
                          y : Int }
         "#;
     let lex = Lexer::new(source);
-    // let mut counter = 0;
-    // loop {
-    //     let token = lex.advance();
-    //     println!("{token:?}");
-    //     if let Token {
-    //         typ: TokenType::Eof,
-    //         ..
-    //     } = token
-    //     {
-    //         counter += 1;
-    //     }
-    //     if counter == 10 {
-    //         break;
-    //     }
-    // }
     let mut parser = Parser::new(lex);
     let res = parser.parse().unwrap();
     for def in res.items {
