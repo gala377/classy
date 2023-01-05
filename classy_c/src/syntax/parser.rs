@@ -25,21 +25,37 @@ enum ParseErr {
 
 type ParseRes<T> = Result<T, ParseErr>;
 
+trait SyntaxContext
+where
+    Self: Sized,
+{
+    fn error(self, parser: &mut Parser, beg: usize, msg: &str) -> Self {
+        self.error_with_span(parser, beg..parser.curr_pos(), msg)
+    }
+
+    fn error_with_span(self, parser: &mut Parser, range: Range<usize>, msg: &str) -> Self;
+}
+
+impl<T> SyntaxContext for ParseRes<T> {
+    fn error_with_span(self, parser: &mut Parser, span: Range<usize>, msg: &str) -> Self {
+        self.map_err(|_| parser.error(span, msg))
+    }
+}
+
 pub struct Parser<'source> {
     lexer: Lexer<'source>,
     errors: Vec<SyntaxError>,
 }
 
 impl<'source> Parser<'source> {
-    pub fn parse(&mut self) -> ast::Program {
+    pub fn parse(&mut self) -> Result<ast::Program, Vec<SyntaxError>> {
         let mut items = Vec::new();
         loop {
-            if let Token {
-                typ: TokenType::Eof,
-                ..
-            } = self.lexer.current()
-            {
-                return ast::Program { items };
+            if self.eof() {
+                if !self.errors.is_empty() {
+                    return Err(self.errors.clone());
+                }
+                return Ok(ast::Program { items });
             }
             if let Ok(str_def) = self.parse_struct_definition() {
                 items.push(ast::TopLevelItem::StructDefinition(str_def));
@@ -48,26 +64,31 @@ impl<'source> Parser<'source> {
             } else {
                 self.error(
                     self.lexer.current().span.clone(),
-                    "Expected function or struct definition",
+                    format!(
+                        "Expected function or struct definition got {:?}",
+                        &self.lexer.current()
+                    ),
                 );
                 // panic on first syntax error, no recovery yet
-                return ast::Program { items };
+                return Err(self.errors.clone());
             }
         }
+    }
+
+    fn eof(&self) -> bool {
+        self.lexer.current().typ == TokenType::Eof
     }
 
     fn parse_struct_definition(&mut self) -> ParseRes<ast::StructDefinition> {
         let beg = self.curr_pos();
         self.match_token(TokenType::Struct)?;
-        let name = self.parse_identifier().map_err(|_| {
-            self.error(
-                beg..self.curr_pos(),
-                "Expected a name after the struct keyword",
-            )
-        })?;
-        self.expect_token(TokenType::Where)?;
+        let name =
+            self.parse_identifier()
+                .error(self, beg, "Expected a name after a struct keyword")?;
+        self.expect_token(TokenType::LBrace)?;
         let fields = self.parse_delimited(Self::parse_typed_identifier, TokenType::Semicolon);
-        self.expect_token(TokenType::End)?;
+        self.expect_token(TokenType::RBrace)?;
+        let _ = self.expect_token(TokenType::Semicolon);
         Ok(StructDefinition {
             name,
             fields,
@@ -83,12 +104,12 @@ impl<'source> Parser<'source> {
     fn parse_typed_identifier(&mut self) -> ParseRes<TypedName> {
         let beg = self.curr_pos();
         let name = self.parse_identifier()?;
-        let _colon = self
-            .match_token(TokenType::Colon)
-            .map_err(|_| self.error(beg..self.curr_pos(), self.expected_err_msg("a colon")));
+        let _colon =
+            self.match_token(TokenType::Colon)
+                .error(self, beg, &self.expected_err_msg("a colon"));
         let typ = self
             .parse_identifier()
-            .map_err(|_| self.error(beg..self.curr_pos(), self.expected_err_msg("a type")))?;
+            .error(self, beg, &self.expected_err_msg("a type"))?;
         Ok(ast::TypedName {
             name,
             typ: ast::Typ::Name(typ),
@@ -190,37 +211,39 @@ mod tests {
     use crate::syntax::ast;
 
     #[test]
-    fn test_empty_struct_definition() {
+    fn test_empty_struct_definition() -> Result<(), Vec<SyntaxError>> {
         let source = r#"
-            struct Foo where end
-            struct Bar where
-            end
+            struct Foo {}
+            struct Bar {
+            }
         "#;
         let lex = Lexer::new(source);
         let mut parser = Parser::new(lex);
-        let actual = parser.parse();
+        let actual = parser.parse()?;
         let expected = ast::Builder::new()
             .empty_struct("Foo")
             .empty_struct("Bar")
             .build();
         assert_eq!(expected, actual);
+        Ok(())
     }
 
     #[test]
-    fn test_struct_definition_with_simple_fields() {
+    fn test_struct_definition_with_simple_fields() -> Result<(), Vec<SyntaxError>> {
         let source = r#"
-            struct Foo where x: typ1; y: typ2 end
-            struct Bar where
+            struct Foo { x: typ1; y: typ2 }
+            struct Bar {
                 foo: typ_1
-            end
+            }
         "#;
         let lexer = Lexer::new(source);
         let mut parser = Parser::new(lexer);
-        let actual = parser.parse();
+        let actual = parser.parse()?;
         let expected = ast::Builder::new()
             .struct_def("Foo", |s| s.field("x", "typ1").field("y", "typ2"))
             .struct_def("Bar", |s| s.field("foo", "typ_1"))
             .build();
         assert_eq!(expected, actual);
+        Ok(())
     }
 }

@@ -19,13 +19,13 @@ fn main() {
     println!("Hello world!");
 
     let source = r#"
-        struct Foo where x: Int; y: Float end
-        struct Bar where
+        struct Foo { x: Int; y: Float }
+        struct Bar {
             x : String
             y : String2
-        end
-        struct Baz where x : String
-                         y : Int end
+        }
+        struct Baz {     x : String
+                         y : Int }
         "#;
     let lex = Lexer::new(source);
     // let mut counter = 0;
@@ -44,7 +44,7 @@ fn main() {
     //     }
     // }
     let mut parser = Parser::new(lex);
-    let res = parser.parse();
+    let res = parser.parse().unwrap();
     for def in res.items {
         println!("Parsed {def:#?}");
         if let ast::TopLevelItem::StructDefinition(ast::StructDefinition { span, .. }) = def {
