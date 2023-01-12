@@ -77,7 +77,7 @@ impl<'source> Parser<'source> {
 
     fn parse_struct_definition(&mut self) -> ParseRes<ast::StructDefinition> {
         let beg = self.curr_pos();
-        self.match_token(TokenType::Struct)?;
+        self.match_token(TokenType::Type)?;
         let name =
             self.parse_identifier()
                 .error(self, beg, "Expected a name after a struct keyword")?;
@@ -252,8 +252,8 @@ mod tests {
     #[test]
     fn test_empty_struct_definition() -> TestRes {
         let source = r#"
-            struct Foo {}
-            struct Bar {
+            type  Foo {}
+            type  Bar {
             }
         "#;
         let lex = Lexer::new(source);
@@ -270,8 +270,8 @@ mod tests {
     #[test]
     fn test_struct_definition_with_simple_fields() -> TestRes {
         let source = r#"
-            struct Foo { x: typ1; y: typ2 }
-            struct Bar {
+            type Foo { x: typ1; y: typ2 }
+            type Bar {
                 foo: typ_1
             }
         "#;

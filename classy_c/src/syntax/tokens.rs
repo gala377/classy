@@ -34,7 +34,9 @@ pub enum TokenType {
     Else,
     #[token("func")]
     Function,
-
+    #[token("type")]
+    Type,
+    
     // Literals
     #[regex(r"[_a-zA-Z][_a-zA-Z0-9]*", |lex| lex.slice().to_owned())]
     Identifier(String),
