@@ -1,9 +1,7 @@
-
 type Option(a) {
     Some(a)
     None
 }
-
 
 protocol Debug(this) {
     this.debug : String
@@ -38,7 +36,7 @@ pub methods Person {
     }
 
     setBetterName :: Void((String, String))
-    setBetterName(name1, name2) {
+    setBetterName name1 name2 {
         this.name = if name1.len > name2.len {
             name1 
         } else { 
@@ -57,10 +55,15 @@ instance Adult(Person) {
 }
 
 // freestanding Function
-isAdult :: Adult(t) => t -> Bool
+isAdult: Adult(t) => t -> Bool
 isAdult(p) {
     p.isAdult
 }
 
+protocol From(self, t) {
+    from : t -> self
+}
 
-
+instance From(Person, (String, Int)) {
+    from (name, age) = Person { name, age }
+}
