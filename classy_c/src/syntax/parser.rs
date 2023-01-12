@@ -2,8 +2,6 @@ use std::ops::Range;
 
 use thiserror::Error;
 
-use crate::syntax::ast::StructDefinition;
-
 use super::ast::{self, TypedName};
 use super::lexer::Lexer;
 use super::tokens::{Token, TokenType};
@@ -57,8 +55,8 @@ impl<'source> Parser<'source> {
                 }
                 return Ok(ast::Program { items });
             }
-            if let Ok(str_def) = self.parse_struct_definition() {
-                items.push(ast::TopLevelItem::StructDefinition(str_def));
+            if let Ok(str_def) = self.parse_type_definition() {
+                items.push(ast::TopLevelItem::TypeDefinition(str_def));
             } else if let Ok(fun_def) = self.parse_function_definition() {
                 items.push(ast::TopLevelItem::FunctionDefinition(fun_def));
             } else {
@@ -75,7 +73,7 @@ impl<'source> Parser<'source> {
         }
     }
 
-    fn parse_struct_definition(&mut self) -> ParseRes<ast::StructDefinition> {
+    fn parse_type_definition(&mut self) -> ParseRes<ast::TypeDefinition> {
         let beg = self.curr_pos();
         self.match_token(TokenType::Type)?;
         let name =
@@ -85,9 +83,10 @@ impl<'source> Parser<'source> {
         let fields = self.parse_delimited(Self::parse_typed_identifier, TokenType::Semicolon);
         self.expect_token(TokenType::RBrace)?;
         let _ = self.expect_token(TokenType::Semicolon);
-        Ok(StructDefinition {
+        Ok(ast::TypeDefinition  {
             name,
-            fields,
+            type_variables: Vec::new(),
+            definition: ast::DefinedType::Record(ast::Record { fields }),
             span: beg..self.curr_pos(),
         })
     }

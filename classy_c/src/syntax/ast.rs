@@ -17,15 +17,44 @@ pub struct Program {
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum TopLevelItem {
-    StructDefinition(StructDefinition),
+    TypeDefinition(TypeDefinition),
     FunctionDefinition(FunctionDefinition),
+}
+#[derive(Debug)]
+
+pub struct TypeDefinition {
+    pub name: String,
+    pub definition: DefinedType,
+    pub type_variables: Vec<TypeVariable>,
+    pub span: Range<usize>,
 }
 
 #[derive(Debug)]
-pub struct StructDefinition {
-    pub name: String,
+pub enum DefinedType {
+    Record(Record),
+    ADT(ADT),
+    Alias(Alias),
+}
+
+#[derive(Debug)]
+pub struct Record {
     pub fields: Vec<TypedName>,
-    pub span: Range<usize>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct ADT {
+    pub discriminants: Vec<Discriminant>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Discriminant {
+    pub constructor: String,
+    pub arguments: Vec<Typ>,
+}
+
+#[derive(Debug)]
+pub struct Alias {
+    pub for_type: Typ,
 }
 
 #[derive(Debug)]
@@ -43,11 +72,17 @@ pub struct FunctionDefinition {
     pub body: Expr,
 }
 
-#[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Typ {
     Name(String),
     Array(Box<Typ>),
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct TypeVariable {
+    pub name: String,
+    // todo: for the future
+    // pub constraints: Vec<Contraint>,
 }
 
 #[derive(Debug)]
@@ -64,9 +99,17 @@ pub enum Expr {
 /// Explicit PartialEq implementations to skip span comparison.
 /// Only used in tests.
 #[cfg(test)]
-impl PartialEq for StructDefinition {
+impl PartialEq for TypeDefinition {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name && self.fields == other.fields
+        if self.name != other.name {
+            return false;
+        }
+        match (&self.definition, &other.definition) {
+            (DefinedType::Record(r1), DefinedType::Record(r2)) => r1.fields == r2.fields,
+            (DefinedType::ADT(a1), DefinedType::ADT(a2)) => a1.discriminants == a2.discriminants,
+            (DefinedType::Alias(a1), DefinedType::Alias(a2)) => a1.for_type == a2.for_type,
+            _ => false,
+        }
     }
 }
 
@@ -85,7 +128,7 @@ impl Builder {
     }
 
     pub fn empty_struct(mut self, name: impl Into<String>) -> Self {
-        self.res.items.push(TopLevelItem::StructDefinition(
+        self.res.items.push(TopLevelItem::TypeDefinition(
             StructDefBuilder::new().name(name).build(),
         ));
         self
@@ -100,7 +143,7 @@ impl Builder {
         let r#struct = str_builder(r#struct);
         self.res
             .items
-            .push(TopLevelItem::StructDefinition(r#struct.build()));
+            .push(TopLevelItem::TypeDefinition(r#struct.build()));
         self
     }
 
@@ -129,35 +172,40 @@ impl Builder {
 
 #[cfg(test)]
 pub struct StructDefBuilder {
-    res: StructDefinition,
+    name: String,
+    fields: Vec<TypedName>,
 }
 
 #[cfg(test)]
 impl StructDefBuilder {
     pub fn new() -> Self {
         Self {
-            res: StructDefinition {
-                name: String::new(),
-                fields: Vec::new(),
-                span: 0..0,
-            },
+            name: String::new(),
+            fields: Vec::new(),
         }
     }
 
     pub fn name(mut self, name: impl Into<String>) -> Self {
-        self.res.name = name.into();
+        self.name = name.into();
         self
     }
     pub fn field(mut self, name: impl Into<String>, typ: impl Into<String>) -> Self {
-        self.res.fields.push(TypedName {
+        self.fields.push(TypedName {
             name: name.into(),
             typ: Typ::Name(typ.into()),
         });
         self
     }
 
-    pub fn build(self) -> StructDefinition {
-        self.res
+    pub fn build(self) -> TypeDefinition {
+        TypeDefinition {
+            name: self.name,
+            definition: DefinedType::Record(Record {
+                fields: self.fields,
+            }),
+            type_variables: Vec::new(),
+            span: 0..0,
+        }
     }
 }
 

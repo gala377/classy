@@ -19,12 +19,12 @@ fn main() {
     println!("Hello world!");
 
     let source = r#"
-        struct Foo { x: Int; y: Float }
-        struct Bar {
+        type Foo { x: Int; y: Float }
+        type Bar {
             x : String
             y : String2
         }
-        struct Baz {     x : String
+        type Baz {     x : String
                          y : Int }
 
         func FooBar 10
@@ -40,7 +40,7 @@ fn main() {
     let res = parser.parse().unwrap();
     for def in res.items {
         println!("Parsed {def:#?}");
-        if let ast::TopLevelItem::StructDefinition(ast::StructDefinition { span, .. }) = def {
+        if let ast::TopLevelItem::TypeDefinition(ast::TypeDefinition { span, .. }) = def {
             print_source(source, span);
         }
     }
