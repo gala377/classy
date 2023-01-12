@@ -174,6 +174,7 @@ impl Builder {
 pub struct StructDefBuilder {
     name: String,
     fields: Vec<TypedName>,
+    type_variables: Vec<TypeVariable>,
 }
 
 #[cfg(test)]
@@ -182,6 +183,7 @@ impl StructDefBuilder {
         Self {
             name: String::new(),
             fields: Vec::new(),
+            type_variables: Vec::new(),
         }
     }
 
@@ -197,13 +199,18 @@ impl StructDefBuilder {
         self
     }
 
+    pub fn type_var(mut self, name: impl Into<String>) -> Self {
+        self.type_variables.push(TypeVariable { name: name.into() });
+        self
+    }
+
     pub fn build(self) -> TypeDefinition {
         TypeDefinition {
             name: self.name,
             definition: DefinedType::Record(Record {
                 fields: self.fields,
             }),
-            type_variables: Vec::new(),
+            type_variables: self.type_variables,
             span: 0..0,
         }
     }

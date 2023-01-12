@@ -79,16 +79,34 @@ impl<'source> Parser<'source> {
         let name =
             self.parse_identifier()
                 .error(self, beg, "Expected a name after a struct keyword")?;
+        let type_variables = self.parse_optional_type_variables().error(
+            self,
+            beg,
+            "Expected type variables list",
+        )?;
         self.expect_token(TokenType::LBrace)?;
         let fields = self.parse_delimited(Self::parse_typed_identifier, TokenType::Semicolon);
         self.expect_token(TokenType::RBrace)?;
         let _ = self.expect_token(TokenType::Semicolon);
-        Ok(ast::TypeDefinition  {
+        Ok(ast::TypeDefinition {
             name,
-            type_variables: Vec::new(),
+            type_variables,
             definition: ast::DefinedType::Record(ast::Record { fields }),
             span: beg..self.curr_pos(),
         })
+    }
+
+    fn parse_optional_type_variables(&mut self) -> ParseRes<Vec<ast::TypeVariable>> {
+        if self.match_token(TokenType::LParen).is_err() {
+            return Ok(Vec::new());
+        }
+        let type_vars = self
+            .parse_delimited(Self::parse_identifier, TokenType::Comma)
+            .into_iter()
+            .map(|name| ast::TypeVariable { name })
+            .collect();
+        let _ = self.expect_token(TokenType::RParen);
+        Ok(type_vars)
     }
 
     fn parse_function_definition(&mut self) -> ParseRes<ast::FunctionDefinition> {
