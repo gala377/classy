@@ -207,6 +207,17 @@ impl<'source> Parser<'source> {
         }
     }
 
+    fn in_scope<T>(&mut self, f: impl FnOnce(&mut Parser) -> ParseRes<T>) -> ParseRes<T> {
+        let mut new = Parser {
+            lexer: self.lexer.clone(),
+            errors: Vec::new(),
+        };
+        let res = f(&mut new)?;
+        self.errors.extend(new.errors);
+        self.lexer = new.lexer;
+        Ok(res)
+    }
+
     fn eof(&self) -> bool {
         self.lexer.current().typ == TokenType::Eof
     }

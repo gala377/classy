@@ -2,6 +2,7 @@ use logos::Logos;
 
 use super::tokens::{Token, TokenType, IGNORE_NEWLINE};
 
+#[derive(Clone)]
 pub struct Lexer<'a> {
     tokens: logos::Lexer<'a, TokenType>,
     curr_token: Token,
