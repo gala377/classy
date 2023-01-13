@@ -266,68 +266,83 @@ mod tests {
 
     type TestRes = Result<(), Vec<SyntaxError>>;
 
-    #[test]
-    fn test_empty_struct_definition() -> TestRes {
-        let source = r#"
+    macro_rules! ptest {
+        ($name:ident, $source:literal, $expected:expr) => {
+            #[test]
+            fn $name() -> TestRes {
+                let source = $source;
+                let lex = Lexer::new(source);
+                let mut parser = Parser::new(lex);
+                let actual = parser.parse()?;
+                let expected = $expected.build();
+                assert_eq!(expected, actual);
+                Ok(())
+            }
+        };
+    }
+
+    ptest! {
+        test_empty_struct_definition,
+        r#"
             type  Foo {}
             type  Bar {
             }
-        "#;
-        let lex = Lexer::new(source);
-        let mut parser = Parser::new(lex);
-        let actual = parser.parse()?;
-        let expected = ast::Builder::new()
+        "#,
+        ast::Builder::new()
             .empty_struct("Foo")
             .empty_struct("Bar")
-            .build();
-        assert_eq!(expected, actual);
-        Ok(())
     }
 
-    #[test]
-    fn test_struct_definition_with_simple_fields() -> TestRes {
-        let source = r#"
+    ptest! {
+        test_struct_definition_with_simple_fields,
+        r#"
             type Foo { x: typ1; y: typ2 }
             type Bar {
                 foo: typ_1
             }
-        "#;
-        let lexer = Lexer::new(source);
-        let mut parser = Parser::new(lexer);
-        let actual = parser.parse()?;
-        let expected = ast::Builder::new()
+        "#,
+        ast::Builder::new()
             .struct_def("Foo", |s| s.field("x", "typ1").field("y", "typ2"))
             .struct_def("Bar", |s| s.field("foo", "typ_1"))
-            .build();
-        assert_eq!(expected, actual);
-        Ok(())
     }
 
-    #[test]
-    fn test_function_definition_with_no_arguments() -> TestRes {
-        let source = r#"func foo 10;"#;
-        let lexer = Lexer::new(source);
-        let actual = Parser::new(lexer).parse()?;
-        let expected = ast::Builder::new()
+    ptest! {
+        test_struct_definition_with_explicit_not_type_vars,
+        "type Foo () { x: a };",
+        ast::Builder::new()
+            .struct_def("Foo", |s| s.field("x", "a"))
+    }
+
+    ptest! {
+        test_struct_definition_with_one_type_var,
+        "type Foo (a) { x: a };",
+        ast::Builder::new()
+            .struct_def("Foo", |s| s.type_var("a").field("x", "a"))
+    }
+
+    ptest! {
+        test_struct_definition_with_multiple_type_vars,
+        "type Foo (a, b, c) { x: a };",
+        ast::Builder::new()
+            .struct_def("Foo", |s| s.type_var("a").type_var("b").type_var("c").field("x", "a"))
+    }
+
+    ptest! {
+        test_function_definition_with_no_argumentsr,
+        r#"func foo 10;"#,
+        ast::Builder::new()
             .func_def("foo", |args| args, |body| body.integer(10))
-            .build();
-        assert_eq!(expected, actual);
-        Ok(())
     }
 
-    #[test]
-    fn test_function_definition_with_arguments() -> TestRes {
-        let source = r#"func foo(a:b, c:d) 10;"#;
-        let lexer = Lexer::new(source);
-        let actual = Parser::new(lexer).parse()?;
-        let expected = ast::Builder::new()
+    ptest! {
+        test_function_definition_with_arguments,
+
+        r#"func foo(a:b, c:d) 10;"#,
+        ast::Builder::new()
             .func_def(
                 "foo",
                 |a| a.name("a", "b").name("c", "d"),
                 |b| b.integer(10),
             )
-            .build();
-        assert_eq!(expected, actual);
-        Ok(())
     }
 }

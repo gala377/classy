@@ -21,7 +21,6 @@ pub enum TopLevelItem {
     FunctionDefinition(FunctionDefinition),
 }
 #[derive(Debug)]
-
 pub struct TypeDefinition {
     pub name: String,
     pub definition: DefinedType,
@@ -30,6 +29,7 @@ pub struct TypeDefinition {
 }
 
 #[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum DefinedType {
     Record(Record),
     ADT(ADT),
@@ -37,22 +37,26 @@ pub enum DefinedType {
 }
 
 #[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct Record {
     pub fields: Vec<TypedName>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct ADT {
     pub discriminants: Vec<Discriminant>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct Discriminant {
     pub constructor: String,
     pub arguments: Vec<Typ>,
 }
 
 #[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct Alias {
     pub for_type: Typ,
 }
@@ -101,15 +105,9 @@ pub enum Expr {
 #[cfg(test)]
 impl PartialEq for TypeDefinition {
     fn eq(&self, other: &Self) -> bool {
-        if self.name != other.name {
-            return false;
-        }
-        match (&self.definition, &other.definition) {
-            (DefinedType::Record(r1), DefinedType::Record(r2)) => r1.fields == r2.fields,
-            (DefinedType::ADT(a1), DefinedType::ADT(a2)) => a1.discriminants == a2.discriminants,
-            (DefinedType::Alias(a1), DefinedType::Alias(a2)) => a1.for_type == a2.for_type,
-            _ => false,
-        }
+        self.name == other.name
+            && self.type_variables == other.type_variables
+            && self.definition == other.definition
     }
 }
 
