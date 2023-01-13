@@ -85,17 +85,47 @@ impl<'source> Parser<'source> {
             "Expected type variables list",
         )?;
         self.expect_token(TokenType::LBrace)?;
-        let fields = self.parse_delimited(Self::parse_typed_identifier, TokenType::Semicolon);
+        let possibly_adt = self.in_scope(|p| p.parse_variants_definition());
+        let definition = if let Ok(adt) = possibly_adt {
+            adt
+        } else {
+            let fields = self.parse_delimited(Self::parse_typed_identifier, TokenType::Semicolon);
+            ast::DefinedType::Record(ast::Record { fields })
+        };
         self.expect_token(TokenType::RBrace)?;
         let _ = self.expect_token(TokenType::Semicolon);
         Ok(ast::TypeDefinition {
             name,
             type_variables,
-            definition: ast::DefinedType::Record(ast::Record { fields }),
+            definition,
             span: beg..self.curr_pos(),
         })
     }
 
+    fn parse_variants_definition(&mut self) -> ParseRes<ast::DefinedType> {
+        fn parse_discriminant(parser: &mut Parser) -> ParseRes<ast::Discriminant> {
+            let constructor = parser.parse_identifier()?;
+            let mut arguments = Vec::new();
+            // possibly a record definition
+            if parser.match_token(TokenType::Colon).is_ok() {
+                return wrong_rule();
+            }
+            if parser.match_token(TokenType::LParen).is_ok() {
+                arguments = parser.parse_delimited(Parser::parse_type, TokenType::Comma);
+                let _ = parser.expect_token(TokenType::RParen)?;
+            }
+            Ok(ast::Discriminant {
+                constructor,
+                arguments,
+            })
+        }
+        let discriminants = self.parse_delimited(parse_discriminant, TokenType::Semicolon);
+        if discriminants.is_empty() {
+            wrong_rule()
+        } else {
+            Ok(ast::DefinedType::ADT(ast::ADT { discriminants }))
+        }
+    }
     fn parse_optional_type_variables(&mut self) -> ParseRes<Vec<ast::TypeVariable>> {
         if self.match_token(TokenType::LParen).is_err() {
             return Ok(Vec::new());
@@ -163,6 +193,10 @@ impl<'source> Parser<'source> {
         } else {
             wrong_rule()
         }
+    }
+
+    fn parse_type(&mut self) -> ParseRes<ast::Typ> {
+        self.parse_identifier().map(|v| ast::Typ::Name(v))
     }
 
     fn parse_delimited<T>(
@@ -328,14 +362,58 @@ mod tests {
         test_struct_definition_with_one_type_var,
         "type Foo (a) { x: a };",
         ast::Builder::new()
-            .struct_def("Foo", |s| s.type_var("a").field("x", "a"))
+            .struct_def("Foo", |s| s.type_var("a")
+                                    .field("x", "a"))
     }
 
     ptest! {
         test_struct_definition_with_multiple_type_vars,
         "type Foo (a, b, c) { x: a };",
         ast::Builder::new()
-            .struct_def("Foo", |s| s.type_var("a").type_var("b").type_var("c").field("x", "a"))
+            .struct_def(
+                "Foo", |s| s.type_var("a")
+                            .type_var("b")
+                            .type_var("c")
+                            .field("x", "a"))
+    }
+
+    ptest! {
+        test_simple_adt_definition_with_single_discriminant,
+        "type A { B };",
+        ast::Builder::new()
+            .adt_def("A", |adt| adt.empty_discriminant("B"))
+    }
+
+    ptest! {
+        test_simple_adt_with_multiple_no_argument_discriminants,
+        "type A { A; B; C };",
+        ast::Builder::new()
+            .adt_def("A", |adt| adt.empty_discriminant("A")
+                                   .empty_discriminant("B")
+                                   .empty_discriminant("C"))
+    }
+
+    ptest! {
+        test_adt_with_mixed_discriminants_with_arguments_and_no_arguments,
+        "type A { A(T1, T2); B; C(T3); D(T4, T5, T6); E };",
+        ast::Builder::new()
+            .adt_def("A", |adt| adt.discriminant("A", &["T1", "T2"])
+                                   .empty_discriminant("B")
+                                   .discriminant("C", &["T3"])
+                                   .discriminant("D", &["T4", "T5", "T6"])
+                                   .empty_discriminant("E"))
+    }
+
+    ptest! {
+        test_adt_with_type_vars,
+        "type Res(a, b) { Ok(a); Err(b) };",
+        ast::Builder::new()
+            .adt_def(
+                "Res",
+                |adt| adt.type_var("a")
+                         .type_var("b")
+                         .discriminant("Ok", &["a"])
+                         .discriminant("Err", &["b"]))
     }
 
     ptest! {

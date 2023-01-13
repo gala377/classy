@@ -145,6 +145,19 @@ impl Builder {
         self
     }
 
+    pub fn adt_def(
+        mut self,
+        name: impl Into<String>,
+        adt_builder: impl FnOnce(AdtDefBuilder) -> AdtDefBuilder,
+    ) -> Self {
+        let adt = AdtDefBuilder::new().name(name);
+        let adt = adt_builder(adt);
+        self.res
+            .items
+            .push(TopLevelItem::TypeDefinition(adt.build()));
+        self
+    }
+
     pub fn func_def(
         mut self,
         name: impl Into<String>,
@@ -210,6 +223,59 @@ impl StructDefBuilder {
             }),
             type_variables: self.type_variables,
             span: 0..0,
+        }
+    }
+}
+
+pub struct AdtDefBuilder {
+    name: String,
+    type_vars: Vec<TypeVariable>,
+    discriminants: Vec<Discriminant>,
+}
+
+impl AdtDefBuilder {
+    pub fn new() -> Self {
+        Self {
+            name: String::new(),
+            type_vars: Vec::new(),
+            discriminants: Vec::new(),
+        }
+    }
+
+    pub fn name(mut self, name: impl Into<String>) -> Self {
+        self.name = name.into();
+        self
+    }
+
+    pub fn discriminant(mut self, name: impl Into<String>, arguments: &[impl AsRef<str>]) -> Self {
+        self.discriminants.push(Discriminant {
+            constructor: name.into(),
+            arguments: arguments
+                .iter()
+                .map(|typ| Typ::Name(typ.as_ref().into()))
+                .collect(),
+        });
+        self
+    }
+
+    pub fn empty_discriminant(self, name: impl Into<String>) -> Self {
+        let arguments: &[&'static str] = &[];
+        self.discriminant(name, arguments)
+    }
+
+    pub fn type_var(mut self, name: impl Into<String>) -> Self {
+        self.type_vars.push(TypeVariable { name: name.into() });
+        self
+    }
+
+    pub fn build(self) -> TypeDefinition {
+        TypeDefinition {
+            name: self.name,
+            span: 0..0,
+            type_variables: self.type_vars,
+            definition: DefinedType::ADT(ADT {
+                discriminants: self.discriminants,
+            }),
         }
     }
 }
