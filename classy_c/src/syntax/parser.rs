@@ -141,26 +141,54 @@ impl<'source> Parser<'source> {
 
     fn parse_function_definition(&mut self) -> ParseRes<ast::FunctionDefinition> {
         let beg = self.curr_pos();
-        self.match_token(TokenType::Function)?;
-        let name = self
-            .parse_identifier()
-            .error(self, beg, "Expected a function name")?;
+        let name = self.parse_identifier()?;
+        let _ = self.expect_token(TokenType::Colon);
+        let typ = self.parse_fn_type()?;
+        let _ = self.expect_token(TokenType::Semicolon);
+        let name_repeated = self.parse_identifier().error(
+            self,
+            beg,
+            "Expected a function definition following its declaration",
+        )?;
+        if name != name_repeated {
+            return Err(self.error(
+                beg..self.curr_pos(),
+                "The name in the function's declaration and definition have to be the same",
+            ));
+        }
         let parameters = self.parse_argument_list()?;
+        if self.lexer.current().typ != TokenType::RBrace {
+            let _ = self.match_token(TokenType::Assignment).error(
+                self,
+                beg,
+                "Missing = in the function definition",
+            );
+        }
         let body = self.parse_expr()?;
         let _ = self.expect_token(TokenType::Semicolon);
         Ok(ast::FunctionDefinition {
             name,
+            typ,
             parameters,
             body,
         })
     }
 
-    fn parse_argument_list(&mut self) -> ParseRes<Vec<ast::TypedName>> {
-        if self.match_token(TokenType::LParen).is_err() {
-            return Ok(Vec::new());
+    fn parse_fn_type(&mut self) -> ParseRes<ast::Typ> {
+        let beg = self.curr_pos();
+        match self.parse_type()? {
+            f_t @ ast::Typ::Function { .. } => Ok(f_t),
+            t => Err(self.error(
+                beg..self.curr_pos(),
+                format!("The function's type is not a function type: {t:#?}"),
+            )),
         }
-        let args = self.parse_delimited(Self::parse_typed_identifier, TokenType::Comma);
-        let _ = self.expect_token(TokenType::RParen);
+    }
+
+    fn parse_argument_list(&mut self) -> ParseRes<Vec<String>> {
+        let _ = self.match_token(TokenType::LParen);
+        let args = self.parse_delimited(Self::parse_identifier, TokenType::Comma);
+        let _ = self.match_token(TokenType::RParen);
         Ok(args)
     }
 
@@ -196,7 +224,50 @@ impl<'source> Parser<'source> {
     }
 
     fn parse_type(&mut self) -> ParseRes<ast::Typ> {
-        self.parse_identifier().map(|v| ast::Typ::Name(v))
+        let beg = self.curr_pos();
+        match self.lexer.current().typ.clone() {
+            TokenType::Identifier(name) => {
+                self.lexer.advance();
+                Ok(ast::Typ::Name(name))
+            }
+            TokenType::LParen => {
+                self.lexer.advance();
+                let inner_t = match self.parse_type() {
+                    Err(ParseErr::WrongRule) => {
+                        if self.match_token(TokenType::RParen).is_err() {
+                            return Err(self.error(beg..self.curr_pos(), "Cannot parse a type"));
+                        }
+                        ast::Typ::Unit
+                    }
+                    e @ Err(_) => return e,
+                    Ok(inner_t) => {
+                        let t = if self.match_token(TokenType::Comma).is_ok() {
+                            let mut rest = self.parse_delimited(Self::parse_type, TokenType::Comma);
+                            let mut tuple = vec![inner_t];
+                            tuple.append(&mut rest);
+                            ast::Typ::Tuple(tuple)
+                        } else {
+                            inner_t
+                        };
+                        self.expect_token(TokenType::RParen)?;
+                        t
+                    }
+                };
+                if self.match_token(TokenType::Arrow).is_ok() {
+                    let ret = self.parse_type()?;
+                    return Ok(ast::Typ::Function {
+                        args: match inner_t {
+                            ast::Typ::Tuple(args) => args,
+                            ast::Typ::Unit => Vec::new(),
+                            other => vec![other],
+                        },
+                        ret: Box::new(ret),
+                    });
+                }
+                Ok(inner_t)
+            }
+            _ => wrong_rule(),
+        }
     }
 
     fn parse_delimited<T>(
@@ -418,19 +489,22 @@ mod tests {
 
     ptest! {
         test_function_definition_with_no_argumentsr,
-        r#"func foo 10;"#,
+        "foo: () -> ()
+         foo = 10;",
         ast::Builder::new()
-            .func_def("foo", |args| args, |body| body.integer(10))
+            .func_def("foo", |args| args, ast::Typ::Unit, |body| body.integer(10))
     }
 
     ptest! {
         test_function_definition_with_arguments,
 
-        r#"func foo(a:b, c:d) 10;"#,
+        r#"foo: (b, d) -> ()
+           foo(a, c) = 10;"#,
         ast::Builder::new()
             .func_def(
                 "foo",
                 |a| a.name("a", "b").name("c", "d"),
+                ast::Typ::Unit,
                 |b| b.integer(10),
             )
     }

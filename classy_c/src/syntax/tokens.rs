@@ -36,7 +36,7 @@ pub enum TokenType {
     Function,
     #[token("type")]
     Type,
-    
+
     // Literals
     #[regex(r"[_a-zA-Z][_a-zA-Z0-9]*", |lex| lex.slice().to_owned())]
     Identifier(String),
@@ -66,6 +66,10 @@ pub enum TokenType {
     Semicolon,
     #[token(",")]
     Comma,
+    #[token("->")]
+    Arrow,
+    #[token("=")]
+    Assignment,
 
     // Others
     #[regex(r"[ \t\f]+", logos::skip)]

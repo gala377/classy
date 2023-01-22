@@ -72,14 +72,18 @@ pub struct TypedName {
 #[cfg_attr(test, derive(PartialEq))]
 pub struct FunctionDefinition {
     pub name: String,
-    pub parameters: Vec<TypedName>,
+    pub typ: Typ,
+    pub parameters: Vec<String>,
     pub body: Expr,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Typ {
+    Unit,
     Name(String),
     Array(Box<Typ>),
+    Function { args: Vec<Typ>, ret: Box<Typ> },
+    Tuple(Vec<Typ>),
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -162,15 +166,26 @@ impl Builder {
         mut self,
         name: impl Into<String>,
         parameters: impl FnOnce(TypedNameListBuilder) -> TypedNameListBuilder,
+        ret: Typ,
         body: impl FnOnce(ExprBuilder) -> ExprBuilder,
     ) -> Self {
         let parameters = parameters(default()).build();
         let body = body(default()).build();
+        let mut arg_types = Vec::new();
+        let mut arg_names = Vec::new();
+        for TypedName { name, typ } in parameters {
+            arg_types.push(typ);
+            arg_names.push(name);
+        }
         self.res
             .items
             .push(TopLevelItem::FunctionDefinition(FunctionDefinition {
                 name: name.into(),
-                parameters,
+                parameters: arg_names,
+                typ: Typ::Function {
+                    args: arg_types,
+                    ret: Box::new(ret),
+                },
                 body,
             }));
         self
