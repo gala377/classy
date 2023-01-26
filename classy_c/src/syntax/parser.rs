@@ -287,6 +287,10 @@ impl<'source> Parser<'source> {
     }
 
     fn parse_expr(&mut self) -> ParseRes<ast::Expr> {
+        self.parse_term()
+    }
+
+    fn parse_term(&mut self) -> ParseRes<ast::Expr> {
         match self.lexer.current().clone() {
             Token {
                 typ: TokenType::Integer(val),

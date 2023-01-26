@@ -97,11 +97,13 @@ pub struct TypeVariable {
 #[cfg_attr(test, derive(PartialEq))]
 pub enum Expr {
     Block(Vec<Expr>),
-
+    Assignment { lval: Box<Expr>, rval: Box<Expr> },
     IntConst(isize),
     StringConst(String),
     FloatConst(f64),
     Name(String),
+    FunctionCall { func: Box<Expr>, args: Vec<Expr> },
+    Access { val: Box<Expr>, field: String },
 }
 
 /// Explicit PartialEq implementations to skip span comparison.
