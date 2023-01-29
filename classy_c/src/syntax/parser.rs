@@ -633,10 +633,6 @@ mod tests {
         };
     }
 
-    fn id<T>(t: T) -> T {
-        t
-    }
-
     ptest! {
         test_empty_struct_definition,
         r#"
