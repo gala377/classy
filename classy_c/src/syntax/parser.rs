@@ -215,12 +215,9 @@ impl<'source> Parser<'source> {
             self.match_token(TokenType::Colon)
                 .error(self, beg, &self.expected_err_msg("a colon"));
         let typ = self
-            .parse_identifier()
+            .parse_type()
             .error(self, beg, &self.expected_err_msg("a type"))?;
-        Ok(ast::TypedName {
-            name,
-            typ: ast::Typ::Name(typ),
-        })
+        Ok(ast::TypedName { name, typ })
     }
 
     fn parse_identifier(&mut self) -> ParseRes<String> {
