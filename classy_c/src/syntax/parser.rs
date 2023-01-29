@@ -18,11 +18,6 @@ TODO - for now:
     while expr { body }
     if cond { body } else { body }
     return expr
-- lambda literals
-    x = a => { }
-    x = (a, b) => { }
-    // only these forms are allowed as
-    x = { } is ambigious with "{ }" being a sequence block
 */
 
 #[derive(Error, Debug, Clone)]
