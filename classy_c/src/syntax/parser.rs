@@ -910,8 +910,6 @@ mod tests {
                                 |e| e.integer(1)))))))
     }
 
-    // func(args) (a, b) => body
-
     ptest! {
         test_function_call_with_args_trailing_with_explicit_args,
         "a:()->();a=a(a, b, c) (d, e) => { 1 };",
