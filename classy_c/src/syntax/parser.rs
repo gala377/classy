@@ -21,7 +21,12 @@ TODO - for now:
     Maybe we should actually have something like
     Person(name="john", age=18)
     with we would parse as a function call with named arguments
-    and then we can resolve it later on the typechecking stage.
+    and then we can resolve it later on the typechecking stage
+
+    So we need to add "named" fields to the syntax. Basically in case of a function
+    call we need to catch patterns in the argument list in the shape
+    Name "=" Expr
+    and threat them as a named arguments.
 
 - control structures
     let name = expr
