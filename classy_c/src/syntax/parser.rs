@@ -11,13 +11,27 @@ TODO - for now:
 
 - struct creation
     expr { field: epxr, field: expr }
-- type application
-    TypeName(Type, Type, Type)
+    // the problem is taht
+    expr { field: expr } is ambigius with trailing lambda, for example
+    Person { name: john }
+    can either mean a struct Person with field name set to john or
+    a function person called with a trailing lambda that returns a
+    "name" variable and sets the type explicitly to "john".
+
+    Maybe we should actually have something like
+    Person(name="john", age=18)
+    with we would parse as a function call with named arguments
+    and then we can resolve it later on the typechecking stage.
+
 - control structures
     let name = expr
+    return expr
+    // these 2 again require us to not allow trailing lambdas because
+    // while a { body } can be ambigious, maybe we can just have
+    // while (cond) { body }
+    // and if (cond) { body }
     while expr { body }
     if cond { body } else { body }
-    return expr
 */
 
 #[derive(Error, Debug, Clone)]

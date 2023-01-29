@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{collections::HashMap, ops::Range};
 
 // cargo is actually wrong about this, it confuses
 // usage of this function with unstable feature
@@ -125,6 +125,31 @@ pub enum Expr {
         expr: Box<Expr>,
         typ: Typ,
     },
+    StructLiteral {
+        strct: Path,
+        values: HashMap<String, Expr>,
+    },
+}
+
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
+pub struct Path(Vec<String>);
+
+impl Path {
+    pub fn try_from_expr(expr: Expr) -> Option<Self> {
+        fn match_segment(expr: Expr) -> Option<Vec<String>> {
+            match expr {
+                Expr::Name(val) => Some(vec![val]),
+                Expr::Access { val, field } => {
+                    let mut path = match_segment(*val)?;
+                    path.push(field);
+                    Some(path)
+                }
+                _ => None,
+            }
+        }
+        match_segment(expr).map(Path)
+    }
 }
 
 /// Explicit PartialEq implementations to skip span comparison.
