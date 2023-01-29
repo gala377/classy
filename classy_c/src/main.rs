@@ -1,7 +1,4 @@
-use std::ops::Range;
-
 use classy_c::syntax::{
-    ast,
     lexer::Lexer,
     parser::Parser,
     tokens::{Token, TokenType},
