@@ -96,6 +96,7 @@ pub struct TypeVariable {
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum Expr {
+    Unit,
     Block(Vec<Expr>),
     Assignment { lval: Box<Expr>, rval: Box<Expr> },
     IntConst(isize),
@@ -104,6 +105,7 @@ pub enum Expr {
     Name(String),
     FunctionCall { func: Box<Expr>, args: Vec<Expr> },
     Access { val: Box<Expr>, field: String },
+    Tuple(Vec<Expr>),
 }
 
 /// Explicit PartialEq implementations to skip span comparison.
@@ -323,11 +325,80 @@ pub struct ExprBuilder {
 
 impl ExprBuilder {
     pub fn integer(mut self, val: isize) -> Self {
+        assert!(self.res.is_none());
         self.res = Some(Expr::IntConst(val));
+        self
+    }
+
+    pub fn float(mut self, val: f64) -> Self {
+        assert!(self.res.is_none());
+        self.res = Some(Expr::FloatConst(val));
+        self
+    }
+
+    pub fn name(mut self, s: impl Into<String>) -> Self {
+        assert!(self.res.is_none());
+        self.res = Some(Expr::Name(s.into()));
+        self
+    }
+
+    pub fn function_call(
+        mut self,
+        callee: impl FnOnce(ExprBuilder) -> ExprBuilder,
+        args: impl FnOnce(ExprListBuilder) -> ExprListBuilder,
+    ) -> Self {
+        assert!(self.res.is_none());
+        let func = callee(default()).build();
+        let args = args(default()).build();
+        self.res = Some(Expr::FunctionCall {
+            func: Box::new(func),
+            args,
+        });
+        self
+    }
+
+    pub fn access(
+        mut self,
+        lhs: impl FnOnce(ExprBuilder) -> ExprBuilder,
+        field: impl Into<String>,
+    ) -> Self {
+        assert!(self.res.is_none());
+        let expr = lhs(default()).build();
+        self.res = Some(Expr::Access {
+            val: Box::new(expr),
+            field: field.into(),
+        });
+        self
+    }
+
+    pub fn tuple(mut self, vals: impl FnOnce(ExprListBuilder) -> ExprListBuilder) -> Self {
+        self.res = Some(Expr::Tuple(vals(default()).build()));
+        self
+    }
+
+    pub fn unit(mut self) -> Self {
+        self.res = Some(Expr::Unit);
         self
     }
 
     pub fn build(self) -> Expr {
         self.res.unwrap()
+    }
+}
+
+#[derive(Default)]
+pub struct ExprListBuilder {
+    res: Vec<Expr>,
+}
+
+impl ExprListBuilder {
+    pub fn build(self) -> Vec<Expr> {
+        self.res
+    }
+
+    pub fn add(mut self, f: impl FnOnce(ExprBuilder) -> ExprBuilder) -> Self {
+        let expr = f(default()).build();
+        self.res.push(expr);
+        self
     }
 }

@@ -70,6 +70,8 @@ pub enum TokenType {
     Arrow,
     #[token("=")]
     Assignment,
+    #[token(".", priority = 3)]
+    Dot,
 
     // Others
     #[regex(r"[ \t\f]+", logos::skip)]
@@ -84,6 +86,8 @@ pub enum TokenType {
 }
 
 lazy_static! {
+    /// List of tokens after which the lexer should not insert a semicolon
+    /// in case there is a newline following them;
     pub static ref IGNORE_NEWLINE: HashSet<Discriminant<TokenType>> = {
         use TokenType::*;
         let mut set = HashSet::new();
@@ -96,7 +100,7 @@ lazy_static! {
             // Special
             NewLine, Eof,
             // Operators
-            Semicolon, Comma,
+            Semicolon, Comma, Dot,
             // Grouping
             LBrace, LBracket, LParen,
             // Keywords

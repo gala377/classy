@@ -157,14 +157,16 @@ impl<'source> Parser<'source> {
             ));
         }
         let parameters = self.parse_argument_list()?;
-        if self.lexer.current().typ != TokenType::RBrace {
+        let body = if self.lexer.current().typ != TokenType::LBrace {
             let _ = self.match_token(TokenType::Assignment).error(
                 self,
                 beg,
                 "Missing = in the function definition",
             );
-        }
-        let body = self.parse_expr()?;
+            self.parse_expr()?
+        } else {
+            todo!("Parse expression block")
+        };
         let _ = self.expect_token(TokenType::Semicolon);
         Ok(ast::FunctionDefinition {
             name,
@@ -287,17 +289,91 @@ impl<'source> Parser<'source> {
     }
 
     fn parse_expr(&mut self) -> ParseRes<ast::Expr> {
-        self.parse_term()
+        self.parse_fn_call()
+    }
+
+    fn parse_fn_call(&mut self) -> ParseRes<ast::Expr> {
+        let beg = self.curr_pos();
+        let func = self.parse_access()?;
+        if let Err(_) = self.match_token(TokenType::LParen) {
+            return Ok(func);
+        }
+        // this is a function call;
+        let mut args = self.parse_delimited(Self::parse_expr, TokenType::Comma);
+        let _ = self
+            .match_token(TokenType::RParen)
+            .error(self, beg, "Missing closing parenthesis");
+
+        match self.parse_trailing_lambda() {
+            Ok(val) => args.push(val),
+            err @ Err(ParseErr::Err(_)) => return err,
+            _ => (),
+        }
+
+        Ok(ast::Expr::FunctionCall {
+            func: Box::new(func),
+            args,
+        })
+    }
+
+    fn parse_trailing_lambda(&mut self) -> ParseRes<ast::Expr> {
+        wrong_rule()
+    }
+
+    fn parse_access(&mut self) -> ParseRes<ast::Expr> {
+        let beg = self.curr_pos();
+        let mut lhs = self.parse_term()?;
+        while let Ok(_) = self.match_token(TokenType::Dot) {
+            let field =
+                self.parse_identifier()
+                    .error(self, beg, "A field has to be an indentifier")?;
+            lhs = ast::Expr::Access {
+                val: Box::new(lhs),
+                field,
+            };
+        }
+        Ok(lhs)
     }
 
     fn parse_term(&mut self) -> ParseRes<ast::Expr> {
-        match self.lexer.current().clone() {
-            Token {
-                typ: TokenType::Integer(val),
-                ..
-            } => {
+        let beg = self.curr_pos();
+        let tok = self.lexer.current().typ.clone();
+        match tok {
+            TokenType::Integer(val) => {
                 self.lexer.advance();
                 Ok(ast::Expr::IntConst(val))
+            }
+            TokenType::Float(val) => {
+                self.lexer.advance();
+                Ok(ast::Expr::FloatConst(val))
+            }
+            TokenType::Identifier(name) => {
+                self.lexer.advance();
+                Ok(ast::Expr::Name(name))
+            }
+            TokenType::LParen => {
+                self.lexer.advance();
+                if let Ok(_) = self.match_token(TokenType::RParen) {
+                    return Ok(ast::Expr::Unit);
+                }
+                let inner = self.parse_expr()?;
+                if let Err(_) = self.match_token(TokenType::Comma) {
+                    let _ = self.match_token(TokenType::RParen).error(
+                        self,
+                        beg,
+                        "Missing closing parenthesis",
+                    );
+                    return Ok(inner);
+                }
+                let mut tuple_tail = self.parse_delimited(Self::parse_expr, TokenType::Comma);
+                let mut tuple = vec![inner];
+                tuple.append(&mut tuple_tail);
+                let _ = self.match_token(TokenType::RParen).error(
+                    self,
+                    beg,
+                    "Missing closing parenthesis",
+                );
+                Ok(ast::Expr::Tuple(tuple))
             }
             _ => wrong_rule(),
         }
@@ -399,6 +475,10 @@ mod tests {
                 Ok(())
             }
         };
+    }
+
+    fn id<T>(t: T) -> T {
+        t
     }
 
     ptest! {
@@ -511,5 +591,55 @@ mod tests {
                 ast::Typ::Unit,
                 |b| b.integer(10),
             )
+    }
+
+    ptest! {
+        test_simple_function_call_expression,
+        r#"a: () -> ()
+           a() = a(10, 20, 30)
+        "#,
+        ast::Builder::new()
+            .func_def("a", id, ast::Typ::Unit, |body| {
+                body.function_call(
+                    |f| f.name("a"),
+                    |args| args
+                        .add(|arg| arg.integer(10))
+                        .add(|arg| arg.integer(20))
+                        .add(|arg| arg.integer(30)))
+            })
+    }
+
+    ptest! {
+        test_function_returning_a_tuple,
+        r#"a: () -> (); a() = (1, 2, (a.b));"#,
+        ast::Builder::new()
+            .func_def("a", id, ast::Typ::Unit, |body| {
+                body.tuple(|vals|
+                    vals.add(|v| v.integer(1))
+                        .add(|v| v.integer(2))
+                        .add(|v| v.access(|lhs| lhs.name("a"), "b"))
+                )
+            })
+    }
+
+    ptest! {
+        test_parsing_unit_value,
+        "a:()->();a=();",
+        ast::Builder::new()
+            .func_def("a", id, ast::Typ::Unit, |body| body.unit())
+    }
+
+    ptest! {
+        test_chained_access,
+        "a:()->();a=a.b.c.d;",
+        ast::Builder::new()
+            .func_def("a", id, ast::Typ::Unit, |body| {
+                body
+                    .access(|lhs| lhs
+                        .access(|lhs| lhs
+                            .access(|lhs| lhs.name("a"), "b"),
+                        "c"),
+                    "d")
+            })
     }
 }
