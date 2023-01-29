@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, ops::Range};
+use std::ops::Range;
 
 // cargo is actually wrong about this, it confuses
 // usage of this function with unstable feature
