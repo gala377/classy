@@ -11,7 +11,6 @@ TODO - for now:
 
 - struct creation
     expr { field: epxr, field: expr }
-- typed expressions
 - type application
     TypeName(Type, Type, Type)
 - control structures
@@ -528,6 +527,20 @@ impl<'source> Parser<'source> {
             }
             TokenType::Identifier(name) => {
                 self.lexer.advance();
+                if let Ok(_) = self.match_token(TokenType::FatArrow) {
+                    // lambda literal in form
+                    // arg => expr
+                    let body = self
+                        .parse_expr()
+                        .error(self, beg, "expected lambdas body")?;
+                    return Ok(ast::Expr::Lambda {
+                        parameters: vec![ast::TypedName {
+                            name,
+                            typ: ast::Typ::ToInfere,
+                        }],
+                        body: Box::new(body),
+                    });
+                }
                 Ok(ast::Expr::Name(name))
             }
             TokenType::LParen => {
@@ -542,6 +555,41 @@ impl<'source> Parser<'source> {
                         beg,
                         "Missing closing parenthesis",
                     );
+                    if let Ok(_) = self.match_token(TokenType::FatArrow) {
+                        // this is a lambda literal in form
+                        // (a) => expr
+                        return match inner {
+                            ast::Expr::Name(name) => {
+                                // (name) => expr
+                                let body = self.parse_expr()?;
+                                Ok(ast::Expr::Lambda {
+                                    parameters: vec![ast::TypedName {
+                                        name,
+                                        typ: ast::Typ::ToInfere,
+                                    }],
+                                    body: Box::new(body),
+                                })
+                            }
+                            ast::Expr::TypedExpr { expr, typ } => match *expr {
+                                ast::Expr::Name(name) => {
+                                    // (name: type) => expr
+                                    let body = self.parse_expr()?;
+                                    Ok(ast::Expr::Lambda {
+                                        parameters: vec![ast::TypedName { name, typ }],
+                                        body: Box::new(body),
+                                    })
+                                }
+                                _ => Err(ParseErr::Err(SyntaxError {
+                                    span: beg..self.curr_pos(),
+                                    msg: "lambdas parameters must be names".into(),
+                                })),
+                            },
+                            _ => Err(ParseErr::Err(SyntaxError {
+                                span: beg..self.curr_pos(),
+                                msg: "lambdas parameters must be names".into(),
+                            })),
+                        };
+                    }
                     return Ok(inner);
                 }
                 let mut tuple_tail = self.parse_delimited(Self::parse_expr, TokenType::Comma);
@@ -552,6 +600,35 @@ impl<'source> Parser<'source> {
                     beg,
                     "Missing closing parenthesis",
                 );
+                if let Ok(_) = self.match_token(TokenType::FatArrow) {
+                    // this is a lambda literal in form
+                    // (a, b, c) => expr
+                    let parameters = tuple
+                        .into_iter()
+                        .map(|arg| match arg {
+                            ast::Expr::Name(v) => Ok((v, ast::Typ::ToInfere)),
+                            ast::Expr::TypedExpr { expr, typ } => match *expr {
+                                ast::Expr::Name(name) => Ok((name, typ)),
+                                _ => Err(ParseErr::Err(SyntaxError {
+                                    msg: "Expected a lambda's arguments list".into(),
+                                    span: beg..self.curr_pos(),
+                                })),
+                            },
+                            _ => Err(ParseErr::Err(SyntaxError {
+                                msg: "Expected a lambda's arguments list".into(),
+                                span: beg..self.curr_pos(),
+                            })),
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let body = self.parse_expr().error(self, beg, "missing lambdas body")?;
+                    return Ok(ast::Expr::Lambda {
+                        parameters: parameters
+                            .into_iter()
+                            .map(|(name, typ)| ast::TypedName { name, typ })
+                            .collect(),
+                        body: Box::new(body),
+                    });
+                }
                 Ok(ast::Expr::Tuple(tuple))
             }
             TokenType::LBrace => self.parse_expr_sequence(),
@@ -999,6 +1076,53 @@ mod tests {
                     },
                     "d",
                 )
+            })
+    }
+
+    ptest! {
+        test_single_arg_lambda_expr,
+        "a:()->();a=a=>b=>1;",
+        ast::Builder::new()
+            .unit_fn("a", |body| {
+                body.lambda_no_types::<&str>(
+                    &["a"],
+                    |body| {
+                        body.lambda_no_types::<&str>(
+                            &["b"],
+                            |body| {
+                              body.integer(1)
+                            })
+                    })
+            })
+    }
+
+    ptest! {
+        test_lambda_expression_with_no_type_arg_list,
+        "a:()->();a=(a, b)=>1;",
+        ast::Builder::new()
+            .unit_fn("a", |body| {
+                body.lambda_no_types::<&str>(
+                    &["a", "b"],
+                    |body| {
+                        body.integer(1)
+                    })
+            })
+    }
+
+    ptest! {
+        test_lambda_expression_with_typed_arg_list,
+        "a:()->();a=(a: b, c: d)=>1;",
+        ast::Builder::new()
+            .unit_fn("a", |body| {
+                body.lambda(
+                    |args| {
+                        args
+                            .name("a", "b")
+                            .name("c", "d")
+                    },
+                    |body| {
+                        body.integer(1)
+                    })
             })
     }
 }
