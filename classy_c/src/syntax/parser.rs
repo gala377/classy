@@ -732,7 +732,7 @@ mod tests {
         "foo: () -> ()
          foo = 10;",
         ast::Builder::new()
-            .func_def("foo", |args| args, ast::Typ::Unit, |body| body.integer(10))
+            .unit_fn("foo", |body| body.integer(10))
     }
 
     ptest! {
@@ -755,7 +755,7 @@ mod tests {
            a() = a(10, 20, 30)
         "#,
         ast::Builder::new()
-            .func_def("a", id, ast::Typ::Unit, |body| {
+            .unit_fn("a", |body| {
                 body.function_call(
                     |f| f.name("a"),
                     |args| args
@@ -769,7 +769,7 @@ mod tests {
         test_function_returning_a_tuple,
         r#"a: () -> (); a() = (1, 2, (a.b));"#,
         ast::Builder::new()
-            .func_def("a", id, ast::Typ::Unit, |body| {
+            .unit_fn("a", |body| {
                 body.tuple(|vals|
                     vals.add(|v| v.integer(1))
                         .add(|v| v.integer(2))
@@ -782,14 +782,14 @@ mod tests {
         test_parsing_unit_value,
         "a:()->();a=();",
         ast::Builder::new()
-            .func_def("a", id, ast::Typ::Unit, |body| body.unit())
+            .unit_fn("a", |body| body.unit())
     }
 
     ptest! {
         test_chained_access,
         "a:()->();a=a.b.c.d;",
         ast::Builder::new()
-            .func_def("a", id, ast::Typ::Unit, |body| {
+            .unit_fn("a", |body| {
                 body
                     .access(|lhs| lhs
                         .access(|lhs| lhs
@@ -803,7 +803,7 @@ mod tests {
         test_parsing_block,
         "a:()->();a={1; 2};",
         ast::Builder::new()
-            .func_def("a", id, ast::Typ::Unit, |body| {
+            .unit_fn("a", |body| {
                 body.sequence(|es| es
                     .add(|e| e.integer(1))
                     .add(|e| e.integer(2)))
@@ -814,7 +814,7 @@ mod tests {
         test_function_with_block_body,
         "a:()->();a{1; 2};",
         ast::Builder::new()
-            .func_def("a", id, ast::Typ::Unit, |body| {
+            .unit_fn("a", |body| {
                 body.sequence(|es| es
                     .add(|e| e.integer(1))
                     .add(|e| e.integer(2)))
@@ -825,7 +825,7 @@ mod tests {
         test_simple_assignment,
         "a:()->();a=a.b=c.d;",
         ast::Builder::new()
-            .func_def("a", id, ast::Typ::Unit, |body| {
+            .unit_fn("a", |body| {
                 body.assignment(
                     |l| l.access(|s| s.name("a"), "b"),
                     |r| r.access(|s| s.name("c"), "d"))
