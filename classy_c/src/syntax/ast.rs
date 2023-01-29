@@ -389,6 +389,21 @@ impl ExprBuilder {
         self
     }
 
+    pub fn assignment(
+        mut self,
+        lhs: impl FnOnce(ExprBuilder) -> ExprBuilder,
+        rhs: impl FnOnce(ExprBuilder) -> ExprBuilder,
+    ) -> Self {
+        assert!(self.res.is_none());
+        let lhs = lhs(default()).build();
+        let rhs = rhs(default()).build();
+        self.res = Some(Expr::Assignment {
+            lval: Box::new(lhs),
+            rval: Box::new(rhs),
+        });
+        self
+    }
+
     pub fn build(self) -> Expr {
         self.res.unwrap()
     }

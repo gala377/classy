@@ -289,7 +289,19 @@ impl<'source> Parser<'source> {
     }
 
     fn parse_expr(&mut self) -> ParseRes<ast::Expr> {
-        self.parse_fn_call()
+        self.parse_assignment()
+    }
+
+    fn parse_assignment(&mut self) -> ParseRes<ast::Expr> {
+        let lhs = self.parse_fn_call()?;
+        if let Err(_) = self.match_token(TokenType::Assignment) {
+            return Ok(lhs);
+        }
+        let rhs = self.parse_fn_call()?;
+        Ok(ast::Expr::Assignment {
+            lval: Box::new(lhs),
+            rval: Box::new(rhs),
+        })
     }
 
     fn parse_fn_call(&mut self) -> ParseRes<ast::Expr> {
@@ -678,6 +690,17 @@ mod tests {
                 body.sequence(|es| es
                     .add(|e| e.integer(1))
                     .add(|e| e.integer(2)))
+            })
+    }
+
+    ptest! {
+        test_simple_assignment,
+        "a:()->();a=a.b=c.d;",
+        ast::Builder::new()
+            .func_def("a", id, ast::Typ::Unit, |body| {
+                body.assignment(
+                    |l| l.access(|s| s.name("a"), "b"),
+                    |r| r.access(|s| s.name("c"), "d"))
             })
     }
 }
