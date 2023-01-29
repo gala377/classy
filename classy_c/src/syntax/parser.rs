@@ -165,7 +165,7 @@ impl<'source> Parser<'source> {
             );
             self.parse_expr()?
         } else {
-            todo!("Parse expression block")
+            self.parse_expr_sequence()?
         };
         let _ = self.expect_token(TokenType::Semicolon);
         Ok(ast::FunctionDefinition {
@@ -375,8 +375,24 @@ impl<'source> Parser<'source> {
                 );
                 Ok(ast::Expr::Tuple(tuple))
             }
+            TokenType::LBrace => self.parse_expr_sequence(),
             _ => wrong_rule(),
         }
+    }
+
+    fn parse_expr_sequence(&mut self) -> ParseRes<ast::Expr> {
+        let beg = self.curr_pos();
+        self.match_token(TokenType::LBrace)?;
+        let body = self.parse_delimited(Self::parse_expr, TokenType::Semicolon);
+        if body.is_empty() {
+            return Err(self.error(beg..self.curr_pos(), "An expression block cannot be empty"));
+        }
+        let _ = self.match_token(TokenType::RBrace).error(
+            self,
+            beg,
+            "Missing closing brace for the expression block",
+        );
+        Ok(ast::Expr::Sequence(body))
     }
 }
 
@@ -640,6 +656,28 @@ mod tests {
                             .access(|lhs| lhs.name("a"), "b"),
                         "c"),
                     "d")
+            })
+    }
+
+    ptest! {
+        test_parsing_block,
+        "a:()->();a={1; 2};",
+        ast::Builder::new()
+            .func_def("a", id, ast::Typ::Unit, |body| {
+                body.sequence(|es| es
+                    .add(|e| e.integer(1))
+                    .add(|e| e.integer(2)))
+            })
+    }
+
+    ptest! {
+        test_function_with_block_body,
+        "a:()->();a{1; 2};",
+        ast::Builder::new()
+            .func_def("a", id, ast::Typ::Unit, |body| {
+                body.sequence(|es| es
+                    .add(|e| e.integer(1))
+                    .add(|e| e.integer(2)))
             })
     }
 }

@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{borrow::BorrowMut, ops::Range};
 
 // cargo is actually wrong about this, it confuses
 // usage of this function with unstable feature
@@ -97,7 +97,7 @@ pub struct TypeVariable {
 #[cfg_attr(test, derive(PartialEq))]
 pub enum Expr {
     Unit,
-    Block(Vec<Expr>),
+    Sequence(Vec<Expr>),
     Assignment { lval: Box<Expr>, rval: Box<Expr> },
     IntConst(isize),
     StringConst(String),
@@ -372,12 +372,20 @@ impl ExprBuilder {
     }
 
     pub fn tuple(mut self, vals: impl FnOnce(ExprListBuilder) -> ExprListBuilder) -> Self {
+        assert!(self.res.is_none());
         self.res = Some(Expr::Tuple(vals(default()).build()));
         self
     }
 
     pub fn unit(mut self) -> Self {
+        assert!(self.res.is_none());
         self.res = Some(Expr::Unit);
+        self
+    }
+
+    pub fn sequence(mut self, exprs: impl FnOnce(ExprListBuilder) -> ExprListBuilder) -> Self {
+        assert!(self.res.is_none());
+        self.res = Some(Expr::Sequence(exprs(default()).build()));
         self
     }
 
