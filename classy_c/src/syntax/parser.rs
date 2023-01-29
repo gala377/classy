@@ -8,14 +8,22 @@ use super::tokens::{Token, TokenType};
 
 /*
 TODO - for now:
+
 - struct creation
- expr { field: epxr, field: expr }
+    expr { field: epxr, field: expr }
+- typed expressions
 - type application
-  TypeName(Type, Type, Type)
+    TypeName(Type, Type, Type)
 - control structures
-- while expr { body }
-- if cond { body } else { body }
-- return expr
+    let name = expr
+    while expr { body }
+    if cond { body } else { body }
+    return expr
+- lambda literals
+    x = a => { }
+    x = (a, b) => { }
+    // only these forms are allowed as
+    x = { } is ambigious with "{ }" being a sequence block
 */
 
 #[derive(Error, Debug, Clone)]
@@ -350,7 +358,14 @@ impl<'source> Parser<'source> {
                 let parameters = args
                     .into_iter()
                     .map(|arg| match arg {
-                        ast::Expr::Name(v) => Ok(v),
+                        ast::Expr::Name(v) => Ok((v, ast::Typ::ToInfere)),
+                        ast::Expr::TypedExpr { expr, typ } => match *expr {
+                            ast::Expr::Name(name) => Ok((name, typ)),
+                            _ => Err(ParseErr::Err(SyntaxError {
+                                msg: "Expected a lambda's arguments list".into(),
+                                span: beg..self.curr_pos(),
+                            })),
+                        },
                         _ => Err(ParseErr::Err(SyntaxError {
                             msg: "Expected a lambda's arguments list".into(),
                             span: beg..self.curr_pos(),
@@ -363,10 +378,7 @@ impl<'source> Parser<'source> {
                 let lambda = ast::Expr::Lambda {
                     parameters: parameters
                         .into_iter()
-                        .map(|name| ast::TypedName {
-                            name,
-                            typ: ast::Typ::ToInfere,
-                        })
+                        .map(|(name, typ)| ast::TypedName { name, typ })
                         .collect(),
                     body: Box::new(body),
                 };
@@ -866,7 +878,7 @@ mod tests {
                 |body| body.function_call(
                     |c| c.name("a"),
                     |args| args.add(|arg| {
-                        arg.lambda::<&str>(
+                        arg.lambda_no_types::<&str>(
                             &[],
                             |body| body.sequence(|seq|
                                 seq.add(|expr| expr.integer(1))))
@@ -893,7 +905,7 @@ mod tests {
             .unit_fn("a", |body| body.function_call(
                 |c| c.access(|l| l.name("a"), "b"),
                 |args| args
-                    .add(|l| l.lambda(
+                    .add(|l| l.lambda_no_types(
                         &["c"],
                         |body| body.integer(1)))))
     }
@@ -905,7 +917,7 @@ mod tests {
             .unit_fn("a", |body| body.function_call(
                 |c| c.access(|l| l.name("a"), "b"),
                 |args| args
-                    .add(|l| l.lambda::<&str>(
+                    .add(|l| l.lambda_no_types::<&str>(
                         &[],
                         |body| body.integer(1)))))
     }
@@ -917,7 +929,7 @@ mod tests {
             .unit_fn("a", |body| body.function_call(
                 |c| c.name("a"),
                 |args| args
-                    .add(|l| l.lambda(
+                    .add(|l| l.lambda_no_types(
                         &["a", "b", "c"],
                         |body| body.integer(1)))))
     }
@@ -932,7 +944,7 @@ mod tests {
                     .add(|a| a.name("a"))
                     .add(|a| a.name("b"))
                     .add(|a| a.name("c"))
-                    .add(|l| l.lambda::<&str>(
+                    .add(|l| l.lambda_no_types::<&str>(
                         &[],
                         |body| body.sequence(
                             |s| s.add(
@@ -949,11 +961,25 @@ mod tests {
                     .add(|a| a.name("a"))
                     .add(|a| a.name("b"))
                     .add(|a| a.name("c"))
-                    .add(|l| l.lambda(
+                    .add(|l| l.lambda_no_types(
                         &["d", "e"],
                         |body| body.sequence(
                             |s| s.add(
                                 |e| e.integer(1)))))))
+    }
+
+    ptest! {
+        test_trailing_lambda_with_types,
+        "a:()->();a=a(b:c,d:e)=>1;",
+        ast::Builder::new()
+            .unit_fn("a", |body| body.function_call(
+                |c| c.name("a"),
+                |args| args
+                    .add(|l| l.lambda(
+                        |pars| pars
+                            .name("b", "c")
+                            .name("d", "e"),
+                        |body| body.integer(1)))))
     }
 
     ptest! {

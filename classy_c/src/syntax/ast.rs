@@ -430,7 +430,7 @@ impl ExprBuilder {
         self
     }
 
-    pub fn lambda<P: Into<String> + Clone>(
+    pub fn lambda_no_types<P: Into<String> + Clone>(
         mut self,
         parameters: &[P],
         body: impl FnOnce(ExprBuilder) -> ExprBuilder,
@@ -446,6 +446,20 @@ impl ExprBuilder {
                     typ: Typ::ToInfere,
                 })
                 .collect(),
+            body: Box::new(body),
+        });
+        self
+    }
+
+    pub fn lambda(
+        mut self,
+        parameters: impl FnOnce(TypedNameListBuilder) -> TypedNameListBuilder,
+        body: impl FnOnce(ExprBuilder) -> ExprBuilder,
+    ) -> Self {
+        assert!(self.res.is_none());
+        let body = body(default()).build();
+        self.res = Some(Expr::Lambda {
+            parameters: parameters(default()).build(),
             body: Box::new(body),
         });
         self
