@@ -81,6 +81,7 @@ pub struct FunctionDefinition {
 pub enum Typ {
     Unit,
     Name(String),
+    Application { callee: Box<Typ>, args: Vec<Typ> },
     Array(Box<Typ>),
     Function { args: Vec<Typ>, ret: Box<Typ> },
     Tuple(Vec<Typ>),

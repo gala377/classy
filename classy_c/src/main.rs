@@ -18,11 +18,11 @@ fn main() {
     let source = r#"
     
         type Option(a) {
-            Ok(a)
+            Some(a)
             None
         }
 
-        some: (a) -> b
+        some: (a) -> Option(a)
         some x = Option.Ok x
 
         repeat: (int, () -> ()) -> ()
@@ -30,9 +30,10 @@ fn main() {
 
         main: () -> ()
         main {
-            x = repeat 10 i => {
+            x = repeat 10 (i) => {
                 print i
             }
+            until 10 i => print i
             Some x
         }
 

@@ -237,6 +237,20 @@ impl<'source> Parser<'source> {
     }
 
     fn parse_type(&mut self) -> ParseRes<ast::Typ> {
+        let typ = self.parse_atomic_type()?;
+        if let Err(_) = self.match_token(TokenType::LParen) {
+            return Ok(typ);
+        }
+        // type aplication
+        let args = self.parse_delimited(Self::parse_type, TokenType::Comma);
+        let _ = self.expect_token(TokenType::RParen);
+        Ok(ast::Typ::Application {
+            callee: Box::new(typ),
+            args,
+        })
+    }
+
+    fn parse_atomic_type(&mut self) -> ParseRes<ast::Typ> {
         let beg = self.curr_pos();
         match self.lexer.current().typ.clone() {
             TokenType::Identifier(name) => {
@@ -445,7 +459,8 @@ impl<'source> Parser<'source> {
             // form of func a => { lambda body }
             // form of func arg
             // if there is no name, rbrace following then its just a normal expression
-            match self.parse_access() {
+            let mut check_for_trailing_lambda = false;
+            let mut args = match self.parse_access() {
                 // no name or brace following, just a normal expression
                 Err(ParseErr::WrongRule) => return Ok(func),
                 e @ Err(_) => return e,
@@ -467,6 +482,7 @@ impl<'source> Parser<'source> {
                         vec![lambda]
                     } else {
                         // func name
+                        check_for_trailing_lambda = true;
                         vec![ast::Expr::Name(name)]
                     }
                 }
@@ -480,9 +496,62 @@ impl<'source> Parser<'source> {
                 }
                 Ok(val) => {
                     // func expr
+                    check_for_trailing_lambda = true;
                     vec![val]
                 }
+            };
+            if check_for_trailing_lambda {
+                match self.lexer.current().typ.clone() {
+                    TokenType::Identifier(name) => {
+                        // a => expr
+                        self.lexer.advance();
+                        let parameters = vec![ast::TypedName {
+                            name,
+                            typ: ast::Typ::ToInfere,
+                        }];
+                        let _ = self.expect_token(TokenType::FatArrow);
+                        let body =
+                            self.parse_expr()
+                                .error(self, beg, "expected trailing lambdas body")?;
+                        args.push(ast::Expr::Lambda {
+                            parameters,
+                            body: Box::new(body),
+                        });
+                    }
+                    TokenType::LParen => {
+                        // (args) => expr
+                        self.lexer.advance();
+                        let parameters =
+                            self.parse_delimited(Self::parse_possibly_typed_name, TokenType::Comma);
+                        let _ = self.expect_token(TokenType::RParen);
+                        let _ = self.expect_token(TokenType::FatArrow);
+                        let body = self.parse_expr_sequence().error(
+                            self,
+                            beg,
+                            "Expected trailing lambdas body",
+                        )?;
+                        args.push(ast::Expr::Lambda {
+                            parameters,
+                            body: Box::new(body),
+                        })
+                    }
+                    TokenType::LBrace => {
+                        // no args trailing lambda
+                        // { expr }
+                        let body = self.parse_expr_sequence().error(
+                            self,
+                            beg,
+                            "Expected trailing lambdas body",
+                        )?;
+                        args.push(ast::Expr::Lambda {
+                            parameters: Vec::new(),
+                            body: Box::new(body),
+                        });
+                    }
+                    _ => {}
+                }
             }
+            args
         };
         Ok(ast::Expr::FunctionCall {
             func: Box::new(func),
@@ -641,6 +710,18 @@ impl<'source> Parser<'source> {
             "Missing closing brace for the expression block",
         );
         Ok(ast::Expr::Sequence(body))
+    }
+
+    fn parse_possibly_typed_name(&mut self) -> ParseRes<ast::TypedName> {
+        let name = self.parse_identifier()?;
+        if let Err(_) = self.match_token(TokenType::Colon) {
+            return Ok(ast::TypedName {
+                name,
+                typ: ast::Typ::ToInfere,
+            });
+        }
+        let typ = self.parse_type()?;
+        Ok(ast::TypedName { name, typ })
     }
 }
 
@@ -1116,5 +1197,19 @@ mod tests {
                         body.integer(1)
                     })
             })
+    }
+
+    ptest! {
+        function_call_with_single_non_parenthised_argument_and_non_parenthised_lambda,
+        "a:()->();a=a b c => 1;",
+        ast::Builder::new()
+            .unit_fn("a", |body| body.function_call(
+                |c| c.name("a"),
+                |args| args
+                    .add(|a| a.name("b"))
+                    .add(|a| a.lambda_no_types::<&str>(
+                        &["c"], |body| body.integer(1)))
+            )
+        )
     }
 }
