@@ -307,29 +307,157 @@ impl<'source> Parser<'source> {
     fn parse_fn_call(&mut self) -> ParseRes<ast::Expr> {
         let beg = self.curr_pos();
         let func = self.parse_access()?;
-        if let Err(_) = self.match_token(TokenType::LParen) {
-            return Ok(func);
-        }
-        // this is a function call;
-        let mut args = self.parse_delimited(Self::parse_expr, TokenType::Comma);
-        let _ = self
-            .match_token(TokenType::RParen)
-            .error(self, beg, "Missing closing parenthesis");
+        let args = if let Ok(_) = self.match_token(TokenType::LParen) {
+            // this is a function call with arguments passed in parentheses
+            // or a function call in a special form:
+            // func (a, b) => { lambda body }
+            let mut args = self.parse_delimited(Self::parse_expr, TokenType::Comma);
+            let _ =
+                self.match_token(TokenType::RParen)
+                    .error(self, beg, "Missing closing parenthesis");
 
-        match self.parse_trailing_lambda() {
-            Ok(val) => args.push(val),
-            err @ Err(ParseErr::Err(_)) => return err,
-            _ => (),
-        }
-
+            if let Ok(_) = self.match_token(TokenType::FatArrow) {
+                // this means that we probably have a call in form
+                // func (a, b) => { a + b }
+                // which is a function call with trailing lambda with arguments
+                let parameters = args
+                    .into_iter()
+                    .map(|arg| match arg {
+                        ast::Expr::Name(v) => Ok(v),
+                        _ => Err(ParseErr::Err(SyntaxError {
+                            msg: "Expected a lambda's arguments list".into(),
+                            span: beg..self.curr_pos(),
+                        })),
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let body =
+                    self.parse_expr()
+                        .error(self, beg, "Expected a trailing lambda's body")?;
+                let lambda = ast::Expr::Lambda {
+                    parameters: parameters
+                        .into_iter()
+                        .map(|name| ast::TypedName {
+                            name,
+                            typ: ast::Typ::ToInfere,
+                        })
+                        .collect(),
+                    body: Box::new(body),
+                };
+                vec![lambda]
+            } else {
+                // todo:
+                // form of func(args) this => { lambda body }
+                // form of func(args) (a, b) => { lambda body }
+                // form of func(args) { lambda body }
+                match self.lexer.current().typ.clone() {
+                    TokenType::Identifier(name) => {
+                        // form of func(args) this => { lambda body }
+                        let _ = self.expect_token(TokenType::FatArrow);
+                        let body = self.parse_expr().error(
+                            self,
+                            beg,
+                            "expected trailing lambda's body",
+                        )?;
+                        let lambda = ast::Expr::Lambda {
+                            parameters: vec![ast::TypedName {
+                                name,
+                                typ: ast::Typ::ToInfere,
+                            }],
+                            body: Box::new(body),
+                        };
+                        args.push(lambda);
+                        args
+                    }
+                    TokenType::LParen => {
+                        // form of func(args) (parameters) => { lambda body }
+                        self.lexer.advance();
+                        let parameters = self
+                            .parse_delimited(Self::parse_identifier, TokenType::Comma)
+                            .into_iter()
+                            .map(|name| ast::TypedName {
+                                name,
+                                typ: ast::Typ::ToInfere,
+                            })
+                            .collect();
+                        let _ = self.expect_token(TokenType::RParen);
+                        let _ = self.expect_token(TokenType::FatArrow);
+                        let body = self.parse_expr().error(
+                            self,
+                            beg,
+                            "expected trailing lambda's body",
+                        )?;
+                        let lambda = ast::Expr::Lambda {
+                            parameters,
+                            body: Box::new(body),
+                        };
+                        args.push(lambda);
+                        args
+                    }
+                    TokenType::LBrace => {
+                        // form of func(args) { lambda body }
+                        let body = self.parse_expr_sequence().error(
+                            self,
+                            beg,
+                            "expected trailing lambda's body",
+                        )?;
+                        let lambda = ast::Expr::Lambda {
+                            parameters: Vec::new(),
+                            body: Box::new(body),
+                        };
+                        args.push(lambda);
+                        args
+                    }
+                    _ => args,
+                }
+            }
+        } else {
+            // form of func { lambda body }
+            // form of func a => { lambda body }
+            // form of func arg
+            // if there is no name, rbrace following then its just a normal expression
+            match self.parse_expr() {
+                // no name or brace following, just a normal expression
+                Err(ParseErr::WrongRule) => return Ok(func),
+                e @ Err(_) => return e,
+                Ok(ast::Expr::Name(name)) => {
+                    if let Ok(_) = self.match_token(TokenType::FatArrow) {
+                        // func name => { lambda body }
+                        let body = self.parse_expr().error(
+                            self,
+                            beg,
+                            "Expected trailing lambda's body",
+                        )?;
+                        let lambda = ast::Expr::Lambda {
+                            parameters: vec![ast::TypedName {
+                                name,
+                                typ: ast::Typ::ToInfere,
+                            }],
+                            body: Box::new(body),
+                        };
+                        vec![lambda]
+                    } else {
+                        // func name
+                        vec![ast::Expr::Name(name)]
+                    }
+                }
+                Ok(body @ ast::Expr::Sequence(_)) => {
+                    // func { lambda body }
+                    let lambda = ast::Expr::Lambda {
+                        parameters: Vec::new(),
+                        body: Box::new(body),
+                    };
+                    vec![lambda]
+                }
+                Ok(val) => {
+                    // func expr
+                    vec![val]
+                }
+            }
+        };
         Ok(ast::Expr::FunctionCall {
             func: Box::new(func),
             args,
         })
-    }
-
-    fn parse_trailing_lambda(&mut self) -> ParseRes<ast::Expr> {
-        wrong_rule()
     }
 
     fn parse_access(&mut self) -> ParseRes<ast::Expr> {
@@ -702,5 +830,106 @@ mod tests {
                     |l| l.access(|s| s.name("a"), "b"),
                     |r| r.access(|s| s.name("c"), "d"))
             })
+    }
+
+    ptest! {
+        test_func_no_arguments_trailing_lambda,
+        "a:()->();a=a{1};",
+        ast::Builder::new()
+            .unit_fn(
+                "a",
+                |body| body.function_call(
+                    |c| c.name("a"),
+                    |args| args.add(|arg| {
+                        arg.lambda::<&str>(
+                            &[],
+                            |body| body.sequence(|seq|
+                                seq.add(|expr| expr.integer(1))))
+                    })))
+    }
+
+    ptest! {
+        function_call_with_single_non_parenthised_argument,
+        "a:()->();a=a a.b;",
+        ast::Builder::new()
+            .unit_fn("a", |body| body.function_call(
+                |c| c.name("a"),
+                |args| args.add(
+                    |a| a.access(
+                        |lhs| lhs.name("a"),
+                        "b")))
+        )
+    }
+
+    ptest! {
+        test_func_call_trailing_lambda_with_single_unparenthised_argument,
+        "a:()->();a=a.b c => 1;",
+        ast::Builder::new()
+            .unit_fn("a", |body| body.function_call(
+                |c| c.access(|l| l.name("a"), "b"),
+                |args| args
+                    .add(|l| l.lambda(
+                        &["c"],
+                        |body| body.integer(1)))))
+    }
+
+    ptest! {
+        test_func_call_trailing_lambda_explicit_no_arguments,
+        "a:()->();a=a.b () => 1;",
+        ast::Builder::new()
+            .unit_fn("a", |body| body.function_call(
+                |c| c.access(|l| l.name("a"), "b"),
+                |args| args
+                    .add(|l| l.lambda::<&str>(
+                        &[],
+                        |body| body.integer(1)))))
+    }
+
+    ptest! {
+        test_function_call_with_trailing_with_explicit_parameters,
+        "a:()->();a=a(a, b, c) => 1;",
+        ast::Builder::new()
+            .unit_fn("a", |body| body.function_call(
+                |c| c.name("a"),
+                |args| args
+                    .add(|l| l.lambda(
+                        &["a", "b", "c"],
+                        |body| body.integer(1)))))
+    }
+
+    ptest! {
+        test_function_call_with_arguments_and_parameterless_trailing_lambda,
+        "a:()->();a=a(a, b, c) { 1 };",
+        ast::Builder::new()
+            .unit_fn("a", |body| body.function_call(
+                |c| c.name("a"),
+                |args| args
+                    .add(|a| a.name("a"))
+                    .add(|a| a.name("b"))
+                    .add(|a| a.name("c"))
+                    .add(|l| l.lambda::<&str>(
+                        &[],
+                        |body| body.sequence(
+                            |s| s.add(
+                                |e| e.integer(1)))))))
+    }
+
+    // func(args) (a, b) => body
+
+    ptest! {
+        test_function_call_with_args_trailing_with_explicit_args,
+        "a:()->();a=a(a, b, c) (d, e) => { 1 };",
+        ast::Builder::new()
+            .unit_fn("a", |body| body.function_call(
+                |c| c.name("a"),
+                |args| args
+                    .add(|a| a.name("a"))
+                    .add(|a| a.name("b"))
+                    .add(|a| a.name("c"))
+                    .add(|l| l.lambda(
+                        &["d", "e"],
+                        |body| body.sequence(
+                            |s| s.add(
+                                |e| e.integer(1)))))))
     }
 }

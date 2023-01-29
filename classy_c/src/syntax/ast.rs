@@ -84,6 +84,7 @@ pub enum Typ {
     Array(Box<Typ>),
     Function { args: Vec<Typ>, ret: Box<Typ> },
     Tuple(Vec<Typ>),
+    ToInfere,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -98,14 +99,27 @@ pub struct TypeVariable {
 pub enum Expr {
     Unit,
     Sequence(Vec<Expr>),
-    Assignment { lval: Box<Expr>, rval: Box<Expr> },
+    Assignment {
+        lval: Box<Expr>,
+        rval: Box<Expr>,
+    },
     IntConst(isize),
     StringConst(String),
     FloatConst(f64),
     Name(String),
-    FunctionCall { func: Box<Expr>, args: Vec<Expr> },
-    Access { val: Box<Expr>, field: String },
+    FunctionCall {
+        func: Box<Expr>,
+        args: Vec<Expr>,
+    },
+    Access {
+        val: Box<Expr>,
+        field: String,
+    },
     Tuple(Vec<Expr>),
+    Lambda {
+        parameters: Vec<TypedName>,
+        body: Box<Expr>,
+    },
 }
 
 /// Explicit PartialEq implementations to skip span comparison.
@@ -164,6 +178,14 @@ impl Builder {
             .items
             .push(TopLevelItem::TypeDefinition(adt.build()));
         self
+    }
+
+    pub fn unit_fn(
+        self,
+        name: impl Into<String>,
+        body: impl FnOnce(ExprBuilder) -> ExprBuilder,
+    ) -> Self {
+        self.func_def(name, |args| args, Typ::Unit, body)
     }
 
     pub fn func_def(
@@ -400,6 +422,27 @@ impl ExprBuilder {
         self.res = Some(Expr::Assignment {
             lval: Box::new(lhs),
             rval: Box::new(rhs),
+        });
+        self
+    }
+
+    pub fn lambda<P: Into<String> + Clone>(
+        mut self,
+        parameters: &[P],
+        body: impl FnOnce(ExprBuilder) -> ExprBuilder,
+    ) -> Self {
+        assert!(self.res.is_none());
+        let body = body(default()).build();
+        self.res = Some(Expr::Lambda {
+            parameters: parameters
+                .iter()
+                .cloned()
+                .map(|name| TypedName {
+                    name: name.into(),
+                    typ: Typ::ToInfere,
+                })
+                .collect(),
+            body: Box::new(body),
         });
         self
     }

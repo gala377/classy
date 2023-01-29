@@ -68,6 +68,8 @@ pub enum TokenType {
     Comma,
     #[token("->")]
     Arrow,
+    #[token("=>")]
+    FatArrow,
     #[token("=")]
     Assignment,
     #[token(".", priority = 3)]
