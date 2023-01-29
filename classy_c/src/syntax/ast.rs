@@ -120,6 +120,10 @@ pub enum Expr {
         parameters: Vec<TypedName>,
         body: Box<Expr>,
     },
+    TypedExpr {
+        expr: Box<Expr>,
+        typ: Typ,
+    },
 }
 
 /// Explicit PartialEq implementations to skip span comparison.
@@ -443,6 +447,20 @@ impl ExprBuilder {
                 })
                 .collect(),
             body: Box::new(body),
+        });
+        self
+    }
+
+    pub fn typed_expr(
+        mut self,
+        expr: impl FnOnce(ExprBuilder) -> ExprBuilder,
+        typ: impl Into<String>,
+    ) -> Self {
+        assert!(self.res.is_none());
+        let expr = expr(default()).build();
+        self.res = Some(Expr::TypedExpr {
+            expr: Box::new(expr),
+            typ: Typ::Name(typ.into()),
         });
         self
     }

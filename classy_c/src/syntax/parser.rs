@@ -6,6 +6,18 @@ use super::ast::{self, TypedName};
 use super::lexer::Lexer;
 use super::tokens::{Token, TokenType};
 
+/*
+TODO - for now:
+- struct creation
+ expr { field: epxr, field: expr }
+- type application
+  TypeName(Type, Type, Type)
+- control structures
+- while expr { body }
+- if cond { body } else { body }
+- return expr
+*/
+
 #[derive(Error, Debug, Clone)]
 #[error("Syntax error [{span:?}] {msg}")]
 pub struct SyntaxError {
@@ -293,14 +305,29 @@ impl<'source> Parser<'source> {
     }
 
     fn parse_assignment(&mut self) -> ParseRes<ast::Expr> {
-        let lhs = self.parse_fn_call()?;
+        let lhs = self.parse_typed_expression()?;
         if let Err(_) = self.match_token(TokenType::Assignment) {
             return Ok(lhs);
         }
-        let rhs = self.parse_fn_call()?;
+        let rhs = self.parse_typed_expression()?;
         Ok(ast::Expr::Assignment {
             lval: Box::new(lhs),
             rval: Box::new(rhs),
+        })
+    }
+
+    fn parse_typed_expression(&mut self) -> ParseRes<ast::Expr> {
+        let beg = self.curr_pos();
+        let expr = self.parse_fn_call()?;
+        if let Err(_) = self.match_token(TokenType::Colon) {
+            return Ok(expr);
+        }
+        let typ = self
+            .parse_type()
+            .error(self, beg, "expected a type for a typed expression")?;
+        Ok(ast::Expr::TypedExpr {
+            expr: Box::new(expr),
+            typ,
         })
     }
 
@@ -415,7 +442,7 @@ impl<'source> Parser<'source> {
             // form of func a => { lambda body }
             // form of func arg
             // if there is no name, rbrace following then its just a normal expression
-            match self.parse_expr() {
+            match self.parse_access() {
                 // no name or brace following, just a normal expression
                 Err(ParseErr::WrongRule) => return Ok(func),
                 e @ Err(_) => return e,
@@ -627,6 +654,8 @@ mod tests {
                 let mut parser = Parser::new(lex);
                 let actual = parser.parse()?;
                 let expected = $expected.build();
+                println!("Expeceted:\n{expected:#?}");
+                println!("Actual:\n{actual:#?}");
                 assert_eq!(expected, actual);
                 Ok(())
             }
@@ -925,5 +954,25 @@ mod tests {
                         |body| body.sequence(
                             |s| s.add(
                                 |e| e.integer(1)))))))
+    }
+
+    ptest! {
+        test_simple_typed_expression,
+        "a:()->();a=a.b c : d;",
+        ast::Builder::new()
+            .unit_fn("a", |body| {
+                body.typed_expr(
+                    |expr| {
+                        expr.function_call(
+                            |c| c.access(
+                                |l| l.name("a"),
+                                "b"
+                            ),
+                            |args| args.add(
+                                |a| a.name("c")))
+                    },
+                    "d",
+                )
+            })
     }
 }
