@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Range};
+use std::ops::Range;
 
 use thiserror::Error;
 
@@ -72,8 +72,6 @@ impl<T> SyntaxContext for ParseRes<T> {
         self.map_err(|_| parser.error(span, msg))
     }
 }
-
-type ParserMethod<Res> = fn(&mut Parser) -> ParseRes<Res>;
 
 pub struct Parser<'source> {
     lexer: Lexer<'source>,
