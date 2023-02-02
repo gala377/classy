@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{collections::HashMap, ops::Range};
 
 use thiserror::Error;
 
@@ -72,6 +72,8 @@ impl<T> SyntaxContext for ParseRes<T> {
         self.map_err(|_| parser.error(span, msg))
     }
 }
+
+type ParserMethod<Res> = fn(&mut Parser) -> ParseRes<Res>;
 
 pub struct Parser<'source> {
     lexer: Lexer<'source>,
@@ -333,7 +335,12 @@ impl<'source> Parser<'source> {
     }
 
     fn parse_expr(&mut self) -> ParseRes<ast::Expr> {
-        self.parse_assignment()
+        match self.lexer.current().typ.clone() {
+            TokenType::If => self.parse_if(),
+            TokenType::While => self.parse_while(),
+            TokenType::Return => self.parse_return(),
+            _ => self.parse_assignment(),
+        }
     }
 
     fn parse_assignment(&mut self) -> ParseRes<ast::Expr> {
@@ -741,6 +748,51 @@ impl<'source> Parser<'source> {
         }
         let typ = self.parse_type()?;
         Ok(ast::TypedName { name, typ })
+    }
+
+    fn parse_while(&mut self) -> ParseRes<ast::Expr> {
+        self.match_token(TokenType::While)?;
+        let _ = self.expect_token(TokenType::LParen);
+        let cond = self.parse_expr()?;
+        let _ = self.expect_token(TokenType::RParen);
+        let body = self.parse_expr_sequence()?;
+        Ok(ast::Expr::While {
+            cond: Box::new(cond),
+            body: Box::new(body),
+        })
+    }
+
+    fn parse_return(&mut self) -> ParseRes<ast::Expr> {
+        self.match_token(TokenType::Return)?;
+        let expr = self.parse_expr()?;
+        Ok(ast::Expr::Return(Box::new(expr)))
+    }
+
+    fn parse_if(&mut self) -> ParseRes<ast::Expr> {
+        let beg = self.curr_pos();
+        self.match_token(TokenType::If)?;
+        let _ = self.expect_token(TokenType::LParen);
+        let cond = self.parse_expr()?;
+        let _ = self.expect_token(TokenType::RParen);
+        let body = self.parse_expr_sequence()?;
+        let else_body = self
+            .match_token(TokenType::Else)
+            .ok()
+            .map(|_| match self.lexer.current().typ.clone() {
+                TokenType::If => self.parse_if(),
+                TokenType::LBrace => self.parse_expr_sequence(),
+                _ => Err(self.error(
+                    beg..self.curr_pos(),
+                    "else has to be followed by either the if or a block",
+                )),
+            })
+            .transpose()?
+            .map(Box::new);
+        Ok(ast::Expr::If {
+            cond: Box::new(cond),
+            body: Box::new(body),
+            else_body,
+        })
     }
 }
 

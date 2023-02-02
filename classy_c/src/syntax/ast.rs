@@ -129,6 +129,16 @@ pub enum Expr {
         strct: Path,
         values: HashMap<String, Expr>,
     },
+    While {
+        cond: Box<Expr>,
+        body: Box<Expr>,
+    },
+    Return(Box<Expr>),
+    If {
+        cond: Box<Expr>,
+        body: Box<Expr>,
+        else_body: Option<Box<Expr>>,
+    },
 }
 
 #[derive(Debug)]

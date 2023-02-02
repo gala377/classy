@@ -36,6 +36,8 @@ pub enum TokenType {
     Function,
     #[token("type")]
     Type,
+    #[token("return")]
+    Return,
 
     // Literals
     #[regex(r"[_a-zA-Z][_a-zA-Z0-9]*", |lex| lex.slice().to_owned())]
