@@ -885,8 +885,10 @@ mod tests {
                 let mut parser = Parser::new(lex);
                 let actual = parser.parse()?;
                 let expected = $expected.build();
-                println!("Expeceted:\n{expected:#?}");
-                println!("Actual:\n{actual:#?}");
+                if actual != expected {
+                    println!("Expected:\n{expected:#?}");
+                    println!("Actual:\n{actual:#?}");
+                }
                 assert_eq!(expected, actual);
                 Ok(())
             }
@@ -1280,5 +1282,23 @@ mod tests {
                         &["c"], |body| body.integer(1)))
             )
         )
+    }
+
+    ptest! {
+    trailing_lambda_call_in_while_cond,
+    "a:()->();a=while(a { b }) { c };",
+    ast::Builder::new()
+        .unit_fn("a", |body| { body.r#while(
+            |cond| {
+                cond.function_call(
+                    |c| c.name("a"),
+                    |args| args.add(
+                        |l| l.lambda_no_types::<&str>(
+                            &[],
+                            |body| body.sequence(
+                                |seq| seq.add(|e| e.name("b"))))))
+            },
+            |body| { body.add(|e| e.name("c"))
+        })})
     }
 }

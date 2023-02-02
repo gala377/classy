@@ -515,6 +515,53 @@ impl ExprBuilder {
         self
     }
 
+    pub fn r#return(mut self, expr: impl FnOnce(ExprBuilder) -> ExprBuilder) -> Self {
+        assert!(self.res.is_none());
+        let expr = expr(default()).build();
+        self.res = Some(Expr::Return(Box::new(expr)));
+        self
+    }
+
+    pub fn r#while(
+        mut self,
+        cond: impl FnOnce(ExprBuilder) -> ExprBuilder,
+        body: impl FnOnce(ExprListBuilder) -> ExprListBuilder,
+    ) -> Self {
+        let cond = cond(default()).build();
+        let body = Expr::Sequence(body(default()).build());
+        self.res = Some(Expr::While {
+            cond: Box::new(cond),
+            body: Box::new(body),
+        });
+        self
+    }
+
+    pub fn r#if(
+        mut self,
+        cond: impl FnOnce(ExprBuilder) -> ExprBuilder,
+        body: impl FnOnce(ExprListBuilder) -> ExprListBuilder,
+        r#else: impl FnOnce(ExprListBuilder) -> ExprListBuilder,
+    ) -> Self {
+        let cond = cond(default()).build();
+        let body = Expr::Sequence(body(default()).build());
+        let r#else = r#else(default()).build();
+        let r#else = if r#else.is_empty() {
+            None
+        } else {
+            Some(Box::new(Expr::Sequence(r#else)))
+        };
+        self.res = Some(Expr::If {
+            cond: Box::new(cond),
+            body: Box::new(body),
+            else_body: r#else,
+        });
+        self
+    }
+
+    pub fn try_build(self) -> Option<Expr> {
+        self.res
+    }
+
     pub fn build(self) -> Expr {
         self.res.unwrap()
     }
