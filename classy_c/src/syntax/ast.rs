@@ -558,6 +558,24 @@ impl ExprBuilder {
         self
     }
 
+    pub fn r#else_if(
+        mut self,
+        cond: impl FnOnce(ExprBuilder) -> ExprBuilder,
+        body: impl FnOnce(ExprListBuilder) -> ExprListBuilder,
+        r#else: impl FnOnce(ExprBuilder) -> ExprBuilder,
+    ) -> Self {
+        let cond = cond(default()).build();
+        let body = Expr::Sequence(body(default()).build());
+        let r#else = r#else(default()).build();
+        let r#else = Box::new(r#else);
+        self.res = Some(Expr::If {
+            cond: Box::new(cond),
+            body: Box::new(body),
+            else_body: Some(r#else),
+        });
+        self
+    }
+
     pub fn try_build(self) -> Option<Expr> {
         self.res
     }

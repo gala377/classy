@@ -885,11 +885,7 @@ mod tests {
                 let mut parser = Parser::new(lex);
                 let actual = parser.parse()?;
                 let expected = $expected.build();
-                if actual != expected {
-                    println!("Expected:\n{expected:#?}");
-                    println!("Actual:\n{actual:#?}");
-                }
-                assert_eq!(expected, actual);
+                similar_asserts::assert_eq!(expected: expected, actual: actual);
                 Ok(())
             }
         };
@@ -1285,20 +1281,65 @@ mod tests {
     }
 
     ptest! {
-    trailing_lambda_call_in_while_cond,
-    "a:()->();a=while(a { b }) { c };",
-    ast::Builder::new()
-        .unit_fn("a", |body| { body.r#while(
-            |cond| {
-                cond.function_call(
-                    |c| c.name("a"),
-                    |args| args.add(
-                        |l| l.lambda_no_types::<&str>(
-                            &[],
-                            |body| body.sequence(
-                                |seq| seq.add(|e| e.name("b"))))))
-            },
-            |body| { body.add(|e| e.name("c"))
-        })})
+        trailing_lambda_call_in_while_cond,
+        "a:()->();a=while(a { b }) { c };",
+        ast::Builder::new()
+            .unit_fn("a", |body| { body.r#while(
+                |cond| {
+                    cond.function_call(
+                        |c| c.name("a"),
+                        |args| args.add(
+                            |l| l.lambda_no_types::<&str>(
+                                &[],
+                                |body| body.sequence(
+                                    |seq| seq.add(|e| e.name("b"))))))
+                },
+                |body| { body.add(|e| e.name("c"))
+            })})
+    }
+    ptest! {
+        if_with_instruction_following,
+        "a:()->();a { if(b) { c }; d };",
+        ast::Builder::new()
+            .unit_fn("a", |body| {
+                body.sequence(|seq| {
+                    seq.add(|e| {
+                        e.r#if(
+                            |cond| cond.name("b"),
+                            |body| body.add(|e| e.name("c")),
+                            |e| e)
+                        })
+                        .add(|e| e.name("d"))
+                })
+
+            })
+    }
+
+    ptest! {
+        simple_if_else_chain,
+        "a:()->();a=if(b){c}else if (d){e} else {f};",
+        ast::Builder::new()
+            .unit_fn("a", |body| {
+                body.r#else_if(
+                    |cond| cond.name("b"),
+                    |body| body.add(|e| e.name("c")),
+                    |els| els.r#if(
+                            |cond| cond.name("d"),
+                            |body| body.add(|e| e.name("e")),
+                            |els2| els2.add(|e| e.name("f"))))
+        })
+    }
+
+    ptest! {
+        simple_return_statement,
+        "a:()->();a=return a b;",
+        ast::Builder::new()
+            .unit_fn("a", |body| {
+                body.r#return(|e| {
+                    e.function_call(
+                        |callee| callee.name("a"),
+                        |args| args.add(|a| a.name("b")))
+                })
+            })
     }
 }
