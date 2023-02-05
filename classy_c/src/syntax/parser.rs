@@ -337,6 +337,7 @@ impl<'source> Parser<'source> {
             TokenType::If => self.parse_if(),
             TokenType::While => self.parse_while(),
             TokenType::Return => self.parse_return(),
+            TokenType::Let => self.parse_let(),
             _ => self.parse_assignment(),
         }
     }
@@ -746,6 +747,24 @@ impl<'source> Parser<'source> {
         }
         let typ = self.parse_type()?;
         Ok(ast::TypedName { name, typ })
+    }
+
+    fn parse_let(&mut self) -> ParseRes<ast::Expr> {
+        let beg = self.curr_pos();
+        self.match_token(TokenType::Let)?;
+        let name =
+            self.parse_identifier()
+                .error(self, beg, "expected a name after a let keyword")?;
+        let _ = self.expect_token(TokenType::Assignment);
+        let init = self.parse_expr().error(
+            self,
+            beg,
+            "init expression is required in the let expression",
+        )?;
+        Ok(ast::Expr::Let {
+            name,
+            init: Box::new(init),
+        })
     }
 
     fn parse_while(&mut self) -> ParseRes<ast::Expr> {
@@ -1340,6 +1359,19 @@ mod tests {
                         |callee| callee.name("a"),
                         |args| args.add(|a| a.name("b")))
                 })
+            })
+    }
+
+    ptest! {
+        simple_let_expression,
+        "a:()->();a=let var = { a };",
+        ast::Builder::new()
+            .unit_fn("a", |body| {
+                body.r#let(
+                    "var",
+                    |init| init.sequence(|s| s.add(
+                        |e| e.name("a")))
+                )
             })
     }
 }

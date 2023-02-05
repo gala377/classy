@@ -139,6 +139,10 @@ pub enum Expr {
         body: Box<Expr>,
         else_body: Option<Box<Expr>>,
     },
+    Let {
+        name: String,
+        init: Box<Expr>,
+    },
 }
 
 #[derive(Debug)]
@@ -578,6 +582,19 @@ impl ExprBuilder {
 
     pub fn try_build(self) -> Option<Expr> {
         self.res
+    }
+
+    pub fn r#let(
+        mut self,
+        name: impl Into<String>,
+        init: impl FnOnce(ExprBuilder) -> ExprBuilder,
+    ) -> Self {
+        let init = init(default()).build();
+        self.res = Some(Expr::Let {
+            name: name.into(),
+            init: Box::new(init),
+        });
+        self
     }
 
     pub fn build(self) -> Expr {
