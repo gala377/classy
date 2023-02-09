@@ -755,6 +755,12 @@ impl<'source> Parser<'source> {
         let name =
             self.parse_identifier()
                 .error(self, beg, "expected a name after a let keyword")?;
+
+        let typ = if let Ok(_) = self.match_token(TokenType::Colon) {
+            self.parse_type()?
+        } else {
+            ast::Typ::ToInfere
+        };
         let _ = self.expect_token(TokenType::Assignment);
         let init = self.parse_expr().error(
             self,
@@ -763,6 +769,7 @@ impl<'source> Parser<'source> {
         )?;
         Ok(ast::Expr::Let {
             name,
+            typ,
             init: Box::new(init),
         })
     }

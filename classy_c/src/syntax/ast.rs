@@ -141,6 +141,7 @@ pub enum Expr {
     },
     Let {
         name: String,
+        typ: Typ,
         init: Box<Expr>,
     },
 }
@@ -592,6 +593,7 @@ impl ExprBuilder {
         let init = init(default()).build();
         self.res = Some(Expr::Let {
             name: name.into(),
+            typ: Typ::ToInfere,
             init: Box::new(init),
         });
         self
