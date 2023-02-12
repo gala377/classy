@@ -4,7 +4,7 @@ use classy_c::syntax::{
     parser::Parser,
     tokens::{Token, TokenType},
 };
-use classy_c::typecheck::{self, TypCtx, Type};
+use classy_c::typecheck::{self, TypCtx};
 use logos::Logos;
 
 fn main() {
