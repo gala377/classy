@@ -1,8 +1,10 @@
 use classy_c::syntax::{
+    ast::Visitor,
     lexer::Lexer,
     parser::Parser,
     tokens::{Token, TokenType},
 };
+use classy_c::typecheck::{self, TypCtx, Type};
 use logos::Logos;
 
 fn main() {
@@ -17,35 +19,29 @@ fn main() {
 
     let source = r#"
     
-        type Option(a) {
-            Some(a)
-            None
-        }
-
-        some: (a) -> Option(a)
-        some x = Option.Ok x
-
-        repeat: (int, () -> ()) -> ()
-        repeat = todo()
-
-        main: () -> ()
-        main {
-            x = repeat 10 (i) => {
-                print i
-            }
-            until 10 i => print i
-            Some x
-        }
+        type A = Int
+        type B = UInt
+        type D = C
+        type C = B
+        type E = Bool
 
     "#;
     let lex = Lexer::new(source);
     let mut parser = Parser::new(lex);
     let res = parser.parse().unwrap();
-    for def in res.items {
+    for def in &res.items {
         println!("Parsed {def:#?}");
     }
     println!("Errors");
     for e in parser.errors() {
         println!("{e:#?}");
     }
+    let mut tctx = TypCtx::new();
+    typecheck::insert_primitive_types(&mut tctx);
+    println!("{}", tctx.debug_string());
+    let mut add_types = typecheck::AddTypes::new(&mut tctx);
+    add_types.visit(&res);
+    println!("{}", tctx.debug_string());
+    typecheck::resolve_type_names(&mut tctx);
+    println!("{}", tctx.debug_string());
 }

@@ -1,5 +1,8 @@
 use std::{collections::HashMap, ops::Range};
 
+pub mod visitor;
+pub use visitor::Visitor;
+
 // cargo is actually wrong about this, it confuses
 // usage of this function with unstable feature
 // we did not enable
@@ -14,13 +17,13 @@ pub struct Program {
     pub items: Vec<TopLevelItem>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum TopLevelItem {
     TypeDefinition(TypeDefinition),
     FunctionDefinition(FunctionDefinition),
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TypeDefinition {
     pub name: String,
     pub definition: DefinedType,
@@ -28,7 +31,7 @@ pub struct TypeDefinition {
     pub span: Range<usize>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum DefinedType {
     Record(Record),
@@ -36,39 +39,39 @@ pub enum DefinedType {
     Alias(Alias),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct Record {
     pub fields: Vec<TypedName>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct ADT {
     pub discriminants: Vec<Discriminant>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct Discriminant {
     pub constructor: String,
     pub arguments: Vec<Typ>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct Alias {
     pub for_type: Typ,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct TypedName {
     pub name: String,
     pub typ: Typ,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct FunctionDefinition {
     pub name: String,
@@ -77,7 +80,7 @@ pub struct FunctionDefinition {
     pub body: Expr,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Typ {
     Unit,
     Name(String),
@@ -88,14 +91,14 @@ pub enum Typ {
     ToInfere,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct TypeVariable {
     pub name: String,
     // todo: for the future
     // pub constraints: Vec<Contraint>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum Expr {
     Unit,
@@ -146,7 +149,7 @@ pub enum Expr {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct Path(Vec<String>);
 

@@ -111,28 +111,46 @@ impl<'source> Parser<'source> {
         self.match_token(TokenType::Type)?;
         let name =
             self.parse_identifier()
-                .error(self, beg, "Expected a name after a struct keyword")?;
+                .error(self, beg, "Expected a name after a type keyword")?;
         let type_variables = self.parse_optional_type_variables().error(
             self,
             beg,
             "Expected type variables list",
         )?;
-        self.expect_token(TokenType::LBrace)?;
-        let possibly_adt = self.in_scope(|p| p.parse_variants_definition());
-        let definition = if let Ok(adt) = possibly_adt {
-            adt
+        if let Ok(_) = self.match_token(TokenType::LBrace) {
+            let possibly_adt = self.in_scope(|p| p.parse_variants_definition());
+            let definition = if let Ok(adt) = possibly_adt {
+                adt
+            } else {
+                let fields =
+                    self.parse_delimited(Self::parse_typed_identifier, TokenType::Semicolon);
+                ast::DefinedType::Record(ast::Record { fields })
+            };
+            self.expect_token(TokenType::RBrace)?;
+            let _ = self.expect_token(TokenType::Semicolon);
+            Ok(ast::TypeDefinition {
+                name,
+                type_variables,
+                definition,
+                span: beg..self.curr_pos(),
+            })
+        } else if let Ok(_) = self.match_token(TokenType::Assignment) {
+            let for_type =
+                self.parse_type()
+                    .error(self, beg, "Expected a type in type alias definition")?;
+            let _ = self.expect_token(TokenType::Semicolon);
+            Ok(ast::TypeDefinition {
+                name,
+                type_variables,
+                definition: ast::DefinedType::Alias(ast::Alias { for_type }),
+                span: beg..self.curr_pos(),
+            })
         } else {
-            let fields = self.parse_delimited(Self::parse_typed_identifier, TokenType::Semicolon);
-            ast::DefinedType::Record(ast::Record { fields })
-        };
-        self.expect_token(TokenType::RBrace)?;
-        let _ = self.expect_token(TokenType::Semicolon);
-        Ok(ast::TypeDefinition {
-            name,
-            type_variables,
-            definition,
-            span: beg..self.curr_pos(),
-        })
+            Err(self.error(
+                beg..self.curr_pos(),
+                "Expected an alias or a type definition",
+            ))
+        }
     }
 
     fn parse_variants_definition(&mut self) -> ParseRes<ast::DefinedType> {
