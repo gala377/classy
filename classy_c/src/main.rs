@@ -18,13 +18,11 @@ fn main() {
     println!("Hello world!");
 
     let source = r#"
-    
         type A = Int
         type B = UInt
         type D = C
         type C = B
         type E = Bool
-
     "#;
     let lex = Lexer::new(source);
     let mut parser = Parser::new(lex);
@@ -43,5 +41,8 @@ fn main() {
     add_types.visit(&res);
     println!("{}", tctx.debug_string());
     typecheck::resolve_type_names(&mut tctx);
+    println!("{}", tctx.debug_string());
+    println!("RESOLVING ALIASES");
+    typecheck::resolve_aliases(&mut tctx);
     println!("{}", tctx.debug_string());
 }

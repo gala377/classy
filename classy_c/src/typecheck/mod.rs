@@ -1,4 +1,7 @@
-use std::{collections::HashMap, hash::Hash};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::Hash,
+};
 
 use crate::syntax::ast;
 
@@ -8,7 +11,7 @@ type Name = String;
 
 pub struct TypCtx {
     pub definitions: HashMap<TypeId, Type>,
-    pub reverse_definitions: HashMap<Type, TypeId>,
+    //pub reverse_definitions: HashMap<Type, TypeId>,
     pub names: HashMap<Name, TypeId>,
     pub nodes: HashMap<DefId, ast::TypeDefinition>,
 
@@ -21,7 +24,6 @@ impl TypCtx {
             next_id: 0,
             definitions: HashMap::new(),
             names: HashMap::new(),
-            reverse_definitions: HashMap::new(),
             nodes: HashMap::new(),
         }
     }
@@ -81,16 +83,12 @@ impl TypCtx {
     }
 
     fn add_type(&mut self, typ: Type) -> TypeId {
-        if let Some(t) = self.reverse_definitions.get(&typ) {
-            return t.clone();
-        }
         let id = self.next_id();
         self.add_definition(id, typ);
         id
     }
 
     fn add_definition(&mut self, id: TypeId, typ: Type) {
-        self.reverse_definitions.insert(typ.clone(), id);
         self.definitions.insert(id, typ);
     }
 
@@ -120,16 +118,6 @@ impl TypCtx {
         let mut s = "TypCtx {\n\tdefinitions:".to_owned();
         let mut tmp = Vec::new();
         for (id, def) in &self.definitions {
-            tmp.push((id, def));
-        }
-        tmp.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
-        for (id, def) in tmp {
-            s = s + &format!("\n\t\t{id}: {def:?}");
-        }
-        s = s + "\n\treverse_defninitions:";
-
-        let mut tmp = Vec::new();
-        for (def, id) in &self.reverse_definitions {
             tmp.push((id, def));
         }
         tmp.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
@@ -252,5 +240,76 @@ fn resolve_type(ctx: &TypCtx, typ: &ast::Typ) -> TypeId {
             .expect(&format!("type not found, {n}"))
             .clone(),
         _ => unimplemented!(),
+    }
+}
+
+pub fn resolve_aliases(ctx: &mut TypCtx) {
+    let resolver = AliasResolver::new();
+    resolver.resolve_aliases(ctx);
+}
+
+struct AliasResolver {
+    resolved: HashMap<TypeId, TypeId>,
+}
+
+impl AliasResolver {
+    fn new() -> Self {
+        Self {
+            resolved: HashMap::new(),
+        }
+    }
+
+    fn resolve_aliases(mut self, ctx: &mut TypCtx) {
+        for (typ_id, typ) in &ctx.definitions {
+            let mut resolved_this_path = HashSet::new();
+            match typ {
+                Type::Alias(for_type) => {
+                    let new_id = self.resolve_deep(ctx, &mut resolved_this_path, *for_type);
+                    self.resolved.insert(*typ_id, new_id);
+                    for resolved_type in resolved_this_path {
+                        self.resolved.insert(resolved_type, new_id);
+                    }
+                }
+                _ => {}
+            }
+        }
+        for (type_id, for_type) in self.resolved {
+            println!("Updating definition for {type_id} => {for_type}");
+            let t = match ctx.definitions.get(&for_type).unwrap() {
+                Type::Struct { .. }
+                | Type::ADT { .. }
+                | Type::Tuple { .. }
+                | Type::Array(..)
+                | Type::Function { .. } => Type::Alias(for_type),
+                t @ (Type::Bool | Type::Float | Type::Int | Type::String | Type::UInt) => t.clone(),
+                Type::Alias(..) => {
+                    unreachable!("no alias should point to another alias at this point")
+                }
+            };
+            ctx.update_def(type_id, t)
+        }
+    }
+
+    fn resolve_deep(
+        &mut self,
+        ctx: &TypCtx,
+        resolved_this_path: &mut HashSet<TypeId>,
+        follow_type: TypeId,
+    ) -> TypeId {
+        if resolved_this_path.contains(&follow_type) {
+            panic!("type alias loop")
+        }
+        resolved_this_path.insert(follow_type);
+        if let Some(resolved_id) = self.resolved.get(&follow_type) {
+            return *resolved_id;
+        };
+        let t = ctx.definitions.get(&follow_type).unwrap();
+        match t {
+            Type::Alias(for_t) => self.resolve_deep(ctx, resolved_this_path, *for_t),
+            _ => {
+                resolved_this_path.remove(&follow_type);
+                follow_type
+            }
+        }
     }
 }
