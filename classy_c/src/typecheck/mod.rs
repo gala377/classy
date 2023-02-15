@@ -251,7 +251,8 @@ fn resolve_type(ctx: &TypCtx, typ: &ast::Typ) -> TypeId {
             .get(n)
             .expect(&format!("type not found, {n}"))
             .clone(),
-
+        // todo: for other types like a function, array or tuple types we actually
+        // need to create them first.
         _ => unimplemented!(),
     }
 }
