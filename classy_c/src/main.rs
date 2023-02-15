@@ -23,6 +23,10 @@ fn main() {
         type D = C
         type C = B
         type E = Bool
+        type F {
+            a: C
+            b: F
+        }
     "#;
     let lex = Lexer::new(source);
     let mut parser = Parser::new(lex);

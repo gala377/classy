@@ -215,17 +215,29 @@ pub fn insert_primitive_types(ctx: &mut TypCtx) {
 
 pub fn resolve_type_names(ctx: &mut TypCtx) {
     let mut updates = HashMap::new();
-    for (_, def) in &ctx.nodes {
+    for (def_id, def) in &ctx.nodes {
         let name = &def.name;
         let exp_msg = format!("the types should have been prepopulated: {name}");
         let type_id = ctx.names.get(name).expect(&exp_msg);
-        match &def.definition {
+        let resolved_type = match &def.definition {
             ast::DefinedType::Alias(ast::Alias { for_type: inner }) => {
                 let resolved_id = resolve_type(ctx, inner);
-                assert!(updates.insert(*type_id, Type::Alias(resolved_id)).is_none());
+                Type::Alias(resolved_id)
+            }
+            ast::DefinedType::Record(ast::Record { fields }) => {
+                let mut resolved_fields = Vec::with_capacity(fields.len());
+                for ast::TypedName { name, typ } in fields {
+                    let resolved_id = resolve_type(ctx, typ);
+                    resolved_fields.push((name.clone(), resolved_id));
+                }
+                Type::Struct {
+                    def: *def_id,
+                    fields: resolved_fields,
+                }
             }
             _ => unimplemented!(),
-        }
+        };
+        assert!(updates.insert(*type_id, resolved_type).is_none());
     }
     for (id, t) in updates {
         ctx.update_def(id, t)
@@ -239,6 +251,7 @@ fn resolve_type(ctx: &TypCtx, typ: &ast::Typ) -> TypeId {
             .get(n)
             .expect(&format!("type not found, {n}"))
             .clone(),
+
         _ => unimplemented!(),
     }
 }
@@ -248,6 +261,14 @@ pub fn resolve_aliases(ctx: &mut TypCtx) {
     resolver.resolve_aliases(ctx);
 }
 
+// TODO, based on type equality remove
+// redundant aliases, for example
+// 0: Int
+// 1: Int
+// 2: struct { a: 1 }
+// The field in 2 can point to 0, then we can compare types
+// using just the id for equality. The one should be removed
+// and all references pointing to 1 should point to 0 now.
 struct AliasResolver {
     resolved: HashMap<TypeId, TypeId>,
 }
