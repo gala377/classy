@@ -554,7 +554,6 @@ mod tests {
         type A2 = (Int, (Int, (Int, Int)))
         type B2 = (Int, (Int, Int))
         type C2 = (Int, Int)
-
         "#,
         map! {
             117 => tuple!(Int, Alias(114)),
