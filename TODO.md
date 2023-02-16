@@ -1,6 +1,31 @@
 ## What's to figure out
 1. Allocation strategy for the old space
 
+## To do with typechecker
+- Remove redundant types
+    - For example, 2 structs, even with the same fields are always distinct
+    - But two tuples with the same fields are the same
+    - As such a context like:
+        1 => (int, int)
+        2 => (int, int)
+    - Should just retain 1 and treat 2 as an alias for 1, then remove it.
+    - We could rewrite duplicates as aliases of each other, then just remove aliases again.
+    - The problem is how many times should we do this, for example
+
+type A = (Int, (Int, (Int, Int)))
+type B = (Int, (Int, Int))
+type D = (Int, Int)
+
+creates context in form
+0 => (Int, Alias(1))
+1 => (Int, Alias(2))
+2 => (Int, Int)
+3 => (Int Alias(4))
+4 => (Int, Int)
+
+in the first pass we will deduce that 2 and 3 are the same
+but not that 1 and 4 are.
+
 ## To move
 1. Old space would be nice, not necessary yet.
 2. Class universe aka vm runtime 
