@@ -530,6 +530,8 @@ mod tests {
         }
     }
 
+    // DOES NOT WORK AS THE IDS AFTER DEDUPLICATION
+    // ARE NONDETERMINISTIC
     // type_test! {
     //     test_tuple_deduplication,
     //     r#"
