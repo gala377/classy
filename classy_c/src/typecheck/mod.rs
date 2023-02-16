@@ -452,3 +452,100 @@ fn replace_aliases_with_map(typ: &Type, map: &HashMap<TypeId, TypeId>) -> Type {
         _ => unimplemented!(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use crate::{
+        syntax::{ast::Visitor, lexer::Lexer, parser::Parser},
+        typecheck::{
+            self,
+            r#type::Type,
+            type_context::{TypCtx, TypeId},
+        },
+    };
+
+    macro_rules! map {
+        { $($key:literal => $val:expr),* $(,)? } => {
+            {
+                let mut m = HashMap::new();
+                $(m.insert($key, $val));*;
+                m
+            }
+        };
+    }
+
+    macro_rules! type_test {
+        ($name:ident, $source:literal, $expected:expr) => {
+            #[test]
+            fn $name() {
+                #[allow(unused_imports)]
+                use Type::*;
+                run_test($source, $expected)
+            }
+        };
+    }
+
+    macro_rules! tuple {
+        ($($args:expr),*) => {{
+            Type::Tuple(vec![$($args),*])
+        }};
+    }
+
+    macro_rules! function {
+        (($($args:expr),*) -> $ret:expr ) => {
+            {
+                Type::Function { args: vec![$($args),*], ret: Box::new($ret) }
+            }
+        };
+    }
+
+    fn run_test(source: &str, mut expected: HashMap<TypeId, Type>) {
+        expected.insert(0, Type::Int);
+        let lex = Lexer::new(source);
+        let mut parser = Parser::new(lex);
+        let res = parser.parse().unwrap();
+        assert!(parser.errors().is_empty(), "errors while parsing");
+        let mut tctx = TypCtx::new();
+        let int_id = tctx.add_type(Type::Int);
+        tctx.add_name("Int", int_id);
+        let mut add_types = typecheck::AddTypes::new(&mut tctx);
+        add_types.visit(&res);
+        tctx = typecheck::resolve_type_names(tctx);
+        println!("{}", tctx.debug_string());
+        typecheck::resolve_aliases(&mut tctx);
+        println!("{}", tctx.debug_string());
+        typecheck::dedup_trivially_eq_types(&mut tctx);
+
+        let actual = tctx.definitions;
+        similar_asserts::assert_eq!(expected, actual)
+    }
+
+    type_test! {
+        test_function_deduplication,
+        "type A = (Int) -> Int; type B = (Int) -> Int;",
+        map! {
+            5 => function!((Int) -> Int),
+        }
+    }
+
+    // type_test! {
+    //     test_tuple_deduplication,
+    //     r#"
+    //     type A1 = (Int, (Int, (Int, Int)))
+    //     type B1 = (Int, (Int, Int))
+    //     type C1 = (Int, Int)
+
+    //     type A2 = (Int, (Int, (Int, Int)))
+    //     type B2 = (Int, (Int, Int))
+    //     type C2 = (Int, Int)
+
+    //     "#,
+    //     map! {
+    //         17 => tuple!(Int, Alias(14)),
+    //         14 => tuple!(Int, Alias(13)),
+    //         13 => tuple!(Int, Int),
+    //     }
+    // }
+}
