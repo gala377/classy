@@ -37,9 +37,11 @@ fn main() {
         type Z {
             a: I
             b: (Int, Int)
+            c: (U1) -> Z
         }
+
         type U = (Int, Int)
-        
+        type U1 = A1
         type A1 = (Int, (Int, (Int, Int)))
         type B1 = (Int, (Int, Int))
         type D1 = (Int, Int)
@@ -50,6 +52,11 @@ fn main() {
 
         type Z1 { a: A1 }
         type Z2 { a: A2 }
+
+        type Z3 { z: Z6 }
+        type Z6 = Z4
+        type Z4 = (Int) -> A2
+        type Z5 = (Int) -> A1
 
     "#;
     let lex = Lexer::new(source);

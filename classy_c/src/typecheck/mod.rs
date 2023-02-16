@@ -8,6 +8,14 @@ use crate::syntax::ast;
 use r#type::*;
 use type_context::*;
 
+/// How to extend
+/// 1. Add type to AddTypes - resolve type
+/// 2. Then add type to resolve aliases shallow for type
+/// 3. Then add for replace aliases with map
+/// 4. Also add a type for equality
+/// Actually resolve aliases and replace aliases with map should be
+/// a special case of fold but well.
+
 pub struct AddTypes<'ctx> {
     ctx: &'ctx mut TypCtx,
 }
@@ -98,6 +106,24 @@ fn resolve_type(
             let id = *next_id;
             *next_id += 1;
             definitions.insert(id, Type::Tuple(resolved));
+            id
+        }
+        ast::Typ::Function { args, ret } => {
+            let resolved_args = args
+                .iter()
+                .map(|t| resolve_type(names, definitions, next_id, t))
+                .map(Type::Alias)
+                .collect();
+            let resolved_ret = Type::Alias(resolve_type(names, definitions, next_id, ret));
+            let id = *next_id;
+            *next_id += 1;
+            definitions.insert(
+                id,
+                Type::Function {
+                    args: resolved_args,
+                    ret: Box::new(resolved_ret),
+                },
+            );
             id
         }
         // todo: for other types like a function or an array, we actually
@@ -275,6 +301,17 @@ impl AliasResolver {
                     .collect();
                 Type::Tuple(resolved_fields)
             }
+            Type::Function { args, ret } => {
+                let resolved_args = args
+                    .iter()
+                    .map(|t| self.resolve_shallow_aliases_in_type(ctx, t))
+                    .collect();
+                let resolved_ret = self.resolve_shallow_aliases_in_type(ctx, ret);
+                Type::Function {
+                    args: resolved_args,
+                    ret: Box::new(resolved_ret),
+                }
+            }
             t @ (Type::UInt | Type::Int | Type::Bool | Type::Float | Type::String) => t.clone(),
             _ => unimplemented!(),
         }
@@ -314,12 +351,29 @@ fn types_eq(ctx: &TypCtx, t1: &Type, t2: &Type) -> bool {
             if fields1.len() != fields2.len() {
                 return false;
             }
-            for (t1, t2) in fields1.iter().zip(fields2) {
-                if !types_eq(ctx, t1, t2) {
-                    return false;
-                }
+            fields1
+                .iter()
+                .zip(fields2)
+                .all(|(t1, t2)| types_eq(ctx, t1, t2))
+        }
+        (
+            Type::Function {
+                args: args1,
+                ret: ret1,
+            },
+            Type::Function {
+                args: args2,
+                ret: ret2,
+            },
+        ) => {
+            if args1.len() != args2.len() {
+                return false;
             }
-            true
+            types_eq(ctx, ret1, ret2)
+                && args1
+                    .iter()
+                    .zip(args2)
+                    .all(|(t1, t2)| types_eq(ctx, t1, t2))
         }
         _ => false,
     }
@@ -384,6 +438,17 @@ fn replace_aliases_with_map(typ: &Type, map: &HashMap<TypeId, TypeId>) -> Type {
             None => Type::Alias(*for_type),
             Some(t) => Type::Alias(*t),
         },
+        Type::Function { args, ret } => {
+            let args = args
+                .iter()
+                .map(|t| replace_aliases_with_map(t, map))
+                .collect();
+            let ret = replace_aliases_with_map(ret, map);
+            Type::Function {
+                args,
+                ret: Box::new(ret),
+            }
+        }
         _ => unimplemented!(),
     }
 }
