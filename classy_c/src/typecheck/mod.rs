@@ -11,7 +11,6 @@ type Name = String;
 
 pub struct TypCtx {
     pub definitions: HashMap<TypeId, Type>,
-    //pub reverse_definitions: HashMap<Type, TypeId>,
     pub names: HashMap<Name, TypeId>,
     pub nodes: HashMap<DefId, ast::TypeDefinition>,
 
@@ -28,13 +27,10 @@ impl TypCtx {
         }
     }
 
-    // pub fn mk_tuple(&mut self, of: &[TypeId]) -> TypeId {
-    //     for id in of {
-    //         assert!(self.definitions.contains_key(id));
-    //     }
-    //     let typ = Type::Tuple(of.into());
-    //     self.add_type(typ)
-    // }
+    pub fn mk_tuple(&mut self, of: &[Type]) -> TypeId {
+        let typ = Type::Tuple(of.into());
+        self.add_type(typ)
+    }
 
     // pub fn mk_array(&mut self, of: TypeId) -> TypeId {
     //     assert!(self.definitions.contains_key(&of));
@@ -190,24 +186,19 @@ impl<'ast, 'ctx> ast::Visitor<'ast> for AddTypes<'ctx> {
 }
 
 pub fn insert_primitive_types(ctx: &mut TypCtx) {
-    let uint_t = Type::UInt;
-    let int_t = Type::Int;
-    let bool_t = Type::Bool;
-    let string_t = Type::String;
-    let float_t = Type::Float;
-    let id = ctx.add_type(uint_t);
-    ctx.add_name("Int", id);
-    let id = ctx.add_type(int_t);
+    let id = ctx.add_type(Type::UInt);
     ctx.add_name("UInt", id);
-    let id = ctx.add_type(bool_t);
+    let id = ctx.add_type(Type::Int);
+    ctx.add_name("Int", id);
+    let id = ctx.add_type(Type::Bool);
     ctx.add_name("Bool", id);
-    let id = ctx.add_type(string_t);
+    let id = ctx.add_type(Type::String);
     ctx.add_name("String", id);
-    let id = ctx.add_type(float_t);
+    let id = ctx.add_type(Type::Float);
     ctx.add_name("Float", id);
 }
 
-pub fn resolve_type_names(ctx: &mut TypCtx) {
+pub fn resolve_type_names(mut ctx: TypCtx) -> TypCtx {
     let mut updates = HashMap::new();
     for (def_id, def) in &ctx.nodes {
         let name = &def.name;
@@ -215,13 +206,15 @@ pub fn resolve_type_names(ctx: &mut TypCtx) {
         let type_id = ctx.names.get(name).expect(&exp_msg);
         let resolved_type = match &def.definition {
             ast::DefinedType::Alias(ast::Alias { for_type: inner }) => {
-                let resolved_id = resolve_type(ctx, inner);
+                let resolved_id =
+                    resolve_type(&ctx.names, &mut ctx.definitions, &mut ctx.next_id, inner);
                 Type::Alias(resolved_id)
             }
             ast::DefinedType::Record(ast::Record { fields }) => {
                 let mut resolved_fields = Vec::with_capacity(fields.len());
                 for ast::TypedName { name, typ } in fields {
-                    let resolved_id = resolve_type(ctx, typ);
+                    let resolved_id =
+                        resolve_type(&ctx.names, &mut ctx.definitions, &mut ctx.next_id, typ);
                     resolved_fields.push((name.clone(), Type::Alias(resolved_id)));
                 }
                 Type::Struct {
@@ -229,6 +222,7 @@ pub fn resolve_type_names(ctx: &mut TypCtx) {
                     fields: resolved_fields,
                 }
             }
+            // only adt left
             _ => unimplemented!(),
         };
         assert!(updates.insert(*type_id, resolved_type).is_none());
@@ -236,16 +230,29 @@ pub fn resolve_type_names(ctx: &mut TypCtx) {
     for (id, t) in updates {
         ctx.update_def(id, t)
     }
+    ctx
 }
 
-fn resolve_type(ctx: &TypCtx, typ: &ast::Typ) -> TypeId {
+fn resolve_type(
+    names: &HashMap<String, TypeId>,
+    definitions: &mut HashMap<TypeId, Type>,
+    next_id: &mut TypeId,
+    typ: &ast::Typ,
+) -> TypeId {
     match typ {
-        ast::Typ::Name(n) => ctx
-            .names
-            .get(n)
-            .expect(&format!("type not found, {n}"))
-            .clone(),
-        // todo: for other types like a function, array or tuple types we actually
+        ast::Typ::Name(n) => names.get(n).expect(&format!("type not found, {n}")).clone(),
+        ast::Typ::Tuple(types) => {
+            let resolved = types
+                .iter()
+                .map(|t| resolve_type(names, definitions, next_id, t))
+                .map(Type::Alias)
+                .collect();
+            let id = *next_id;
+            *next_id += 1;
+            definitions.insert(id, Type::Tuple(resolved));
+            id
+        }
+        // todo: for other types like a function or an array, we actually
         // need to create them first.
         _ => unimplemented!(),
     }
@@ -374,16 +381,18 @@ impl AliasResolver {
                 def: def_id,
                 fields,
             } => {
-                let mut resolved_fields = Vec::with_capacity(fields.len());
-                for (fname, ftyp) in fields {
-                    assert!(if let Type::Alias(_) = ftyp {
-                        true
-                    } else {
-                        false
-                    });
-                    let resolved_type = self.resolve_shallow_aliases_in_type(ctx, ftyp);
-                    resolved_fields.push((fname.clone(), resolved_type));
-                }
+                let resolved_fields = fields
+                    .iter()
+                    .map(|(fname, ftyp)| {
+                        assert!(if let Type::Alias(_) = ftyp {
+                            true
+                        } else {
+                            false
+                        });
+                        let resolved_type = self.resolve_shallow_aliases_in_type(ctx, ftyp);
+                        (fname.clone(), resolved_type)
+                    })
+                    .collect();
                 Type::Struct {
                     def: *def_id,
                     fields: resolved_fields,
@@ -410,6 +419,13 @@ impl AliasResolver {
                     Type::ADT { .. } => Type::Alias(*for_type),
                     Type::Array { .. } => Type::Alias(*for_type),
                 }
+            }
+            Type::Tuple(fields) => {
+                let resolved_fields = fields
+                    .iter()
+                    .map(|f| self.resolve_shallow_aliases_in_type(ctx, f))
+                    .collect();
+                Type::Tuple(resolved_fields)
             }
             t @ (Type::UInt | Type::Int | Type::Bool | Type::Float | Type::String) => t.clone(),
             _ => unimplemented!(),
