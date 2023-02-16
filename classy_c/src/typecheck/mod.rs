@@ -463,6 +463,7 @@ mod tests {
             self,
             r#type::Type,
             type_context::{TypCtx, TypeId},
+            types_eq,
         },
     };
 
@@ -502,7 +503,6 @@ mod tests {
     }
 
     fn run_test(source: &str, mut expected: HashMap<TypeId, Type>) {
-        expected.insert(0, Type::Int);
         let lex = Lexer::new(source);
         let mut parser = Parser::new(lex);
         let res = parser.parse().unwrap();
@@ -518,36 +518,48 @@ mod tests {
         println!("{}", tctx.debug_string());
         typecheck::dedup_trivially_eq_types(&mut tctx);
 
-        let actual = tctx.definitions;
-        similar_asserts::assert_eq!(expected, actual)
+        expected.insert(1000000, Type::Int);
+        if tctx.definitions.len() != expected.len() {
+            similar_asserts::assert_eq!(expected, tctx.definitions)
+        }
+
+        tctx.definitions
+            .extend(expected.iter().map(|(k, v)| (k.clone(), v.clone())));
+        for (id, t) in expected {
+            assert!(
+                tctx.definitions
+                    .iter()
+                    .any(|(&k, v)| { k != id && types_eq(&tctx, &t, v) }),
+                "no type equal to {:?} found ",
+                t
+            );
+        }
     }
 
     type_test! {
         test_function_deduplication,
         "type A = (Int) -> Int; type B = (Int) -> Int;",
         map! {
-            5 => function!((Int) -> Int),
+            105 => function!((Int) -> Int),
         }
     }
 
-    // DOES NOT WORK AS THE IDS AFTER DEDUPLICATION
-    // ARE NONDETERMINISTIC
-    // type_test! {
-    //     test_tuple_deduplication,
-    //     r#"
-    //     type A1 = (Int, (Int, (Int, Int)))
-    //     type B1 = (Int, (Int, Int))
-    //     type C1 = (Int, Int)
+    type_test! {
+        test_tuple_deduplication,
+        r#"
+        type A1 = (Int, (Int, (Int, Int)))
+        type B1 = (Int, (Int, Int))
+        type C1 = (Int, Int)
 
-    //     type A2 = (Int, (Int, (Int, Int)))
-    //     type B2 = (Int, (Int, Int))
-    //     type C2 = (Int, Int)
+        type A2 = (Int, (Int, (Int, Int)))
+        type B2 = (Int, (Int, Int))
+        type C2 = (Int, Int)
 
-    //     "#,
-    //     map! {
-    //         17 => tuple!(Int, Alias(14)),
-    //         14 => tuple!(Int, Alias(13)),
-    //         13 => tuple!(Int, Int),
-    //     }
-    // }
+        "#,
+        map! {
+            117 => tuple!(Int, Alias(114)),
+            114 => tuple!(Int, Alias(113)),
+            113 => tuple!(Int, Int),
+        }
+    }
 }
