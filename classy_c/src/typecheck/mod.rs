@@ -28,37 +28,34 @@ impl TypCtx {
         }
     }
 
-    pub fn mk_tuple(&mut self, of: &[TypeId]) -> TypeId {
-        for id in of {
-            assert!(self.definitions.contains_key(id));
-        }
-        let typ = Type::Tuple(of.into());
-        self.add_type(typ)
-    }
+    // pub fn mk_tuple(&mut self, of: &[TypeId]) -> TypeId {
+    //     for id in of {
+    //         assert!(self.definitions.contains_key(id));
+    //     }
+    //     let typ = Type::Tuple(of.into());
+    //     self.add_type(typ)
+    // }
 
-    pub fn mk_array(&mut self, of: TypeId) -> TypeId {
-        assert!(self.definitions.contains_key(&of));
-        let typ = Type::Array(of);
-        self.add_type(typ)
-    }
+    // pub fn mk_array(&mut self, of: TypeId) -> TypeId {
+    //     assert!(self.definitions.contains_key(&of));
+    //     let typ = Type::Array(of);
+    //     self.add_type(typ)
+    // }
 
-    pub fn mk_function(&mut self, args: &[TypeId], ret: TypeId) -> TypeId {
-        assert!(self.definitions.contains_key(&ret));
-        for id in args {
-            assert!(self.definitions.contains_key(id));
-        }
-        let typ = Type::Function {
-            args: args.into(),
-            ret,
-        };
-        self.add_type(typ)
-    }
+    // pub fn mk_function(&mut self, args: &[TypeId], ret: TypeId) -> TypeId {
+    //     assert!(self.definitions.contains_key(&ret));
+    //     for id in args {
+    //         assert!(self.definitions.contains_key(id));
+    //     }
+    //     let typ = Type::Function {
+    //         args: args.into(),
+    //         ret,
+    //     };
+    //     self.add_type(typ)
+    // }
 
-    pub fn mk_struct(&mut self, def_id: DefId, fields: &[(Name, TypeId)]) -> TypeId {
+    pub fn mk_struct(&mut self, def_id: DefId, fields: &[(Name, Type)]) -> TypeId {
         assert!(self.nodes.contains_key(&def_id));
-        for (_, t) in fields {
-            assert!(self.definitions.contains_key(t));
-        }
         let typ = Type::Struct {
             def: def_id,
             fields: fields.into(),
@@ -66,11 +63,8 @@ impl TypCtx {
         self.add_type(typ)
     }
 
-    pub fn insert_struct(&mut self, at: TypeId, def_id: DefId, fields: &[(Name, TypeId)]) {
+    pub fn insert_struct(&mut self, at: TypeId, def_id: DefId, fields: &[(Name, Type)]) {
         assert!(self.nodes.contains_key(&def_id));
-        for (_, t) in fields {
-            assert!(self.definitions.contains_key(t));
-        }
         let typ = Type::Struct {
             def: def_id,
             fields: fields.into(),
@@ -158,20 +152,20 @@ pub enum Type {
     Struct {
         def: TypeId,
         // maps fields to the TypeId of the type
-        fields: Vec<(Name, TypeId)>,
+        fields: Vec<(Name, Type)>,
     },
     ADT {
         def: TypeId,
         // maps constructors to the TypeId of the type
         // can be a tuple type
-        constructors: Vec<(Name, TypeId)>,
+        constructors: Vec<(Name, Type)>,
     },
     Function {
-        args: Vec<TypeId>,
-        ret: TypeId,
+        args: Vec<Type>,
+        ret: Box<Type>,
     },
-    Tuple(Vec<TypeId>),
-    Array(TypeId),
+    Tuple(Vec<Type>),
+    Array(Box<Type>),
     Alias(TypeId),
 }
 
@@ -228,7 +222,7 @@ pub fn resolve_type_names(ctx: &mut TypCtx) {
                 let mut resolved_fields = Vec::with_capacity(fields.len());
                 for ast::TypedName { name, typ } in fields {
                     let resolved_id = resolve_type(ctx, typ);
-                    resolved_fields.push((name.clone(), resolved_id));
+                    resolved_fields.push((name.clone(), Type::Alias(resolved_id)));
                 }
                 Type::Struct {
                     def: *def_id,
@@ -258,8 +252,11 @@ fn resolve_type(ctx: &TypCtx, typ: &ast::Typ) -> TypeId {
 }
 
 pub fn resolve_aliases(ctx: &mut TypCtx) {
-    let resolver = AliasResolver::new();
+    let mut resolver = AliasResolver::new();
     resolver.resolve_aliases(ctx);
+    resolver.update_names(ctx);
+    resolver.resolve_aliases_shallow(ctx);
+    resolver.remove_top_level_aliases(ctx);
 }
 
 // TODO, based on type equality remove
@@ -281,7 +278,7 @@ impl AliasResolver {
         }
     }
 
-    fn resolve_aliases(mut self, ctx: &mut TypCtx) {
+    fn resolve_aliases(&mut self, ctx: &mut TypCtx) {
         for (typ_id, typ) in &ctx.definitions {
             let mut resolved_this_path = HashSet::new();
             match typ {
@@ -295,20 +292,36 @@ impl AliasResolver {
                 _ => {}
             }
         }
-        for (type_id, for_type) in self.resolved {
+        for (type_id, for_type) in &self.resolved {
             println!("Updating definition for {type_id} => {for_type}");
             let t = match ctx.definitions.get(&for_type).unwrap() {
                 Type::Struct { .. }
                 | Type::ADT { .. }
                 | Type::Tuple { .. }
                 | Type::Array(..)
-                | Type::Function { .. } => Type::Alias(for_type),
-                t @ (Type::Bool | Type::Float | Type::Int | Type::String | Type::UInt) => t.clone(),
+                | Type::Function { .. }
+                | Type::Bool
+                | Type::Float
+                | Type::Int
+                | Type::String
+                | Type::UInt => Type::Alias(*for_type),
                 Type::Alias(..) => {
                     unreachable!("no alias should point to another alias at this point")
                 }
             };
-            ctx.update_def(type_id, t)
+            ctx.update_def(*type_id, t)
+        }
+    }
+
+    fn update_names(&mut self, ctx: &mut TypCtx) {
+        let mut updates = Vec::new();
+        for (name, tid) in &ctx.names {
+            if let Type::Alias(for_type) = ctx.definitions.get(tid).unwrap() {
+                updates.push((name.clone(), *for_type));
+            }
+        }
+        for (name, tid) in updates {
+            ctx.names.insert(name, tid);
         }
     }
 
@@ -333,5 +346,78 @@ impl AliasResolver {
                 follow_type
             }
         }
+    }
+
+    /// Resolves struct field aliases if possible, meaning subsituting
+    /// them will not result in a reference cycle.
+    /// The substitution is shallow so it only resolves aliases 2 levels deep.
+    /// This method should be called after top level aliases have already
+    /// been resolved.
+    fn resolve_aliases_shallow(&mut self, ctx: &mut TypCtx) {
+        let mut updated_defs = HashMap::new();
+        for (typ_id, typ) in &ctx.definitions {
+            if let Type::Alias(_) = typ {
+                // skip top level aliases, keep them to resolve alias chains,
+                // we will remove them later.
+                continue;
+            }
+            updated_defs.insert(*typ_id, self.resolve_shallow_aliases_in_type(ctx, typ));
+        }
+        for (id, typ) in updated_defs {
+            ctx.update_def(id, typ)
+        }
+    }
+
+    fn resolve_shallow_aliases_in_type(&self, ctx: &TypCtx, typ: &Type) -> Type {
+        match typ {
+            Type::Struct {
+                def: def_id,
+                fields,
+            } => {
+                let mut resolved_fields = Vec::with_capacity(fields.len());
+                for (fname, ftyp) in fields {
+                    assert!(if let Type::Alias(_) = ftyp {
+                        true
+                    } else {
+                        false
+                    });
+                    let resolved_type = self.resolve_shallow_aliases_in_type(ctx, ftyp);
+                    resolved_fields.push((fname.clone(), resolved_type));
+                }
+                Type::Struct {
+                    def: *def_id,
+                    fields: resolved_fields,
+                }
+            }
+            Type::Alias(for_type) => {
+                let typ = ctx.definitions.get(for_type).unwrap();
+                match typ {
+                    // We will get at most 2 long chain in case of
+                    // struct field => top level alias => specific type
+                    // so we strip the outer alias layer and resolve again
+                    // this type we are sure to hit some other type after
+                    // resolving this alias
+                    Type::Alias(follow) => {
+                        self.resolve_shallow_aliases_in_type(ctx, &Type::Alias(*follow))
+                    }
+                    t @ (Type::UInt | Type::Int | Type::Bool | Type::Float | Type::String) => {
+                        t.clone()
+                    }
+                    // Do not resolve this types as they migh create reference cycles.
+                    Type::Struct { .. } => Type::Alias(*for_type),
+                    Type::Function { .. } => Type::Alias(*for_type),
+                    Type::Tuple { .. } => Type::Alias(*for_type),
+                    Type::ADT { .. } => Type::Alias(*for_type),
+                    Type::Array { .. } => Type::Alias(*for_type),
+                }
+            }
+            t @ (Type::UInt | Type::Int | Type::Bool | Type::Float | Type::String) => t.clone(),
+            _ => unimplemented!(),
+        }
+    }
+
+    fn remove_top_level_aliases(&mut self, ctx: &mut TypCtx) {
+        ctx.definitions
+            .retain(|_, v| if let Type::Alias(_) = v { false } else { true })
     }
 }

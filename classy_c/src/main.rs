@@ -23,9 +23,14 @@ fn main() {
         type D = C
         type C = B
         type E = Bool
+        type G = F
         type F {
             a: C
             b: F
+        }
+        type H {
+            a: F 
+            b: G
         }
     "#;
     let lex = Lexer::new(source);
