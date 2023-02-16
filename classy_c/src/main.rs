@@ -39,6 +39,11 @@ fn main() {
             b: (Int, Int)
         }
         type U = (Int, Int)
+        
+        type A1 = (Int, (Int, (Int, Int)))
+        type B1 = (Int, (Int, Int))
+        type D1 = (Int, Int)
+
     "#;
     let lex = Lexer::new(source);
     let mut parser = Parser::new(lex);

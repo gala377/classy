@@ -225,7 +225,12 @@ pub fn resolve_type_names(mut ctx: TypCtx) -> TypCtx {
             // only adt left
             _ => unimplemented!(),
         };
-        assert!(updates.insert(*type_id, resolved_type).is_none());
+        if let Some(t) = updates.insert(*type_id, resolved_type) {
+            panic!(
+                "Redefinition of type: {} => {}, previous value {:?}",
+                *type_id, def.name, t
+            );
+        }
     }
     for (id, t) in updates {
         ctx.update_def(id, t)
