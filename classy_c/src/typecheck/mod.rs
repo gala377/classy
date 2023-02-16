@@ -442,3 +442,105 @@ impl AliasResolver {
             .retain(|_, v| if let Type::Alias(_) = v { false } else { true })
     }
 }
+
+fn types_eq(ctx: &TypCtx, t1: &Type, t2: &Type) -> bool {
+    match (t1, t2) {
+        (Type::Alias(f1), Type::Alias(f2)) if f1 == f2 => {
+            return true;
+        }
+        _ => {}
+    }
+    let t1 = if let Type::Alias(for_type) = t1 {
+        ctx.definitions.get(for_type).unwrap()
+    } else {
+        t1
+    };
+    let t2 = if let Type::Alias(for_type) = t2 {
+        ctx.definitions.get(for_type).unwrap()
+    } else {
+        t2
+    };
+    match (t1, t2) {
+        (Type::Int, Type::Int) => true,
+        (Type::UInt, Type::UInt) => true,
+        (Type::Bool, Type::Bool) => true,
+        (Type::String, Type::String) => true,
+        (Type::Float, Type::Float) => true,
+        (Type::Struct { def: def1, .. }, Type::Struct { def: def2, .. }) => def1 == def2,
+        (Type::Tuple(fields1), Type::Tuple(fields2)) => {
+            if fields1.len() != fields2.len() {
+                return false;
+            }
+            for (t1, t2) in fields1.iter().zip(fields2) {
+                if !types_eq(ctx, t1, t2) {
+                    return false;
+                }
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
+pub fn dedup_trivially_eq_types(ctx: &mut TypCtx) {
+    let mut duplicates = HashMap::new();
+    for (t_id_1, typ_1) in &ctx.definitions {
+        for (t_id_2, typ_2) in &ctx.definitions {
+            if t_id_1 == t_id_2 {
+                continue;
+            }
+            if !types_eq(ctx, typ_1, typ_2) {
+                continue;
+            }
+            // different ids pointing to the same type
+            // we need to chose one as the one we will retain
+            // we chose the smaller one.
+            let type_to_delete = std::cmp::max(t_id_1, t_id_2);
+            let type_to_retain = std::cmp::min(t_id_1, t_id_2);
+            match duplicates.get(type_to_delete) {
+                None => {
+                    duplicates.insert(*type_to_delete, *type_to_retain);
+                }
+                Some(old_type) if old_type == type_to_retain => {}
+                Some(old_type) if old_type < type_to_retain => {
+                    duplicates.insert(*type_to_retain, *old_type);
+                }
+                Some(old_type) => {
+                    duplicates.insert(*old_type, *type_to_retain);
+                    duplicates.insert(*type_to_delete, *type_to_retain);
+                }
+            }
+        }
+    }
+    for (id, typ_id) in &duplicates {
+        println!("this type can be replaced with {id} => {typ_id}")
+    }
+    ctx.definitions.retain(|k, _| !duplicates.contains_key(k));
+    for (_, typ) in ctx.definitions.iter_mut() {
+        *typ = replace_aliases_with_map(typ, &duplicates)
+    }
+}
+
+fn replace_aliases_with_map(typ: &Type, map: &HashMap<TypeId, TypeId>) -> Type {
+    match typ {
+        t @ (Type::UInt | Type::Int | Type::Bool | Type::Float | Type::String) => t.clone(),
+        Type::Struct { def, fields } => Type::Struct {
+            def: *def,
+            fields: fields
+                .iter()
+                .map(|(n, t)| (n.clone(), replace_aliases_with_map(t, map)))
+                .collect(),
+        },
+        Type::Tuple(fields) => Type::Tuple(
+            fields
+                .iter()
+                .map(|t| replace_aliases_with_map(t, map))
+                .collect(),
+        ),
+        Type::Alias(for_type) => match map.get(for_type) {
+            None => Type::Alias(*for_type),
+            Some(t) => Type::Alias(*t),
+        },
+        _ => unimplemented!(),
+    }
+}

@@ -44,6 +44,13 @@ fn main() {
         type B1 = (Int, (Int, Int))
         type D1 = (Int, Int)
 
+        type A2 = (Int, (Int, (Int, Int)))
+        type B2 = (Int, (Int, Int))
+        type D2 = (Int, Int)
+
+        type Z1 { a: A1 }
+        type Z2 { a: A2 }
+
     "#;
     let lex = Lexer::new(source);
     let mut parser = Parser::new(lex);
@@ -65,5 +72,7 @@ fn main() {
     println!("{}", tctx.debug_string());
     println!("RESOLVING ALIASES");
     typecheck::resolve_aliases(&mut tctx);
+    println!("{}", tctx.debug_string());
+    typecheck::dedup_trivially_eq_types(&mut tctx);
     println!("{}", tctx.debug_string());
 }
