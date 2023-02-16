@@ -412,6 +412,11 @@ pub fn dedup_trivially_eq_types(ctx: &mut TypCtx) {
     for (id, typ_id) in &duplicates {
         println!("this type can be replaced with {id} => {typ_id}")
     }
+    for (_, id) in &mut ctx.names {
+        if let Some(new_id) = duplicates.get(id) {
+            *id = *new_id;
+        }
+    }
     ctx.definitions.retain(|k, _| !duplicates.contains_key(k));
     for (_, typ) in ctx.definitions.iter_mut() {
         *typ = replace_aliases_with_map(typ, &duplicates)
