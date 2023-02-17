@@ -468,7 +468,6 @@ mod tests {
             self,
             r#type::Type,
             type_context::{TypCtx, TypeId},
-            types_eq,
         },
     };
 
@@ -507,6 +506,91 @@ mod tests {
         };
     }
 
+    macro_rules! struct_t {
+        ($($field:ident: $t:expr),* $(,)?) => {
+            Type::Struct {
+                def: 0,
+                fields: vec![
+                    $(
+                        (
+                            (stringify!($field)).into(),
+                            $t
+                        )
+                    ),*
+                ]
+            }
+        };
+    }
+
+    fn test_types_eq(ctx: &TypCtx, t1: &Type, t2: &Type) -> bool {
+        match (t1, t2) {
+            (Type::Alias(f1), Type::Alias(f2)) if f1 == f2 => {
+                return true;
+            }
+            _ => {}
+        }
+        let t1 = if let Type::Alias(for_type) = t1 {
+            ctx.definitions.get(for_type).unwrap()
+        } else {
+            t1
+        };
+        let t2 = if let Type::Alias(for_type) = t2 {
+            ctx.definitions.get(for_type).unwrap()
+        } else {
+            t2
+        };
+        match (t1, t2) {
+            (Type::Int, Type::Int) => true,
+            (Type::UInt, Type::UInt) => true,
+            (Type::Bool, Type::Bool) => true,
+            (Type::String, Type::String) => true,
+            (Type::Float, Type::Float) => true,
+            (
+                Type::Struct {
+                    fields: fields1,
+                    ..
+                },
+                Type::Struct {
+                    fields: fields2,
+                    ..
+                },
+            ) => {
+                fields1.len() == fields2.len() &&
+                    fields1.iter().zip(fields2).all(
+                        |((n1, t1), (n2, t2))| { n1 == n2 && test_types_eq(ctx, t1, t2) })
+            }
+            (Type::Tuple(fields1), Type::Tuple(fields2)) => {
+                if fields1.len() != fields2.len() {
+                    return false;
+                }
+                fields1
+                    .iter()
+                    .zip(fields2)
+                    .all(|(t1, t2)| test_types_eq(ctx, t1, t2))
+            }
+            (
+                Type::Function {
+                    args: args1,
+                    ret: ret1,
+                },
+                Type::Function {
+                    args: args2,
+                    ret: ret2,
+                },
+            ) => {
+                if args1.len() != args2.len() {
+                    return false;
+                }
+                test_types_eq(ctx, ret1, ret2)
+                    && args1
+                        .iter()
+                        .zip(args2)
+                        .all(|(t1, t2)| test_types_eq(ctx, t1, t2))
+            }
+            _ => false,
+        }
+    }
+
     fn run_test(source: &str, mut expected: HashMap<TypeId, Type>) {
         let lex = Lexer::new(source);
         let mut parser = Parser::new(lex);
@@ -534,7 +618,7 @@ mod tests {
             assert!(
                 tctx.definitions
                     .iter()
-                    .any(|(&k, v)| { k != id && types_eq(&tctx, &t, v) }),
+                    .any(|(&k, v)| { k != id && test_types_eq(&tctx, &t, v) }),
                 "no type equal to {:?} found ",
                 t
             );
@@ -564,6 +648,32 @@ mod tests {
             117 => tuple!(Int, Alias(114)),
             114 => tuple!(Int, Alias(113)),
             113 => tuple!(Int, Int),
+        }
+    }
+
+    type_test! {
+        resolving_indirect_alias_in_a_structs_field,
+        r#"
+        type A { a: B }
+        type B = C
+        type C = Int
+        "#,
+        map! {
+            101 => struct_t!{ a: Int },
+        }
+    }
+
+    type_test!{
+        resolving_indirect_aliases_in_types_of_structs_field,
+        r#"
+        type A { a: (B) -> Int } 
+        type B = (C, C)
+        type C = Int
+        "#,
+        map! {
+            101 => struct_t!{ a: Alias(102) },
+            102 => function!((Alias(103)) -> Int),
+            103 => tuple!(Int, Int)
         }
     }
 }
