@@ -7,6 +7,7 @@ pub enum Type {
     Bool,
     String,
     Float,
+    Unit,
     Struct {
         def: TypeId,
         // maps fields to the TypeId of the type

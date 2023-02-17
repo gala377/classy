@@ -46,7 +46,7 @@ fn main() {
         type B1 = (Int, (Int, Int))
         type D1 = (Int, Int)
 
-        type A2 = (Int, (Int, (Int, Int)))
+        type A2 = (Int, (Int, (Int, Int)), ())
         type B2 = (Int, (Int, Int))
         type D2 = (Int, Int)
 
@@ -56,8 +56,7 @@ fn main() {
         type Z3 { z: Z6 }
         type Z6 = Z4
         type Z4 = (Int) -> A2
-        type Z5 = (Int) -> A1
-
+        type Z5 = (Int) -> ()
     "#;
     let lex = Lexer::new(source);
     let mut parser = Parser::new(lex);

@@ -12,12 +12,15 @@ pub struct TypCtx {
     pub nodes: HashMap<DefId, ast::TypeDefinition>,
 
     pub next_id: TypeId,
+
+    pub unit_id: TypeId,
 }
 
 impl TypCtx {
     pub fn new() -> Self {
         Self {
             next_id: 0,
+            unit_id: 0,
             definitions: HashMap::new(),
             names: HashMap::new(),
             nodes: HashMap::new(),
