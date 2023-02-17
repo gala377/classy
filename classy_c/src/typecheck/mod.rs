@@ -520,6 +520,19 @@ mod tests {
                 ]
             }
         };
+        (id: $id:literal, $($field:ident: $t:expr),* $(,)?) => {
+            Type::Struct {
+                def: $id,
+                fields: vec![
+                    $(
+                        (
+                            (stringify!($field)).into(),
+                            $t
+                        )
+                    ),*
+                ]
+            }
+        };
     }
 
     fn test_types_eq(ctx: &TypCtx, t1: &Type, t2: &Type) -> bool {
@@ -548,16 +561,21 @@ mod tests {
             (
                 Type::Struct {
                     fields: fields1,
-                    ..
+                    def: def1,
                 },
                 Type::Struct {
                     fields: fields2,
-                    ..
+                    def: def2,
                 },
             ) => {
-                fields1.len() == fields2.len() &&
-                    fields1.iter().zip(fields2).all(
-                        |((n1, t1), (n2, t2))| { n1 == n2 && test_types_eq(ctx, t1, t2) })
+                if def1 == def2 {
+                    return true;
+                }
+                fields1.len() == fields2.len()
+                    && fields1
+                        .iter()
+                        .zip(fields2)
+                        .all(|((n1, t1), (n2, t2))| n1 == n2 && test_types_eq(ctx, t1, t2))
             }
             (Type::Tuple(fields1), Type::Tuple(fields2)) => {
                 if fields1.len() != fields2.len() {
@@ -591,7 +609,7 @@ mod tests {
         }
     }
 
-    fn run_test(source: &str, mut expected: HashMap<TypeId, Type>) {
+    fn apply_type_ctx_passes(source: &str) -> TypCtx {
         let lex = Lexer::new(source);
         let mut parser = Parser::new(lex);
         let res = parser.parse().unwrap();
@@ -606,7 +624,11 @@ mod tests {
         typecheck::resolve_aliases(&mut tctx);
         println!("{}", tctx.debug_string());
         typecheck::dedup_trivially_eq_types(&mut tctx);
+        tctx
+    }
 
+    fn run_test(source: &str, mut expected: HashMap<TypeId, Type>) {
+        let mut tctx = apply_type_ctx_passes(source);
         expected.insert(1000000, Type::Int);
         if tctx.definitions.len() != expected.len() {
             similar_asserts::assert_eq!(expected, tctx.definitions)
@@ -663,7 +685,7 @@ mod tests {
         }
     }
 
-    type_test!{
+    type_test! {
         resolving_indirect_aliases_in_types_of_structs_field,
         r#"
         type A { a: (B) -> Int } 
@@ -674,6 +696,52 @@ mod tests {
             101 => struct_t!{ a: Alias(102) },
             102 => function!((Alias(103)) -> Int),
             103 => tuple!(Int, Int)
+        }
+    }
+
+    #[test]
+    fn test_mutualy_recursive_structs_resolution() {
+        let source = r#"
+            type A { a: C }
+            type B { a: D }
+            type C = B
+            type D = A
+        "#;
+        let tctx = apply_type_ctx_passes(source);
+        let mut actual = tctx.definitions;
+        actual.retain(|_, v| *v != Type::Int);
+        assert!(
+            actual.len() == 2,
+            "there should be only 2 types left (2 structs)"
+        );
+        let actual: Vec<_> = actual.into_iter().collect();
+        let [(id1, t1), (id2, t2)] = &actual[..] else {
+            panic!("expected 2 types exactly")
+        };
+        match t1 {
+            Type::Struct { fields, .. } => match fields
+                .iter()
+                .map(|(s, t)| (s.as_str(), t))
+                .collect::<Vec<_>>()
+                .as_slice()
+            {
+                [("a", Type::Alias(for_type))] if for_type == id2 => {}
+                _ => panic!("T1 does not have an expected shape {t1:?}"),
+            },
+            _ => panic!("T1 is does not have expected shape {t1:?}"),
+        }
+
+        match t2 {
+            Type::Struct { fields, .. } => match fields
+                .iter()
+                .map(|(s, t)| (s.as_str(), t))
+                .collect::<Vec<_>>()
+                .as_slice()
+            {
+                [("a", Type::Alias(for_type))] if for_type == id1 => {}
+                _ => panic!("T1 does not have an expected shape {t2:?}"),
+            },
+            _ => panic!("T1 is does not have expected shape {t2:?}"),
         }
     }
 }
