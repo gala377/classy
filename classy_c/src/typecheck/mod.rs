@@ -28,6 +28,7 @@ impl<'ctx> AddTypes<'ctx> {
 
 impl<'ast, 'ctx> ast::Visitor<'ast> for AddTypes<'ctx> {
     fn visit_fn_def(&mut self, _node: &'ast ast::FunctionDefinition) {}
+
     fn visit_type_def(&mut self, node: &'ast ast::TypeDefinition) {
         println!("Adding node for: {node:?}");
         let _id = self.ctx.add_node(node);
@@ -59,15 +60,25 @@ pub fn resolve_type_names(mut ctx: TypCtx) -> TypCtx {
         let type_id = ctx.names.get(name).expect(&exp_msg);
         let resolved_type = match &def.definition {
             ast::DefinedType::Alias(ast::Alias { for_type: inner }) => {
-                let resolved_id =
-                    resolve_type(&ctx.names, &mut ctx.definitions, &mut ctx.next_id, ctx.unit_id, inner);
+                let resolved_id = resolve_type(
+                    &ctx.names,
+                    &mut ctx.definitions,
+                    &mut ctx.next_id,
+                    ctx.unit_id,
+                    inner,
+                );
                 Type::Alias(resolved_id)
             }
             ast::DefinedType::Record(ast::Record { fields }) => {
                 let mut resolved_fields = Vec::with_capacity(fields.len());
                 for ast::TypedName { name, typ } in fields {
-                    let resolved_id =
-                        resolve_type(&ctx.names, &mut ctx.definitions, &mut ctx.next_id, ctx.unit_id, typ);
+                    let resolved_id = resolve_type(
+                        &ctx.names,
+                        &mut ctx.definitions,
+                        &mut ctx.next_id,
+                        ctx.unit_id,
+                        typ,
+                    );
                     resolved_fields.push((name.clone(), Type::Alias(resolved_id)));
                 }
                 Type::Struct {
@@ -288,9 +299,12 @@ impl AliasResolver {
                     Type::Alias(follow) => {
                         self.resolve_shallow_aliases_in_type(ctx, &Type::Alias(*follow))
                     }
-                    t @ (Type::UInt | Type::Int | Type::Bool | Type::Float | Type::String | Type::Unit) => {
-                        t.clone()
-                    }
+                    t @ (Type::UInt
+                    | Type::Int
+                    | Type::Bool
+                    | Type::Float
+                    | Type::String
+                    | Type::Unit) => t.clone(),
                     // Do not resolve this types as they migh create reference cycles.
                     Type::Struct { .. } => Type::Alias(*for_type),
                     Type::Function { .. } => Type::Alias(*for_type),
@@ -317,7 +331,9 @@ impl AliasResolver {
                     ret: Box::new(resolved_ret),
                 }
             }
-            t @ (Type::UInt | Type::Int | Type::Bool | Type::Float | Type::String | Type::Unit) => t.clone(),
+            t @ (Type::UInt | Type::Int | Type::Bool | Type::Float | Type::String | Type::Unit) => {
+                t.clone()
+            }
             _ => unimplemented!(),
         }
     }
@@ -431,7 +447,9 @@ pub fn dedup_trivially_eq_types(ctx: &mut TypCtx) {
 
 fn replace_aliases_with_map(typ: &Type, map: &HashMap<TypeId, TypeId>) -> Type {
     match typ {
-        t @ (Type::UInt | Type::Int | Type::Bool | Type::Float | Type::String | Type::Unit) => t.clone(),
+        t @ (Type::UInt | Type::Int | Type::Bool | Type::Float | Type::String | Type::Unit) => {
+            t.clone()
+        }
         Type::Struct { def, fields } => Type::Struct {
             def: *def,
             fields: fields
