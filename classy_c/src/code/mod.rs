@@ -25,7 +25,10 @@ pub enum OpCode {
     AddFloat,
     ConstLoadInteger,
     ConstLoadFloat,
+    ConstLoadString,
+    LookUpGlobal,
     Return,
+    Call1,
 }
 
 /// Entry for a gc stack map.
@@ -56,4 +59,14 @@ pub struct Code {
     pub instructions: Vec<u8>,
     pub constant_pool: ConstantPool,
     pub stack_map: GcStackMap,
+}
+
+impl Code {
+    pub fn new() -> Code {
+        Code {
+            instructions: Vec::new(),
+            constant_pool: ConstantPool::new(),
+            stack_map: GcStackMap::new(),
+        }
+    }
 }
