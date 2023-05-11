@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 clap = { version = "4.0.18", features = ["derive"] }
 classy_vm = { path = "../classy_vm" }
+classy_c = { path = "../classy_c" }

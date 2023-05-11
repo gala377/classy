@@ -82,7 +82,7 @@ fn make_thread_loop(
     let allocate_integers = *allocate_integers;
     let create_handle_every = *create_handle_every;
     move || {
-        let mut thread = vm.create_evaluation_thread();
+        let mut thread = vm.create_evaluation_thread(classy_c::code::Code::new());
         let runtime = vm.runtime();
         let mut handles = Vec::new();
         for i in 0..allocate_integers {

@@ -113,6 +113,7 @@ name = "classy_example"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "classy_c",
  "classy_vm",
 ]
 
@@ -120,6 +121,7 @@ dependencies = [
 name = "classy_vm"
 version = "0.1.0"
 dependencies = [
+ "classy_c",
  "loom",
  "sptr",
  "thiserror",

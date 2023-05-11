@@ -65,7 +65,7 @@ impl Vm {
 
     /// Should be called inside the os thread that this evaluation
     /// thread is created for.
-    pub fn create_evaluation_thread(&mut self) -> runtime::thread::Thread {
+    pub fn create_evaluation_thread(&mut self, code: classy_c::code::Code) -> runtime::thread::Thread {
         while self.thread_manager.should_stop_thread_for_gc() {
             self.thread_manager.stop_for_gc().unwrap();
         }
@@ -81,6 +81,7 @@ impl Vm {
             self.permament_heap.clone(),
             self.options.initial_tlab_size,
             self.options.young_space_size,
+            code,
         )
     }
 
@@ -130,7 +131,7 @@ mod tests {
             page::Page,
             ptr::{NonNullPtr, Ptr},
         },
-        vm::{self, Vm},
+        vm::{self, Vm}, runtime::class,
     };
 
     fn setup_vm(page_size: usize, page_count: usize) -> Vm {
@@ -146,7 +147,7 @@ mod tests {
     #[test]
     fn gc_changes_the_handles_address_but_preserves_the_value() {
         let mut vm = setup_vm(4 * size_of::<usize>(), 1);
-        let mut t = vm.create_evaluation_thread();
+        let mut t = vm.create_evaluation_thread(classy_c::code::Code::new());
         unsafe {
             let ptr: Ptr<isize> = t.allocate_instance(vm.runtime.classes.int);
             assert!(!ptr.is_null());
@@ -166,7 +167,7 @@ mod tests {
     #[test]
     fn revoking_a_handle_allows_gc_to_collect_garbage() {
         let mut vm = setup_vm(4 * size_of::<usize>(), 1);
-        let mut t = vm.create_evaluation_thread();
+        let mut t = vm.create_evaluation_thread(classy_c::code::Code::new());
         unsafe {
             let ptr: Ptr<isize> = t.allocate_instance(vm.runtime.classes.int);
             assert!(!ptr.is_null());

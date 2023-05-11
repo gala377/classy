@@ -29,8 +29,19 @@ pub enum OpCode {
     LookUpGlobal,
     Return,
     Call1,
+    LastMarker,
 }
 
+impl From<u8> for OpCode {
+    fn from(value: u8) -> Self {
+        let last = OpCode::LastMarker as u8;
+        if value >= last {
+            panic!("Unknown opcode {value}");
+        }
+        // SAFETY: We checked that the value falls within the opcode range
+        unsafe { std::mem::transmute(value) }
+    }
+}
 /// Entry for a gc stack map.
 /// Represents stack information about cells holding references
 /// to scan.
