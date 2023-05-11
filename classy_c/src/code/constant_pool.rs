@@ -236,4 +236,12 @@ mod tests {
         let id = cp.add_entry(TypedEntry::String("Hello".into()));
         assert_eq!(cp.get::<String>(id).unwrap(), "Hello");
     }
+    #[test]
+    fn test_storing_2_string_values() {
+        let mut cp = ConstantPool::new();
+        let id_1 = cp.add_entry(TypedEntry::String("Hello".into()));
+        let id_2 = cp.add_entry(TypedEntry::String("World".into()));
+        assert_eq!(cp.get::<String>(id_1).unwrap(), "Hello");
+        assert_eq!(cp.get::<String>(id_2).unwrap(), "World");
+    }
 }
