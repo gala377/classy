@@ -9,21 +9,29 @@ pub struct TypeMismatched {
     actual: EntryType,
 }
 
+const STRING_LEN_MASK: usize = 0xFFFFFFFF00000000;
+const STRING_OFFSET_MASK: usize = 0x00000000FFFFFFFF;
+
 /// Vector of type erased values paired with their
 /// type information. Used to store constant information
 /// for the execution.
 pub struct ConstantPool {
     entries: Vec<Entry>,
+
+    /// Byte vector containing all of the strings tightly packed.
+    /// See documentation for EntryType on how to retrieve them.
+    strings: Vec<u8>,
 }
 
 impl ConstantPool {
     pub fn new() -> Self {
         Self {
             entries: Vec::new(),
+            strings: Vec::new(),
         }
     }
 
-    pub fn add_entry(&mut self, entry: TypedEntry) {
+    pub fn add_entry(&mut self, entry: TypedEntry) -> usize {
         // SAFETY: All transmutes are used only for the type erasure.
         unsafe {
             match entry {
@@ -35,8 +43,35 @@ impl ConstantPool {
                     typ: EntryType::Float,
                     val: std::mem::transmute(val),
                 }),
+                TypedEntry::String(val) => {
+                    let offset = self.strings.len();
+                    let len = val.as_bytes().len();
+                    assert!(
+                        offset <= std::u32::MAX as usize,
+                        "string table cannot be larger than max of u32"
+                    );
+                    assert!(
+                        len <= std::u32::MAX as usize,
+                        "string literal cannot be longer than max of u32"
+                    );
+                    let string_word = offset | len << 32;
+                    assert!(
+                        string_word & STRING_OFFSET_MASK == offset,
+                        "offset has been wrongly encoded"
+                    );
+                    assert!(
+                        string_word & STRING_LEN_MASK == (len << 32),
+                        "len has been wrongly encoded"
+                    );
+                    self.entries.push(Entry {
+                        typ: EntryType::String,
+                        val: string_word,
+                    });
+                    self.strings.extend_from_slice(val.as_bytes());
+                }
             }
-        }
+        };
+        self.entries.len() - 1
     }
 
     pub unsafe fn get_unchecked<T>(&self, index: usize) -> T {
@@ -49,16 +84,28 @@ impl ConstantPool {
         std::mem::transmute_copy(&self.entries[index].val)
     }
 
-    pub fn get<T>(&self, typ: EntryType, index: usize) -> Result<T, TypeMismatched> {
+    pub fn get<T: Tagged>(&self, index: usize) -> Result<T, TypeMismatched> {
         let actual_typ = self.entries[index].typ;
-        if actual_typ != typ {
-            Err(TypeMismatched {
-                expected: typ,
+        if actual_typ != T::tag() {
+            return Err(TypeMismatched {
+                expected: T::tag(),
                 actual: actual_typ,
-            })
-        } else {
-            // SAFETY: safe, we checked the entry's type.
-            Ok(unsafe { self.get_unchecked(index) })
+            });
+        }
+        match T::tag() {
+            EntryType::Float | EntryType::Int => {
+                // SAFETY: safe, we checked the entry's type.
+                Ok(unsafe { self.get_unchecked(index) })
+            }
+            EntryType::String => {
+                let string_word = self.entries[index].val;
+                let offset = string_word & STRING_OFFSET_MASK;
+                let len = (string_word & STRING_LEN_MASK) >> 32;
+                // todo: we could return str reference instead of allocating a string here
+                let string_val = String::from_utf8(self.strings[offset..offset + len].to_vec())
+                    .expect("This string has not been encoded properly");
+                Ok(T::from_string(string_val))
+            }
         }
     }
 }
@@ -90,8 +137,13 @@ pub struct Entry {
 /// Used for validation.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum EntryType {
+    /// The value of this tag is the int itself.
     Int,
+    /// The value of this tag is a float itself.
     Float,
+    /// The word erased value of this entry type is an u32 offset
+    /// into a string table followed by an u32 lenght of the string.
+    String,
 }
 
 /// A type safe wrapped around `EntryType`.
@@ -106,6 +158,7 @@ pub enum EntryType {
 pub enum TypedEntry {
     Int(isize),
     Float(f64),
+    String(String),
 }
 
 impl From<isize> for TypedEntry {
@@ -120,10 +173,20 @@ impl From<f64> for TypedEntry {
     }
 }
 
+impl From<String> for TypedEntry {
+    fn from(val: String) -> Self {
+        Self::String(val)
+    }
+}
+
 /// Convienience trait to retrieve type tag
 /// for the constant pool entry of some generic T: Tagged.
-pub trait Tagged {
+pub trait Tagged: Sized {
     fn tag() -> EntryType;
+
+    fn from_string(_: String) -> Self {
+        panic!("This entry does not support converting from string")
+    }
 }
 
 impl Tagged for isize {
@@ -135,5 +198,42 @@ impl Tagged for isize {
 impl Tagged for f64 {
     fn tag() -> EntryType {
         EntryType::Float
+    }
+}
+
+impl Tagged for String {
+    fn tag() -> EntryType {
+        EntryType::String
+    }
+
+    fn from_string(s: String) -> Self {
+        s
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn test_storing_and_retrieving_int_value() {
+        let mut cp = ConstantPool::new();
+        let id = cp.add_entry(TypedEntry::Int(10));
+        assert_eq!(cp.get::<isize>(id).unwrap(), 10)
+    }
+
+    #[test]
+    fn test_storing_flaot_value() {
+        let mut cp = ConstantPool::new();
+        let id = cp.add_entry(TypedEntry::Float(1.12));
+        assert_eq!(cp.get::<f64>(id).unwrap(), 1.12);
+    }
+
+    #[test]
+    fn test_storing_string_value() {
+        let mut cp = ConstantPool::new();
+        let id = cp.add_entry(TypedEntry::String("Hello".into()));
+        assert_eq!(cp.get::<String>(id).unwrap(), "Hello");
     }
 }
