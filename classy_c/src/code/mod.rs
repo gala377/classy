@@ -1,3 +1,4 @@
+
 use bitvec::vec::BitVec;
 
 pub mod constant_pool;
@@ -44,6 +45,21 @@ impl From<u8> for OpCode {
         unsafe { std::mem::transmute(value) }
     }
 }
+
+impl OpCode {
+    pub fn argument_size(&self) -> usize {
+        match self {
+            Self::ConstLoadFloat => 1,
+            Self::ConstLoadInteger => 1,
+            Self::ConstLoadString => {
+                std::mem::size_of::<u64>()
+            },
+            Self::LookUpGlobal => std::mem::size_of::<u64>(),
+            _ => 0,
+        }
+    }
+}
+
 /// Entry for a gc stack map.
 /// Represents stack information about cells holding references
 /// to scan.

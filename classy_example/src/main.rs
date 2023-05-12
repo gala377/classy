@@ -62,7 +62,17 @@ fn main() {
             println!("Done")
         }
         Example::Print => {
-            let source = "main:()->();main { print \"Hello world\" };";
+            let source = r#"
+                main:()->();
+                main { 
+                    print "Hello world" 
+                    print "Hello world" 
+                    print "Hello world" 
+                    print "Hello world" 
+                    print "Hello world" 
+                    print "Hello world" 
+                };
+            "#;
             let mut parser =
                 classy_c::syntax::parser::Parser::new(classy_c::syntax::lexer::Lexer::new(&source));
             let ast = parser.parse().unwrap();

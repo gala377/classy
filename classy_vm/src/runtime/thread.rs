@@ -1,4 +1,4 @@
-use std::{alloc::Layout, collections::HashMap, mem::size_of, sync::Arc};
+use std::{alloc::Layout, collections::HashMap, mem::size_of, sync::{Arc, Mutex}};
 
 use classy_c::code::{Code, OpCode};
 
@@ -21,7 +21,7 @@ type Word = u64;
 
 pub struct Thread {
     heap: Heap,
-    _permament_heap: Arc<permament_heap::PermamentHeap>,
+    _permament_heap: Arc<Mutex<permament_heap::PermamentHeap>>,
     _runtime: Runtime,
     _thread_manager: Arc<ThreadManager>,
     code: Code,
@@ -37,7 +37,7 @@ impl Thread {
         thread_manager: Arc<ThreadManager>,
         from_space: SemiSpace,
         to_space: SemiSpace,
-        permament_heap: Arc<permament_heap::PermamentHeap>,
+        permament_heap: Arc<Mutex<permament_heap::PermamentHeap>>,
         initial_tlab_free_size: usize,
         max_young_space_size: usize,
         code: Code,
@@ -126,20 +126,14 @@ impl Thread {
                     // have a full word to store the pointer.
                     instr += 1;
                     // We need to read it as
-                    let index_bytes = &self.code.instructions[instr..instr + size_of::<u64>()];
-                    let mut index_bytes_array: [u8; 8] = [0; 8];
-                    assert!(index_bytes.len() == 8);
+                    let address_bytes = &self.code.instructions[instr..instr + size_of::<u64>()];
+                    assert!(address_bytes.len() == 8);
+                    let mut address_bytes_array: [u8; 8] = [0; 8];
                     for i in 0..8 {
-                        index_bytes_array[i] = index_bytes[i];
+                        address_bytes_array[i] = address_bytes[i];
                     }
-                    let index = u64::from_le_bytes(index_bytes_array);
-                    let str = self
-                        .code
-                        .constant_pool
-                        .get::<String>(index as usize)
-                        .expect("checked by instruction");
-                    let strcls = self._runtime.classes.string.clone();
-                    let instance = self.heap.allocate_static_string(strcls, &str);
+                    let address = u64::from_le_bytes(address_bytes_array);
+                    let instance: Ptr<StringInst> = unsafe { std::mem::transmute(address) };
                     // unsafe as heck, there is a possiblity we could not allocate
                     self.stack.push(
                         instance
@@ -147,27 +141,24 @@ impl Thread {
                             .expect("could not allocate a string literal")
                             .as_ptr() as Word,
                     );
-                    instr += size_of::<u64>();
+                    instr += OpCode::ConstLoadString.argument_size();
                 }
                 OpCode::LookUpGlobal => {
                     // TODO: temporary so we just have something working
                     // on the top of the stack is a pointer to string that we need to look up
                     instr += 1;
-                    let index_bytes = &self.code.instructions[instr..instr + size_of::<u64>()];
-                    let mut index_bytes_array: [u8; 8] = [0; 8];
-                    assert!(index_bytes.len() == 8, "The len is {}", index_bytes.len());
+                    let address_bytes = &self.code.instructions[instr..instr + size_of::<u64>()];
+                    assert!(address_bytes.len() == 8);
+                    let mut address_bytes_array: [u8; 8] = [0; 8];
                     for i in 0..8 {
-                        index_bytes_array[i] = index_bytes[i];
+                        address_bytes_array[i] = address_bytes[i];
                     }
-                    let index = u64::from_le_bytes(index_bytes_array);
-                    let name = self
-                        .code
-                        .constant_pool
-                        .get::<String>(index as usize)
-                        .expect("checked by instruction");
+                    let address = u64::from_le_bytes(address_bytes_array);
+                    let name: NonNullPtr<StringInst> = unsafe { std::mem::transmute(address) };
+                    let name = unsafe { (*name.get()).as_rust_string() };
                     let to_push = *self.native_functions.get(&name).expect("Unknown name");
                     self.stack.push(to_push as *mut () as Word);
-                    instr += size_of::<u64>();
+                    instr += OpCode::LookUpGlobal.argument_size();
                 }
                 OpCode::Return => {
                     // For now nothing to do as we do not have function frames
