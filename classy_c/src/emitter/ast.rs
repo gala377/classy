@@ -86,10 +86,6 @@ impl AstEmmiter {
         code.instructions.push(op as u8)
     }
 
-    fn emit_byte(&self, code: &mut Code, val: u8) {
-        code.instructions.push(val)
-    }
-
     fn emit_word(&self, code: &mut Code, val: u64) {
         // saves as a low endian representaiton
         code.instructions.extend_from_slice(&val.to_le_bytes())
