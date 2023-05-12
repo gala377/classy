@@ -1,6 +1,10 @@
+use std::hash::Hash;
+
 use thiserror::Error;
 
 use crate::code::Word;
+
+use super::interner::Interner;
 
 #[derive(Error, Debug)]
 #[error("Constant pool entry had unexpected type {actual:?}. Expected type {expected:?}")]
@@ -21,6 +25,8 @@ pub struct ConstantPool {
     /// Byte vector containing all of the strings tightly packed.
     /// See documentation for EntryType on how to retrieve them.
     strings: Vec<u8>,
+
+    interner: Interner,
 }
 
 impl ConstantPool {
@@ -28,14 +34,17 @@ impl ConstantPool {
         Self {
             entries: Vec::new(),
             strings: Vec::new(),
+            interner: Interner::new(),
         }
     }
 
     pub fn add_entry(&mut self, entry: TypedEntry) -> usize {
+        if let Some(id) = self.interner.check(&entry) {
+            return id;
+        }
         // SAFETY: All transmutes are used only for the type erasure.
         unsafe {
-            // TODO: All values should be interned to save space
-            match entry {
+            match &entry {
                 TypedEntry::Int(val) => self.entries.push(Entry {
                     typ: EntryType::Int,
                     val: std::mem::transmute(val),
@@ -70,9 +79,11 @@ impl ConstantPool {
                     });
                     self.strings.extend_from_slice(val.as_bytes());
                 }
-            }
+            };
         };
-        self.entries.len() - 1
+        let id = self.entries.len() - 1;
+        self.interner.add(&entry, id);
+        id
     }
 
     pub unsafe fn get_unchecked<T>(&self, index: usize) -> T {
@@ -124,6 +135,7 @@ impl ConstantPool {
 /// a pointer to it. However raw pointers are not owned so a care has
 /// to be put not to dereference freed memory and to free the memory
 /// when it is no longer needed.
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub struct Entry {
     /// Type of the entry. One could want to
     /// retrieve f64 from isize. To prevent
@@ -136,7 +148,7 @@ pub struct Entry {
 
 /// Type of the entry in the constant pool.
 /// Used for validation.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum EntryType {
     /// The value of this tag is the int itself.
     Int,
@@ -160,6 +172,17 @@ pub enum TypedEntry {
     Int(isize),
     Float(f64),
     String(String),
+}
+
+impl PartialEq for TypedEntry {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Int(l0), Self::Int(r0)) => l0 == r0,
+            (Self::Float(l0), Self::Float(r0)) => l0 == r0,
+            (Self::String(l0), Self::String(r0)) => l0 == r0,
+            _ => false,
+        }
+    }
 }
 
 impl From<isize> for TypedEntry {
