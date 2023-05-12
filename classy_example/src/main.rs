@@ -41,7 +41,7 @@ struct Args {
     #[arg(long)]
     create_handle_every: Option<usize>,
 
-    #[arg(value_enum, default_value_t = Example::Print)]
+    #[arg(long, value_enum, default_value_t = Example::Print)]
     example: Example,
 }
 
