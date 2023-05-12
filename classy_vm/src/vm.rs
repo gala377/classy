@@ -1,4 +1,8 @@
-use std::{sync::{Arc, Mutex}, thread::ThreadId, collections::HashMap};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    thread::ThreadId,
+};
 
 use classy_c::code;
 
@@ -108,7 +112,10 @@ impl Vm {
             let opcode = code::OpCode::from(code.instructions[instr]);
             instr += match opcode {
                 code::OpCode::ConstLoadString | code::OpCode::LookUpGlobal => {
-                    assert!(code::OpCode::ConstLoadString.argument_size() == code::OpCode::LookUpGlobal.argument_size());
+                    assert!(
+                        code::OpCode::ConstLoadString.argument_size()
+                            == code::OpCode::LookUpGlobal.argument_size()
+                    );
                     instr += 1;
                     let index_bytes = &code.instructions[instr..instr + std::mem::size_of::<u64>()];
                     let mut index_bytes_array: [u8; 8] = [0; 8];
@@ -125,7 +132,7 @@ impl Vm {
                             for i in 0..std::mem::size_of::<u64>() {
                                 code.instructions[instr + i] = instance_word_bytes[i];
                             }
-                        },
+                        }
                         None => {
                             // retrieve the string
                             let str = code
@@ -134,7 +141,11 @@ impl Vm {
                                 .expect("checked by instruction");
                             // allocate string in the permament heap
                             let strcls = self.runtime.classes.string.clone();
-                            let instance = self.permament_heap.lock().unwrap().allocate_static_string(strcls, &str);
+                            let instance = self
+                                .permament_heap
+                                .lock()
+                                .unwrap()
+                                .allocate_static_string(strcls, &str);
                             assert!(!instance.is_null());
                             let instance_word = instance.unwrap() as u64;
                             let instance_word_bytes = instance_word.to_le_bytes();
@@ -145,7 +156,7 @@ impl Vm {
                             }
                             // add it as interned
                             self.interned_strings.insert(index, instance_word);
-                        },
+                        }
                     }
                     code::OpCode::ConstLoadString.argument_size()
                 }

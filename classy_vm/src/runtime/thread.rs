@@ -1,4 +1,9 @@
-use std::{alloc::Layout, collections::HashMap, mem::size_of, sync::{Arc, Mutex}};
+use std::{
+    alloc::Layout,
+    collections::HashMap,
+    mem::size_of,
+    sync::{Arc, Mutex},
+};
 
 use classy_c::code::{Code, OpCode};
 

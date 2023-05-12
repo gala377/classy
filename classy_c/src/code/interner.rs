@@ -1,6 +1,5 @@
 use std::{collections::HashMap, hash::Hash};
 
-
 use super::constant_pool::{self, TypedEntry};
 
 struct HashableFloat(f64);
@@ -39,10 +38,11 @@ pub struct Interner {
     interned: HashMap<InternableEntry, usize>,
 }
 
-
 impl Interner {
     pub fn new() -> Self {
-        Interner { interned: HashMap::new() }
+        Interner {
+            interned: HashMap::new(),
+        }
     }
 
     pub fn check(&self, entry: &constant_pool::TypedEntry) -> Option<usize> {
@@ -54,4 +54,3 @@ impl Interner {
         self.interned.insert(entry.clone().into(), val);
     }
 }
-

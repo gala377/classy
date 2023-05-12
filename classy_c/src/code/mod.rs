@@ -1,4 +1,3 @@
-
 use bitvec::vec::BitVec;
 
 pub mod constant_pool;
@@ -51,9 +50,7 @@ impl OpCode {
         match self {
             Self::ConstLoadFloat => 1,
             Self::ConstLoadInteger => 1,
-            Self::ConstLoadString => {
-                std::mem::size_of::<u64>()
-            },
+            Self::ConstLoadString => std::mem::size_of::<u64>(),
             Self::LookUpGlobal => std::mem::size_of::<u64>(),
             _ => 0,
         }
