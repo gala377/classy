@@ -1,7 +1,6 @@
-use std::{alloc::Layout, sync::Arc, collections::HashMap, mem::size_of};
+use std::{alloc::Layout, collections::HashMap, mem::size_of, sync::Arc};
 
 use classy_c::code::{Code, OpCode};
-
 
 use crate::{
     mem::{
@@ -11,7 +10,11 @@ use crate::{
         ptr::{NonNullPtr, Ptr},
         ObjectAllocator,
     },
-    runtime::{class::{self, Class, string::StringInst}, thread_manager::ThreadManager, Runtime},
+    runtime::{
+        class::{string::StringInst, Class},
+        thread_manager::ThreadManager,
+        Runtime,
+    },
 };
 
 type Word = u64;
@@ -25,7 +28,7 @@ pub struct Thread {
     stack: Vec<Word>,
 
     // todo: this is temporary
-    native_functions: HashMap<String, fn(& mut Thread, & [Word]) -> Word>,
+    native_functions: HashMap<String, fn(&mut Thread, &[Word]) -> Word>,
 }
 
 impl Thread {
@@ -65,13 +68,16 @@ impl Thread {
                     // SAFETY: TODO COMPLETLY NOT SAFE AT ALL
                     unsafe {
                         let str_ptr: NonNullPtr<StringInst> = std::mem::transmute(args[0]);
-                        println!("{}", (*str_ptr.get()).as_rust_str()); 
-                    }  
+                        println!("{}", (*str_ptr.get()).as_rust_str());
+                    }
                     return 0;
                 }
-                m.insert("print".to_owned(), native_print as fn(&mut Thread, &[Word]) -> Word);
+                m.insert(
+                    "print".to_owned(),
+                    native_print as fn(&mut Thread, &[Word]) -> Word,
+                );
                 m
-            }
+            },
         }
     }
 
@@ -111,7 +117,7 @@ impl Thread {
                 OpCode::ConstLoadInteger => todo!(),
                 OpCode::ConstLoadFloat => todo!(),
                 OpCode::ConstLoadString => {
-                    // TODO: this is wrong, we should not allocate every time 
+                    // TODO: this is wrong, we should not allocate every time
                     // if we just load a string literal
                     // we should probably go through code when we first see it and allocate
                     // every string into a static heap, then replace the instruction by
@@ -119,41 +125,54 @@ impl Thread {
                     // a string table. This requires us to instead of having a byte after the instruction
                     // have a full word to store the pointer.
                     instr += 1;
-                    // We need to read it as 
-                    let index_bytes = &self.code.instructions[instr..instr+size_of::<u64>()];
+                    // We need to read it as
+                    let index_bytes = &self.code.instructions[instr..instr + size_of::<u64>()];
                     let mut index_bytes_array: [u8; 8] = [0; 8];
                     assert!(index_bytes.len() == 8);
                     for i in 0..8 {
                         index_bytes_array[i] = index_bytes[i];
                     }
                     let index = u64::from_le_bytes(index_bytes_array);
-                    let str = self.code.constant_pool.get::<String>(index as usize).expect("checked by instruction");
+                    let str = self
+                        .code
+                        .constant_pool
+                        .get::<String>(index as usize)
+                        .expect("checked by instruction");
                     let strcls = self._runtime.classes.string.clone();
                     let instance = self.heap.allocate_static_string(strcls, &str);
                     // unsafe as heck, there is a possiblity we could not allocate
-                    self.stack.push(instance.inner().expect("could not allocate a string literal").as_ptr() as Word);
+                    self.stack.push(
+                        instance
+                            .inner()
+                            .expect("could not allocate a string literal")
+                            .as_ptr() as Word,
+                    );
                     instr += size_of::<u64>();
-                },
+                }
                 OpCode::LookUpGlobal => {
                     // TODO: temporary so we just have something working
                     // on the top of the stack is a pointer to string that we need to look up
                     instr += 1;
-                    let index_bytes = &self.code.instructions[instr..instr+size_of::<u64>()];
+                    let index_bytes = &self.code.instructions[instr..instr + size_of::<u64>()];
                     let mut index_bytes_array: [u8; 8] = [0; 8];
                     assert!(index_bytes.len() == 8, "The len is {}", index_bytes.len());
                     for i in 0..8 {
                         index_bytes_array[i] = index_bytes[i];
                     }
                     let index = u64::from_le_bytes(index_bytes_array);
-                    let name = self.code.constant_pool.get::<String>(index as usize).expect("checked by instruction");
+                    let name = self
+                        .code
+                        .constant_pool
+                        .get::<String>(index as usize)
+                        .expect("checked by instruction");
                     let to_push = *self.native_functions.get(&name).expect("Unknown name");
                     self.stack.push(to_push as *mut () as Word);
                     instr += size_of::<u64>();
-                },
+                }
                 OpCode::Return => {
                     // For now nothing to do as we do not have function frames
-                   instr += 1; 
-                },
+                    instr += 1;
+                }
                 OpCode::Call1 => {
                     // TODO: temporary just so something works
                     let arg = self.stack.pop().unwrap();
@@ -164,14 +183,15 @@ impl Thread {
                         self.stack.push(res);
                     }
                     instr += 1;
-                },
-                OpCode::LastMarker => { panic!("This instruction should have never been emitted")},
+                }
+                OpCode::LastMarker => {
+                    panic!("This instruction should have never been emitted")
+                }
                 OpCode::Pop => {
                     self.stack.pop().unwrap();
                     instr += 1;
-                },
+                }
             }
         }
     }
-
 }

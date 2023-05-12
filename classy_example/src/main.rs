@@ -60,15 +60,16 @@ fn main() {
             }
             wait_for_all_threads(vm);
             println!("Done")
-        },
+        }
         Example::Print => {
             let source = "main:()->();main { print \"Hello world\" };";
-            let mut parser = classy_c::syntax::parser::Parser::new(classy_c::syntax::lexer::Lexer::new(&source));
+            let mut parser =
+                classy_c::syntax::parser::Parser::new(classy_c::syntax::lexer::Lexer::new(&source));
             let ast = parser.parse().unwrap();
             let code = classy_c::emitter::ast::AstEmmiter::compile(ast);
             let mut thread = vm.create_evaluation_thread(code);
             thread.interpert();
-        },
+        }
     }
 }
 

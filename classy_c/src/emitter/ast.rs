@@ -1,5 +1,3 @@
-use bitvec::macros::internal::funty::Numeric;
-
 use crate::{
     code::{constant_pool, Code, OpCode},
     syntax::ast,
@@ -40,7 +38,7 @@ impl AstEmmiter {
                     self.emit_expr(code, expr);
                     self.emit_instr(code, OpCode::Pop);
                 }
-            },
+            }
             ast::Expr::Assignment { .. } => todo!(),
             ast::Expr::IntConst(_) => todo!(),
             ast::Expr::StringConst(val) => {
@@ -78,7 +76,7 @@ impl AstEmmiter {
             ast::Expr::Return(expr) => {
                 self.emit_expr(code, expr);
                 self.emit_instr(code, OpCode::Return);
-            },
+            }
             ast::Expr::If { .. } => todo!(),
             ast::Expr::Let { .. } => todo!(),
         }

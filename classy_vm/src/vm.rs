@@ -65,7 +65,10 @@ impl Vm {
 
     /// Should be called inside the os thread that this evaluation
     /// thread is created for.
-    pub fn create_evaluation_thread(&mut self, code: classy_c::code::Code) -> runtime::thread::Thread {
+    pub fn create_evaluation_thread(
+        &mut self,
+        code: classy_c::code::Code,
+    ) -> runtime::thread::Thread {
         while self.thread_manager.should_stop_thread_for_gc() {
             self.thread_manager.stop_for_gc().unwrap();
         }
@@ -131,7 +134,7 @@ mod tests {
             page::Page,
             ptr::{NonNullPtr, Ptr},
         },
-        vm::{self, Vm}, runtime::class,
+        vm::{self, Vm},
     };
 
     fn setup_vm(page_size: usize, page_count: usize) -> Vm {
