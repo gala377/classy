@@ -736,6 +736,10 @@ impl<'source> Parser<'source> {
                 Ok(ast::Expr::Tuple(tuple))
             }
             TokenType::LBrace => self.parse_expr_sequence(),
+            TokenType::String(s) => {
+                self.lexer.advance();
+                Ok(ast::Expr::StringConst(s))
+            }
             _ => wrong_rule(),
         }
     }

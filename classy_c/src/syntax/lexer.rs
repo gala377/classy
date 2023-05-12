@@ -86,7 +86,7 @@ fn skip_new_lines(tokens: &mut logos::Lexer<TokenType>) -> Token {
 mod tests {
     use super::Lexer;
     use super::Token;
-    use super::TokenType::*;
+    use super::TokenType::{self, *};
 
     macro_rules! assert_token {
         ($p:pat, $e:expr) => {
@@ -132,5 +132,17 @@ mod tests {
             ],
             Lexer::new("2 -2 1.0 1. .1 -1.1 ")
         );
+    }
+
+    #[test]
+    fn lexing_strings() {
+        let l = Lexer::new(r#""Hello world""#);
+        match l.current() {
+            Token { typ: TokenType::String(s), .. }  if s == r#""Hello world""# => {},
+            Token { typ: TokenType::String(s), .. }  => {
+                panic!("Value of s is {s}")
+            },
+            t => panic!("value of s is wrong {t:#?}"),
+        }
     }
 }

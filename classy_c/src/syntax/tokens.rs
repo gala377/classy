@@ -48,6 +48,8 @@ pub enum TokenType {
     Integer(isize),
     #[regex(r"(-)?(0|[1-9][0-9]*)?\.[0-9]*", |lex| lex.slice().parse())]
     Float(f64),
+    #[regex(r#""(?:[^"]|\\")*""#, |lex| lex.slice()[1..lex.slice().len()-1].to_owned())]
+    String(String),
 
     // Grouping
     #[token("{")]

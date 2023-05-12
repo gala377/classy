@@ -1,3 +1,5 @@
+use bitvec::macros::internal::funty::Numeric;
+
 use crate::{
     code::{constant_pool, Code, OpCode},
     syntax::ast,
@@ -33,7 +35,12 @@ impl AstEmmiter {
     fn emit_expr(&self, code: &mut Code, expr: &ast::Expr) {
         match expr {
             ast::Expr::Unit => todo!(),
-            ast::Expr::Sequence(_) => todo!(),
+            ast::Expr::Sequence(seq) => {
+                for expr in seq {
+                    self.emit_expr(code, expr);
+                    self.emit_instr(code, OpCode::Pop);
+                }
+            },
             ast::Expr::Assignment { .. } => todo!(),
             ast::Expr::IntConst(_) => todo!(),
             ast::Expr::StringConst(val) => {
@@ -41,24 +48,18 @@ impl AstEmmiter {
                     .constant_pool
                     .add_entry(constant_pool::TypedEntry::String(val.clone()));
                 self.emit_instr(code, OpCode::ConstLoadString);
-                if id < 256 {
-                    self.emit_byte(code, id as u8);
-                } else {
-                    todo!()
-                }
+                self.emit_word(code, id as u64);
             }
             ast::Expr::FloatConst(_) => todo!(),
             ast::Expr::Name(name) => {
                 // todo: this is just plain wrong but we want something working
+                // Actually this might be okay if we just somehow intern the strings?
+                // we need better symbol names.
                 let id = code
                     .constant_pool
                     .add_entry(constant_pool::TypedEntry::String(name.clone()));
                 self.emit_instr(code, OpCode::LookUpGlobal);
-                if id < 256 {
-                    self.emit_byte(code, id as u8);
-                } else {
-                    todo!()
-                }
+                self.emit_word(code, id as u64);
             }
             ast::Expr::FunctionCall { func, args } => {
                 if args.len() != 1 {
@@ -89,5 +90,10 @@ impl AstEmmiter {
 
     fn emit_byte(&self, code: &mut Code, val: u8) {
         code.instructions.push(val)
+    }
+
+    fn emit_word(&self, code: &mut Code, val: u64) {
+        // saves as a low endian representaiton
+        code.instructions.extend_from_slice(&val.to_le_bytes())
     }
 }

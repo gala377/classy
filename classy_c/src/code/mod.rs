@@ -29,6 +29,7 @@ pub enum OpCode {
     LookUpGlobal,
     Return,
     Call1,
+    Pop,
     LastMarker,
 }
 

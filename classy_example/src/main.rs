@@ -1,6 +1,6 @@
 use std::mem::size_of;
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 
 use classy_vm::{
     mem::{
@@ -13,6 +13,12 @@ use classy_vm::{
 
 const PAGE_SIZE: usize = 1 << 12;
 const PAGE_ALIGN: usize = 1 << 12;
+
+#[derive(Eq, PartialEq, PartialOrd, Ord, Copy, Debug, Clone, ValueEnum)]
+enum Example {
+    Allocation,
+    Print,
+}
 
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about)]
@@ -34,21 +40,36 @@ struct Args {
 
     #[arg(long)]
     create_handle_every: Option<usize>,
+
+    #[arg(value_enum, default_value_t = Example::Print)]
+    example: Example,
 }
 
 fn main() {
     let args = Args::parse();
-    let vm = Vm::new_default(vm::Options {
+    let mut vm = Vm::new_default(vm::Options {
         page_size: args.page_size + size_of::<Page>(),
         page_align: args.page_align,
         young_space_size: (args.page_size + size_of::<Page>()) * args.pages_count,
         initial_tlab_size: args.page_size,
     });
-    for _ in 0..args.threads {
-        start_thread(&vm, &args);
+    match args.example {
+        Example::Allocation => {
+            for _ in 0..args.threads {
+                start_thread(&vm, &args);
+            }
+            wait_for_all_threads(vm);
+            println!("Done")
+        },
+        Example::Print => {
+            let source = "main:()->();main { print \"Hello world\" };";
+            let mut parser = classy_c::syntax::parser::Parser::new(classy_c::syntax::lexer::Lexer::new(&source));
+            let ast = parser.parse().unwrap();
+            let code = classy_c::emitter::ast::AstEmmiter::compile(ast);
+            let mut thread = vm.create_evaluation_thread(code);
+            thread.interpert();
+        },
     }
-    wait_for_all_threads(vm);
-    println!("Done")
 }
 
 fn wait_for_all_threads(vm: Vm) {

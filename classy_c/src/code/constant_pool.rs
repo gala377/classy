@@ -34,6 +34,7 @@ impl ConstantPool {
     pub fn add_entry(&mut self, entry: TypedEntry) -> usize {
         // SAFETY: All transmutes are used only for the type erasure.
         unsafe {
+            // TODO: All values should be interned to save space
             match entry {
                 TypedEntry::Int(val) => self.entries.push(Entry {
                     typ: EntryType::Int,
