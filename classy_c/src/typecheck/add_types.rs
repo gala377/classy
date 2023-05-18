@@ -1,7 +1,6 @@
 use crate::syntax::ast;
 
-use super::{type_context::TypCtx, r#type::Type};
-
+use super::{r#type::Type, type_context::TypCtx};
 
 pub struct AddTypes<'ctx, 'parent> {
     ctx: &'ctx mut TypCtx<'parent>,
@@ -20,7 +19,6 @@ impl<'ctx, 'parent> AddTypes<'ctx, 'parent> {
 }
 
 impl<'ast, 'ctx, 'parent> ast::Visitor<'ast> for AddTypes<'ctx, 'parent> {
-
     fn visit_fn_def(&mut self, node: &'ast ast::FunctionDefinition) {
         let _id = self.ctx.add_fn_node(node);
         let typ_id = self.ctx.reserve_id();
@@ -34,7 +32,6 @@ impl<'ast, 'ctx, 'parent> ast::Visitor<'ast> for AddTypes<'ctx, 'parent> {
         self.ctx.add_type_name(node.name.clone(), type_id);
     }
 }
-
 
 pub fn insert_primitive_types(ctx: &mut TypCtx) {
     let id = ctx.add_type(Type::UInt);

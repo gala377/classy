@@ -4,7 +4,7 @@ pub mod r#type;
 pub mod type_context;
 pub mod typechecker;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::syntax::{
     self,

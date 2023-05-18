@@ -1,10 +1,13 @@
-use classy_c::{syntax::{
-    ast::Visitor,
-    lexer::Lexer,
-    parser::Parser,
-    tokens::{Token, TokenType},
-}, typecheck::add_types::AddTypes};
 use classy_c::typecheck::{self, type_context::TypCtx};
+use classy_c::{
+    syntax::{
+        ast::Visitor,
+        lexer::Lexer,
+        parser::Parser,
+        tokens::{Token, TokenType},
+    },
+    typecheck::add_types::AddTypes,
+};
 use logos::Logos;
 
 fn main() {

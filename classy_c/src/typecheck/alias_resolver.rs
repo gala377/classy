@@ -1,13 +1,15 @@
 use std::collections::{HashMap, HashSet};
 
-use super::{type_context::{TypeId, TypCtx}, r#type::Type};
+use super::{
+    r#type::Type,
+    type_context::{TypCtx, TypeId},
+};
 
 pub struct AliasResolver {
     resolved: HashMap<TypeId, TypeId>,
 }
 
 impl AliasResolver {
-
     pub fn resolve(ctx: &mut TypCtx) {
         let mut resolver = AliasResolver::new();
         resolver.resolve_aliases(ctx);
@@ -190,5 +192,4 @@ impl AliasResolver {
         ctx.definitions
             .retain(|_, v| if let Type::Alias(_) = v { false } else { true })
     }
-
 }

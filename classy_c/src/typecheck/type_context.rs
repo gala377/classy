@@ -86,7 +86,6 @@ impl<'a> TypCtx<'a> {
         self.add_type_definition(at, typ)
     }
 
-
     pub fn add_type(&mut self, typ: Type) -> TypeId {
         let id = self.next_id();
         self.add_type_definition(id, typ);
@@ -95,13 +94,21 @@ impl<'a> TypCtx<'a> {
 
     pub fn add_variable(&mut self, name: impl Into<String>, typ: TypeId) {
         let name = name.into();
-        assert!(!self.variables.contains_key(&name), "double definition of variable: {}", name);
+        assert!(
+            !self.variables.contains_key(&name),
+            "double definition of variable: {}",
+            name
+        );
         self.variables.insert(name, typ);
     }
 
     pub fn update_variable(&mut self, name: impl Into<String>, typ: TypeId) {
         let name = name.into();
-        assert!(self.variables.contains_key(&name), "variable not defined: {}", name);
+        assert!(
+            self.variables.contains_key(&name),
+            "variable not defined: {}",
+            name
+        );
         self.variables.insert(name, typ);
     }
 
@@ -119,25 +126,31 @@ impl<'a> TypCtx<'a> {
 
     /// Creates an id and associates it with the given type definition node.
     /// Used for structs.
-    /// 
+    ///
     /// Caller has to ensure that no duplicate nodes are pushed as
     /// no identity checking is done to prevent duplicates.
     pub fn add_type_node(&mut self, node: &ast::TypeDefinition) -> DefId {
         let id = self.next_id();
-        self.nodes.insert(id, ast::TopLevelItem::TypeDefinition(node.clone()));
+        self.nodes
+            .insert(id, ast::TopLevelItem::TypeDefinition(node.clone()));
         id
     }
 
     pub fn add_fn_node(&mut self, node: &ast::FunctionDefinition) -> DefId {
         let id = self.next_id();
-        self.nodes.insert(id, ast::TopLevelItem::FunctionDefinition(node.clone()));
+        self.nodes
+            .insert(id, ast::TopLevelItem::FunctionDefinition(node.clone()));
         id
     }
 
     /// Associates given type name with the given type id.
     pub fn add_type_name(&mut self, name: impl Into<Name>, id: TypeId) -> Option<TypeId> {
         let name = name.into();
-        assert!(!self.names.contains_key(&name), "double definition of type: {}", name);
+        assert!(
+            !self.names.contains_key(&name),
+            "double definition of type: {}",
+            name
+        );
         self.names.insert(name, id)
     }
 
@@ -170,7 +183,6 @@ impl<'a> TypCtx<'a> {
             };
             s = s + &format!("\n\t\t{name}: {type_id} => {resolved_type}");
         }
-
 
         s = s + "\n\tnames:";
 
