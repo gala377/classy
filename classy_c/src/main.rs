@@ -1,9 +1,9 @@
-use classy_c::syntax::{
+use classy_c::{syntax::{
     ast::Visitor,
     lexer::Lexer,
     parser::Parser,
     tokens::{Token, TokenType},
-};
+}, typecheck::add_types::AddTypes};
 use classy_c::typecheck::{self, type_context::TypCtx};
 use logos::Logos;
 
@@ -57,6 +57,9 @@ fn main() {
         type Z6 = Z4
         type Z4 = (Int) -> A2
         type Z5 = (Int) -> ()
+
+        main: () -> Z5
+        main = 1 
     "#;
     let lex = Lexer::new(source);
     let mut parser = Parser::new(lex);
@@ -69,15 +72,13 @@ fn main() {
         println!("{e:#?}");
     }
     let mut tctx = TypCtx::new();
-    typecheck::insert_primitive_types(&mut tctx);
-    println!("{}", tctx.debug_string());
-    let mut add_types = typecheck::AddTypes::new(&mut tctx);
+    let mut add_types = AddTypes::with_primitive_types(&mut tctx);
     add_types.visit(&res);
     println!("{}", tctx.debug_string());
     tctx = typecheck::resolve_type_names(tctx);
     println!("{}", tctx.debug_string());
     println!("RESOLVING ALIASES");
-    typecheck::resolve_aliases(&mut tctx);
+    typecheck::alias_resolver::AliasResolver::resolve(&mut tctx);
     println!("{}", tctx.debug_string());
     typecheck::dedup_trivially_eq_types(&mut tctx);
     println!("{}", tctx.debug_string());

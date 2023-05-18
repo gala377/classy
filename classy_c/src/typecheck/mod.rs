@@ -1,5 +1,8 @@
+pub mod add_types;
+pub mod alias_resolver;
 pub mod r#type;
 pub mod type_context;
+pub mod typechecker;
 
 use std::collections::{HashMap, HashSet};
 
@@ -11,6 +14,23 @@ use crate::syntax::{
 use r#type::*;
 use type_context::*;
 
+use self::{add_types::AddTypes, alias_resolver::AliasResolver};
+
+/// Create a top level type context containing all types and functions with their
+/// respective types in the simplest form possible.
+pub fn prepare_for_typechecking(program: &syntax::ast::Program) -> TypCtx<'static> {
+    let mut tctx = TypCtx::new();
+    let mut add_types = AddTypes::with_primitive_types(&mut tctx);
+    add_types.visit(program);
+    tctx = resolve_type_names(tctx);
+    AliasResolver::resolve(&mut tctx);
+    dedup_trivially_eq_types(&mut tctx);
+    tctx
+}
+
+/// Actually creates the types for all ast node in the type context.
+/// Populates type ids created earlier with actual type definitions.
+///
 /// How to extend
 /// 1. Add type to AddTypes - resolve type
 /// 2. Then add type to resolve aliases shallow for type
@@ -18,91 +38,109 @@ use type_context::*;
 /// 4. Also add a type for equality
 /// Actually resolve aliases and replace aliases with map should be
 /// a special case of fold but well.
-
-pub struct AddTypes<'ctx, 'parent> {
-    ctx: &'ctx mut TypCtx<'parent>,
-}
-
-impl<'ctx, 'parent> AddTypes<'ctx, 'parent> {
-    pub fn new(ctx: &'ctx mut TypCtx<'parent>) -> Self {
-        Self { ctx }
-    }
-}
-
-impl<'ast, 'ctx, 'parent> ast::Visitor<'ast> for AddTypes<'ctx, 'parent> {
-    fn visit_fn_def(&mut self, _node: &'ast ast::FunctionDefinition) {}
-
-    fn visit_type_def(&mut self, node: &'ast ast::TypeDefinition) {
-        println!("Adding node for: {node:?}");
-        let _id = self.ctx.add_node(node);
-        let type_id = self.ctx.reserve_type_id();
-        self.ctx.add_name(node.name.clone(), type_id);
-    }
-}
-
-pub fn insert_primitive_types(ctx: &mut TypCtx) {
-    let id = ctx.add_type(Type::UInt);
-    ctx.add_name("UInt", id);
-    let id = ctx.add_type(Type::Int);
-    ctx.add_name("Int", id);
-    let id = ctx.add_type(Type::Bool);
-    ctx.add_name("Bool", id);
-    let id = ctx.add_type(Type::String);
-    ctx.add_name("String", id);
-    let id = ctx.add_type(Type::Float);
-    ctx.add_name("Float", id);
-    let id = ctx.add_type(Type::Unit);
-    ctx.unit_id = id;
-}
-
 pub fn resolve_type_names(mut ctx: TypCtx) -> TypCtx {
-    let mut updates = HashMap::new();
-    for (def_id, def) in &ctx.nodes {
-        let name = &def.name;
-        let exp_msg = format!("the types should have been prepopulated: {name}");
-        let type_id = ctx.names.get(name).expect(&exp_msg);
-        let resolved_type = match &def.definition {
-            ast::DefinedType::Alias(ast::Alias { for_type: inner }) => {
+    let mut type_updates = HashMap::new();
+    let nodes = ctx.nodes.clone();
+    for (def_id, def) in &nodes {
+        match def {
+            ast::TopLevelItem::TypeDefinition(ast::TypeDefinition {
+                name, definition, ..
+            }) => {
+                resolve_top_level_type(&mut ctx, name, definition, def_id, &mut type_updates);
+            }
+            ast::TopLevelItem::FunctionDefinition(ast::FunctionDefinition {
+                name, typ, ..
+            }) => resolve_fn_def(typ, &mut ctx, name),
+        }
+    }
+    for (id, t) in type_updates {
+        ctx.update_type_def(id, t)
+    }
+    ctx
+}
+
+fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String) {
+    match typ {
+        ast::Typ::Function { args, ret } => {
+            let resolved_args: Vec<_> = args
+                .iter()
+                .map(|t| {
+                    resolve_type(
+                        &ctx.names,
+                        &mut ctx.definitions,
+                        &mut ctx.next_id,
+                        ctx.unit_id,
+                        t,
+                    )
+                })
+                .map(Type::Alias)
+                .collect();
+            let resolved_ret = resolve_type(
+                &ctx.names,
+                &mut ctx.definitions,
+                &mut ctx.next_id,
+                ctx.unit_id,
+                ret,
+            );
+            let function_t = ctx.mk_function(&resolved_args, Type::Alias(resolved_ret));
+            assert!(
+                ctx.variables.insert(name.clone(), function_t).is_some(),
+                "updating type definition for funtion that does not exist {}",
+                name
+            );
+        }
+        ast::Typ::Name(_) => todo!("Name aliases for function types not yet supported"),
+        ast::Typ::Application { .. } => todo!("Generic types for function types not yet supported"),
+        _ => panic!("invalid type for function definition {} => {:?}", name, typ),
+    }
+}
+
+fn resolve_top_level_type(
+    ctx: &mut TypCtx,
+    name: &String,
+    definition: &ast::DefinedType,
+    def_id: &usize,
+    updates: &mut HashMap<usize, Type>,
+) {
+    let exp_msg = format!("the types should have been prepopulated: {name}");
+    let type_id = ctx.names.get(name).expect(&exp_msg);
+    let resolved_type = match definition {
+        ast::DefinedType::Alias(ast::Alias { for_type: inner }) => {
+            let resolved_id = resolve_type(
+                &ctx.names,
+                &mut ctx.definitions,
+                &mut ctx.next_id,
+                ctx.unit_id,
+                inner,
+            );
+            Type::Alias(resolved_id)
+        }
+        ast::DefinedType::Record(ast::Record { fields }) => {
+            let mut resolved_fields = Vec::with_capacity(fields.len());
+            for ast::TypedName { name, typ } in fields {
                 let resolved_id = resolve_type(
                     &ctx.names,
                     &mut ctx.definitions,
                     &mut ctx.next_id,
                     ctx.unit_id,
-                    inner,
+                    typ,
                 );
-                Type::Alias(resolved_id)
+                resolved_fields.push((name.clone(), Type::Alias(resolved_id)));
             }
-            ast::DefinedType::Record(ast::Record { fields }) => {
-                let mut resolved_fields = Vec::with_capacity(fields.len());
-                for ast::TypedName { name, typ } in fields {
-                    let resolved_id = resolve_type(
-                        &ctx.names,
-                        &mut ctx.definitions,
-                        &mut ctx.next_id,
-                        ctx.unit_id,
-                        typ,
-                    );
-                    resolved_fields.push((name.clone(), Type::Alias(resolved_id)));
-                }
-                Type::Struct {
-                    def: *def_id,
-                    fields: resolved_fields,
-                }
+            Type::Struct {
+                def: *def_id,
+                fields: resolved_fields,
             }
-            // only adt left
-            _ => unimplemented!(),
-        };
-        if let Some(t) = updates.insert(*type_id, resolved_type) {
-            panic!(
-                "Redefinition of type: {} => {}, previous value {:?}",
-                *type_id, def.name, t
-            );
         }
+        // only adt left
+        _ => unimplemented!(),
+    };
+    if let Some(t) = updates.insert(*type_id, resolved_type) {
+        panic!(
+            "Redefinition of type: {} => {}, previous value {:?}",
+            *type_id, name, t
+        );
     }
-    for (id, t) in updates {
-        ctx.update_def(id, t)
-    }
-    ctx
 }
 
 fn resolve_type(
@@ -147,203 +185,6 @@ fn resolve_type(
         // todo: for other types like a function or an array, we actually
         // need to create them first.
         _ => unimplemented!(),
-    }
-}
-
-pub fn resolve_aliases(ctx: &mut TypCtx) {
-    let mut resolver = AliasResolver::new();
-    resolver.resolve_aliases(ctx);
-    resolver.update_names(ctx);
-    resolver.resolve_aliases_shallow(ctx);
-    resolver.remove_top_level_aliases(ctx);
-}
-
-// TODO, based on type equality remove
-// redundant aliases, for example
-// 0: Int
-// 1: Int
-// 2: struct { a: 1 }
-// The field in 2 can point to 0, then we can compare types
-// using just the id for equality. The one should be removed
-// and all references pointing to 1 should point to 0 now.
-struct AliasResolver {
-    resolved: HashMap<TypeId, TypeId>,
-}
-
-impl AliasResolver {
-    fn new() -> Self {
-        Self {
-            resolved: HashMap::new(),
-        }
-    }
-
-    fn resolve_aliases(&mut self, ctx: &mut TypCtx) {
-        for (typ_id, typ) in &ctx.definitions {
-            let mut resolved_this_path = HashSet::new();
-            match typ {
-                Type::Alias(for_type) => {
-                    let new_id = self.resolve_deep(ctx, &mut resolved_this_path, *for_type);
-                    self.resolved.insert(*typ_id, new_id);
-                    for resolved_type in resolved_this_path {
-                        self.resolved.insert(resolved_type, new_id);
-                    }
-                }
-                _ => {}
-            }
-        }
-        for (type_id, for_type) in &self.resolved {
-            println!("Updating definition for {type_id} => {for_type}");
-            let t = match ctx.definitions.get(&for_type).unwrap() {
-                Type::Struct { .. }
-                | Type::ADT { .. }
-                | Type::Tuple { .. }
-                | Type::Array(..)
-                | Type::Function { .. }
-                | Type::Bool
-                | Type::Float
-                | Type::Int
-                | Type::String
-                | Type::Unit
-                | Type::UInt => Type::Alias(*for_type),
-                Type::Alias(..) => {
-                    unreachable!("no alias should point to another alias at this point")
-                }
-            };
-            ctx.update_def(*type_id, t)
-        }
-    }
-
-    fn update_names(&mut self, ctx: &mut TypCtx) {
-        let mut updates = Vec::new();
-        for (name, tid) in &ctx.names {
-            if let Type::Alias(for_type) = ctx.definitions.get(tid).unwrap() {
-                updates.push((name.clone(), *for_type));
-            }
-        }
-        for (name, tid) in updates {
-            ctx.names.insert(name, tid);
-        }
-    }
-
-    fn resolve_deep(
-        &mut self,
-        ctx: &TypCtx,
-        resolved_this_path: &mut HashSet<TypeId>,
-        follow_type: TypeId,
-    ) -> TypeId {
-        if resolved_this_path.contains(&follow_type) {
-            panic!("type alias loop")
-        }
-        resolved_this_path.insert(follow_type);
-        if let Some(resolved_id) = self.resolved.get(&follow_type) {
-            return *resolved_id;
-        };
-        let t = ctx.definitions.get(&follow_type).unwrap();
-        match t {
-            Type::Alias(for_t) => self.resolve_deep(ctx, resolved_this_path, *for_t),
-            _ => {
-                resolved_this_path.remove(&follow_type);
-                follow_type
-            }
-        }
-    }
-
-    /// Resolves struct field aliases if possible, meaning subsituting
-    /// them will not result in a reference cycle.
-    /// The substitution is shallow so it only resolves aliases 2 levels deep.
-    /// This method should be called after top level aliases have already
-    /// been resolved.
-    fn resolve_aliases_shallow(&mut self, ctx: &mut TypCtx) {
-        let mut updated_defs = HashMap::new();
-        for (typ_id, typ) in &ctx.definitions {
-            if let Type::Alias(_) = typ {
-                // skip top level aliases, keep them to resolve alias chains,
-                // we will remove them later.
-                continue;
-            }
-            updated_defs.insert(*typ_id, self.resolve_shallow_aliases_in_type(ctx, typ));
-        }
-        for (id, typ) in updated_defs {
-            ctx.update_def(id, typ)
-        }
-    }
-
-    fn resolve_shallow_aliases_in_type(&self, ctx: &TypCtx, typ: &Type) -> Type {
-        match typ {
-            Type::Struct {
-                def: def_id,
-                fields,
-            } => {
-                let resolved_fields = fields
-                    .iter()
-                    .map(|(fname, ftyp)| {
-                        assert!(if let Type::Alias(_) = ftyp {
-                            true
-                        } else {
-                            false
-                        });
-                        let resolved_type = self.resolve_shallow_aliases_in_type(ctx, ftyp);
-                        (fname.clone(), resolved_type)
-                    })
-                    .collect();
-                Type::Struct {
-                    def: *def_id,
-                    fields: resolved_fields,
-                }
-            }
-            Type::Alias(for_type) => {
-                let typ = ctx.definitions.get(for_type).unwrap();
-                match typ {
-                    // We will get at most 2 long chain in case of
-                    // struct field => top level alias => specific type
-                    // so we strip the outer alias layer and resolve again
-                    // this type we are sure to hit some other type after
-                    // resolving this alias
-                    Type::Alias(follow) => {
-                        self.resolve_shallow_aliases_in_type(ctx, &Type::Alias(*follow))
-                    }
-                    t @ (Type::UInt
-                    | Type::Int
-                    | Type::Bool
-                    | Type::Float
-                    | Type::String
-                    | Type::Unit) => t.clone(),
-                    // Do not resolve this types as they migh create reference cycles.
-                    Type::Struct { .. } => Type::Alias(*for_type),
-                    Type::Function { .. } => Type::Alias(*for_type),
-                    Type::Tuple { .. } => Type::Alias(*for_type),
-                    Type::ADT { .. } => Type::Alias(*for_type),
-                    Type::Array { .. } => Type::Alias(*for_type),
-                }
-            }
-            Type::Tuple(fields) => {
-                let resolved_fields = fields
-                    .iter()
-                    .map(|f| self.resolve_shallow_aliases_in_type(ctx, f))
-                    .collect();
-                Type::Tuple(resolved_fields)
-            }
-            Type::Function { args, ret } => {
-                let resolved_args = args
-                    .iter()
-                    .map(|t| self.resolve_shallow_aliases_in_type(ctx, t))
-                    .collect();
-                let resolved_ret = self.resolve_shallow_aliases_in_type(ctx, ret);
-                Type::Function {
-                    args: resolved_args,
-                    ret: Box::new(resolved_ret),
-                }
-            }
-            t @ (Type::UInt | Type::Int | Type::Bool | Type::Float | Type::String | Type::Unit) => {
-                t.clone()
-            }
-            _ => unimplemented!(),
-        }
-    }
-
-    fn remove_top_level_aliases(&mut self, ctx: &mut TypCtx) {
-        ctx.definitions
-            .retain(|_, v| if let Type::Alias(_) = v { false } else { true })
     }
 }
 
@@ -434,10 +275,18 @@ pub fn dedup_trivially_eq_types(ctx: &mut TypCtx) {
             }
         }
     }
+    // just debug printing
     for (id, typ_id) in &duplicates {
         println!("this type can be replaced with {id} => {typ_id}")
     }
+    // update type aliases to point to the common type
     for (_, id) in &mut ctx.names {
+        if let Some(new_id) = duplicates.get(id) {
+            *id = *new_id;
+        }
+    }
+    // update variable names to point to the common type
+    for (_, id) in &mut ctx.variables {
         if let Some(new_id) = duplicates.get(id) {
             *id = *new_id;
         }
@@ -483,17 +332,6 @@ fn replace_aliases_with_map(typ: &Type, map: &HashMap<TypeId, TypeId>) -> Type {
         }
         _ => unimplemented!(),
     }
-}
-
-pub fn prepare_for_typechecking(program: &syntax::ast::Program) -> TypCtx<'static> {
-    let mut tctx = TypCtx::new();
-    insert_primitive_types(&mut tctx);
-    let mut add_types = AddTypes::new(&mut tctx);
-    add_types.visit(program);
-    tctx = resolve_type_names(tctx);
-    resolve_aliases(&mut tctx);
-    dedup_trivially_eq_types(&mut tctx);
-    tctx
 }
 
 #[cfg(test)]
@@ -655,12 +493,12 @@ mod tests {
         assert!(parser.errors().is_empty(), "errors while parsing");
         let mut tctx = TypCtx::new();
         let int_id = tctx.add_type(Type::Int);
-        tctx.add_name("Int", int_id);
+        tctx.add_type_name("Int", int_id);
         let mut add_types = typecheck::AddTypes::new(&mut tctx);
         add_types.visit(&res);
         tctx = typecheck::resolve_type_names(tctx);
         println!("{}", tctx.debug_string());
-        typecheck::resolve_aliases(&mut tctx);
+        typecheck::alias_resolver::AliasResolver::resolve(&mut tctx);
         println!("{}", tctx.debug_string());
         typecheck::dedup_trivially_eq_types(&mut tctx);
         tctx

@@ -7,9 +7,15 @@ pub type DefId = usize;
 pub type Name = String;
 
 pub struct TypCtx<'parent> {
+    /// Associates type ids with their types. Useful for resolving aliases.
     pub definitions: HashMap<TypeId, Type>,
+    /// Associates a type name with its type id.
     pub names: HashMap<Name, TypeId>,
-    pub nodes: HashMap<DefId, ast::TypeDefinition>,
+    /// Associates a definition id with its original ast type definition node.
+    pub nodes: HashMap<DefId, ast::TopLevelItem>,
+    /// Associates names of items, that are not types, like variables or
+    /// functions with their type.
+    pub variables: HashMap<Name, TypeId>,
 
     pub next_id: TypeId,
 
@@ -26,6 +32,7 @@ impl TypCtx<'static> {
             definitions: HashMap::new(),
             names: HashMap::new(),
             nodes: HashMap::new(),
+            variables: HashMap::new(),
             parent: None,
         }
     }
@@ -39,6 +46,7 @@ impl<'a> TypCtx<'a> {
             definitions: HashMap::new(),
             names: HashMap::new(),
             nodes: HashMap::new(),
+            variables: HashMap::new(),
             parent: Some(self),
         }
     }
@@ -48,23 +56,13 @@ impl<'a> TypCtx<'a> {
         self.add_type(typ)
     }
 
-    // pub fn mk_array(&mut self, of: TypeId) -> TypeId {
-    //     assert!(self.definitions.contains_key(&of));
-    //     let typ = Type::Array(of);
-    //     self.add_type(typ)
-    // }
-
-    // pub fn mk_function(&mut self, args: &[TypeId], ret: TypeId) -> TypeId {
-    //     assert!(self.definitions.contains_key(&ret));
-    //     for id in args {
-    //         assert!(self.definitions.contains_key(id));
-    //     }
-    //     let typ = Type::Function {
-    //         args: args.into(),
-    //         ret,
-    //     };
-    //     self.add_type(typ)
-    // }
+    pub fn mk_function(&mut self, args: &[Type], ret: Type) -> TypeId {
+        let typ = Type::Function {
+            args: args.into(),
+            ret: Box::new(ret),
+        };
+        self.add_type(typ)
+    }
 
     pub fn mk_struct(&mut self, def_id: DefId, fields: &[(Name, Type)]) -> TypeId {
         assert!(self.nodes.contains_key(&def_id));
@@ -81,20 +79,35 @@ impl<'a> TypCtx<'a> {
             def: def_id,
             fields: fields.into(),
         };
-        self.add_definition(at, typ)
+        self.add_type_definition(at, typ)
     }
 
-    pub fn update_def(&mut self, at: TypeId, typ: Type) {
-        self.add_definition(at, typ)
+    pub fn update_type_def(&mut self, at: TypeId, typ: Type) {
+        self.add_type_definition(at, typ)
     }
+
 
     pub fn add_type(&mut self, typ: Type) -> TypeId {
         let id = self.next_id();
-        self.add_definition(id, typ);
+        self.add_type_definition(id, typ);
         id
     }
 
-    fn add_definition(&mut self, id: TypeId, typ: Type) {
+    pub fn add_variable(&mut self, name: impl Into<String>, typ: TypeId) {
+        let name = name.into();
+        assert!(!self.variables.contains_key(&name), "double definition of variable: {}", name);
+        self.variables.insert(name, typ);
+    }
+
+    pub fn update_variable(&mut self, name: impl Into<String>, typ: TypeId) {
+        let name = name.into();
+        assert!(self.variables.contains_key(&name), "variable not defined: {}", name);
+        self.variables.insert(name, typ);
+    }
+
+    /// Associates the type with the given id. So that when asking
+    /// about the id it will resolve to the given type.
+    fn add_type_definition(&mut self, id: TypeId, typ: Type) {
         self.definitions.insert(id, typ);
     }
 
@@ -104,19 +117,31 @@ impl<'a> TypCtx<'a> {
         res
     }
 
-    /// caller has to ensure that no duplicate nodes are pushed as
+    /// Creates an id and associates it with the given type definition node.
+    /// Used for structs.
+    /// 
+    /// Caller has to ensure that no duplicate nodes are pushed as
     /// no identity checking is done to prevent duplicates.
-    pub fn add_node(&mut self, node: &ast::TypeDefinition) -> DefId {
+    pub fn add_type_node(&mut self, node: &ast::TypeDefinition) -> DefId {
         let id = self.next_id();
-        self.nodes.insert(id, node.clone());
+        self.nodes.insert(id, ast::TopLevelItem::TypeDefinition(node.clone()));
         id
     }
 
-    pub fn add_name(&mut self, name: impl Into<Name>, id: TypeId) -> Option<TypeId> {
-        self.names.insert(name.into(), id)
+    pub fn add_fn_node(&mut self, node: &ast::FunctionDefinition) -> DefId {
+        let id = self.next_id();
+        self.nodes.insert(id, ast::TopLevelItem::FunctionDefinition(node.clone()));
+        id
     }
 
-    pub fn reserve_type_id(&mut self) -> TypeId {
+    /// Associates given type name with the given type id.
+    pub fn add_type_name(&mut self, name: impl Into<Name>, id: TypeId) -> Option<TypeId> {
+        let name = name.into();
+        assert!(!self.names.contains_key(&name), "double definition of type: {}", name);
+        self.names.insert(name, id)
+    }
+
+    pub fn reserve_id(&mut self) -> TypeId {
         self.next_id()
     }
 
@@ -130,6 +155,23 @@ impl<'a> TypCtx<'a> {
         for (id, def) in tmp {
             s = s + &format!("\n\t\t{id}: {def:?}");
         }
+
+        s = s + "\n\tvariables:";
+
+        let mut tmp = Vec::new();
+        for (name, type_id) in &self.variables {
+            tmp.push((name, type_id));
+        }
+        tmp.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
+        for (name, type_id) in tmp {
+            let resolved_type = match self.definitions.get(type_id) {
+                Some(t) => format!("{:?}", t),
+                None => format!("unknown type: {}", type_id),
+            };
+            s = s + &format!("\n\t\t{name}: {type_id} => {resolved_type}");
+        }
+
+
         s = s + "\n\tnames:";
 
         let mut tmp = Vec::new();
