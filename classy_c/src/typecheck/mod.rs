@@ -3,7 +3,7 @@ pub mod type_context;
 
 use std::collections::{HashMap, HashSet};
 
-use crate::syntax::ast;
+use crate::syntax::{ast::{self, Visitor}, self};
 
 use r#type::*;
 use type_context::*;
@@ -16,17 +16,17 @@ use type_context::*;
 /// Actually resolve aliases and replace aliases with map should be
 /// a special case of fold but well.
 
-pub struct AddTypes<'ctx> {
-    ctx: &'ctx mut TypCtx,
+pub struct AddTypes<'ctx, 'parent> {
+    ctx: &'ctx mut TypCtx<'parent>,
 }
 
-impl<'ctx> AddTypes<'ctx> {
-    pub fn new(ctx: &'ctx mut TypCtx) -> Self {
+impl<'ctx, 'parent> AddTypes<'ctx, 'parent> {
+    pub fn new(ctx: &'ctx mut TypCtx<'parent>) -> Self {
         Self { ctx }
     }
 }
 
-impl<'ast, 'ctx> ast::Visitor<'ast> for AddTypes<'ctx> {
+impl<'ast, 'ctx, 'parent> ast::Visitor<'ast> for AddTypes<'ctx, 'parent> {
     fn visit_fn_def(&mut self, _node: &'ast ast::FunctionDefinition) {}
 
     fn visit_type_def(&mut self, node: &'ast ast::TypeDefinition) {
@@ -480,6 +480,17 @@ fn replace_aliases_with_map(typ: &Type, map: &HashMap<TypeId, TypeId>) -> Type {
         }
         _ => unimplemented!(),
     }
+}
+
+pub fn prepare_for_typechecking(program: &syntax::ast::Program) -> TypCtx<'static> {
+    let mut tctx = TypCtx::new();
+    insert_primitive_types(&mut tctx);
+    let mut add_types = AddTypes::new(&mut tctx);
+    add_types.visit(program);
+    tctx = resolve_type_names(tctx);
+    resolve_aliases(&mut tctx);
+    dedup_trivially_eq_types(&mut tctx);
+    tctx
 }
 
 #[cfg(test)]

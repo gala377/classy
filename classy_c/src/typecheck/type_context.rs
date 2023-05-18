@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, hash::Hash};
 
 use crate::{syntax::ast, typecheck::r#type::Type};
 
@@ -6,7 +6,7 @@ pub type TypeId = usize;
 pub type DefId = usize;
 pub type Name = String;
 
-pub struct TypCtx {
+pub struct TypCtx<'parent> {
     pub definitions: HashMap<TypeId, Type>,
     pub names: HashMap<Name, TypeId>,
     pub nodes: HashMap<DefId, ast::TypeDefinition>,
@@ -14,9 +14,12 @@ pub struct TypCtx {
     pub next_id: TypeId,
 
     pub unit_id: TypeId,
+
+    pub parent: Option<&'parent TypCtx<'parent>>,
 }
 
-impl TypCtx {
+
+impl TypCtx<'static> {
     pub fn new() -> Self {
         Self {
             next_id: 0,
@@ -24,6 +27,21 @@ impl TypCtx {
             definitions: HashMap::new(),
             names: HashMap::new(),
             nodes: HashMap::new(),
+            parent: None,
+        }
+    }
+}
+
+impl<'a> TypCtx<'a> {
+
+    pub fn new_child<'this>(&'this self) -> TypCtx<'this> {
+        TypCtx {
+            next_id: self.next_id,
+            unit_id: self.unit_id,
+            definitions: HashMap::new(),
+            names: HashMap::new(),
+            nodes: HashMap::new(),
+            parent: Some(self),
         }
     }
 
