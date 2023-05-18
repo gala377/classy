@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::Hash};
+use std::collections::HashMap;
 
 use crate::{syntax::ast, typecheck::r#type::Type};
 
@@ -18,7 +18,6 @@ pub struct TypCtx<'parent> {
     pub parent: Option<&'parent TypCtx<'parent>>,
 }
 
-
 impl TypCtx<'static> {
     pub fn new() -> Self {
         Self {
@@ -33,7 +32,6 @@ impl TypCtx<'static> {
 }
 
 impl<'a> TypCtx<'a> {
-
     pub fn new_child<'this>(&'this self) -> TypCtx<'this> {
         TypCtx {
             next_id: self.next_id,

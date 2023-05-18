@@ -3,7 +3,10 @@ pub mod type_context;
 
 use std::collections::{HashMap, HashSet};
 
-use crate::syntax::{ast::{self, Visitor}, self};
+use crate::syntax::{
+    self,
+    ast::{self, Visitor},
+};
 
 use r#type::*;
 use type_context::*;
