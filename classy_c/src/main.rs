@@ -64,11 +64,19 @@ fn main() {
         print: (String) -> ()
         print s = ()
 
+        type MyString = String
+
+        get_string: () -> MyString
+        get_string = "Hello world"
+
+        get_int: () -> A
+        get_int = 1
+
         main: () -> ()
-        main {
-            let a = "hello"
-            let b = 1
-            print a
+        main { 
+            let a = get_string
+            let b = get_int()
+            print(b)
         }
     "#;
     let lex = Lexer::new(source);
