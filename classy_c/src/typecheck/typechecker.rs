@@ -2,11 +2,7 @@ use std::collections::HashMap;
 
 use crate::syntax::ast::{self, Visitor};
 
-use super::{
-    r#type::Type,
-    type_context::{TypCtx},
-    types_eq,
-};
+use super::{r#type::Type, type_context::TypCtx, types_eq};
 
 struct Scope<'s> {
     type_ctx: TypCtx,
@@ -55,21 +51,30 @@ impl<'s> Scope<'s> {
     }
 
     pub fn type_of(&self, name: &str) -> Option<Type> {
-        self.resolved_types
+        self.resolved_vars
             .get(name)
             .cloned()
             .or_else(|| self.parent.as_ref().and_then(|parent| parent.type_of(name)))
     }
 
     pub fn lookup_type(&self, name: &str) -> Option<Type> {
-        let Some(id) = self.type_ctx.types.get(name).cloned() else {
-            return self.parent.as_ref().and_then(|parent| parent.lookup_type(name));
-        };
-        self.type_ctx.definitions.get(&id).cloned()
+        self.resolved_types.get(name).cloned().or_else(|| {
+            self.parent
+                .as_ref()
+                .and_then(|parent| parent.lookup_type(name))
+        })
     }
 
     pub fn add_variable(&mut self, name: &str, typ: Type) {
         self.resolved_vars.insert(name.to_owned(), typ);
+    }
+
+    pub fn types_eq(&self, a: &Type, b: &Type) -> bool {
+        types_eq(&self.type_ctx, a, b)
+            || self
+                .parent
+                .as_ref()
+                .map_or(false, |parent| parent.types_eq(a, b))
     }
 }
 
@@ -110,7 +115,7 @@ impl<'s> TypeChecker<'s> {
             ast::Expr::Assignment { lval, rval } => {
                 let lval_t = self.typecheck_expr(lval);
                 let rval_t = self.typecheck_expr(rval);
-                if !types_eq(&self.scope.type_ctx, &lval_t, &rval_t) {
+                if !self.scope.types_eq( &lval_t, &rval_t) {
                     panic!("Expected type {:?} but got {:?}", lval_t, rval_t)
                 }
                 Type::Unit
@@ -141,7 +146,7 @@ impl<'s> TypeChecker<'s> {
                             )
                         }
                         for (expected_arg, arg) in expected_args.iter().zip(args_t) {
-                            if !types_eq(&self.scope.type_ctx, &expected_arg, &arg) {
+                            if !self.scope.types_eq(&expected_arg, &arg) {
                                 panic!("Expected type {:?} but got {:?}", expected_arg, arg)
                             }
                         }
@@ -175,7 +180,7 @@ impl<'s> TypeChecker<'s> {
             ast::Expr::TypedExpr { expr, typ } => {
                 let expr_t = self.typecheck_expr(expr);
                 let typ_t = self.ast_type_to_type(typ);
-                if !types_eq(&self.scope.type_ctx, &expr_t, &typ_t) {
+                if !self.scope.types_eq(&expr_t, &typ_t) {
                     panic!("Expected type {:?} but got {:?}", typ_t, expr_t)
                 }
                 expr_t
@@ -198,10 +203,10 @@ impl<'s> TypeChecker<'s> {
                     .functions_ret_type
                     .clone()
                     .expect("Expected return type to be set");
-                if !types_eq(&self.scope.type_ctx, &expr_t, &ret_t) {
+                if !self.scope.types_eq(&expr_t, &ret_t) {
                     panic!("Expected type {:?} but got {:?}", ret_t, expr_t)
                 }
-                ret_t
+                Type::Divergent
             }
             ast::Expr::If {
                 cond,
@@ -217,7 +222,7 @@ impl<'s> TypeChecker<'s> {
                     .as_ref()
                     .map(|e| self.typecheck_expr(e))
                     .unwrap_or(Type::Unit);
-                if !types_eq(&self.scope.type_ctx, &body_t, &else_body_t) {
+                if !self.scope.types_eq(&body_t, &else_body_t) {
                     panic!("Expected type {:?} but got {:?}", body_t, else_body_t)
                 }
                 body_t
@@ -228,7 +233,7 @@ impl<'s> TypeChecker<'s> {
                     ast::Typ::ToInfere => init_t,
                     _ => {
                         let typ_t = self.ast_type_to_type(typ);
-                        if !types_eq(&self.scope.type_ctx, &init_t, &typ_t) {
+                        if !self.scope.types_eq(&init_t, &typ_t) {
                             panic!("Expected type {:?} but got {:?}", typ_t, init_t)
                         }
                         typ_t
@@ -291,7 +296,7 @@ impl<'ast, 'parent> Visitor<'ast> for TypeChecker<'parent> {
             fn_scope.add_variable(&param, typ);
         }
         let actual_type = fn_scope.typecheck_expr(body);
-        if !types_eq(&self.scope.type_ctx, &actual_type, &ret) {
+        if !self.scope.types_eq(&actual_type, &ret) {
             panic!(
                 "Expected function {} to return type {:?} but got {:?}",
                 name, ret, actual_type

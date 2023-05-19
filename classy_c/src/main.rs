@@ -61,8 +61,15 @@ fn main() {
         type Z4 = (Int) -> A2
         type Z5 = (Int) -> ()
 
-        main: () -> Z5
-        main = 1 
+        print: (String) -> ()
+        print s = ()
+
+        main: () -> ()
+        main {
+            let a = "hello"
+            let b = 1
+            print a
+        }
     "#;
     let lex = Lexer::new(source);
     let mut parser = Parser::new(lex);
