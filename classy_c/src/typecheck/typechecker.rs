@@ -93,7 +93,9 @@ impl<'s> Scope<'s> {
     pub fn resolve_alias(&self, for_type: TypeId) -> Type {
         let mut t = Type::Alias(for_type);
         while let Type::Alias(for_type) = t {
-            t = self.resolve_type_id(for_type).expect("Expected type to exist");
+            t = self
+                .resolve_type_id(for_type)
+                .expect("Expected type to exist");
         }
         t
     }
