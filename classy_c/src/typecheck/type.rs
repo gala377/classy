@@ -26,4 +26,7 @@ pub enum Type {
     Tuple(Vec<Type>),
     Array(Box<Type>),
     Alias(TypeId),
+    /// Used for expressions that diverge the execution flow, like "return".
+    /// Equal to any type.
+    Divergent,
 }

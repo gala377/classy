@@ -11,8 +11,12 @@ pub trait Visitor<'ast>: Sized {
         walk_top_level_item(self, node)
     }
 
-    fn visit_fn_def(&mut self, _node: &'ast ast::FunctionDefinition) {}
-    fn visit_type_def(&mut self, _node: &'ast ast::TypeDefinition) {}
+    fn visit_fn_def(&mut self, _node: &'ast ast::FunctionDefinition) {
+        todo!()
+    }
+    fn visit_type_def(&mut self, _node: &'ast ast::TypeDefinition) {
+        todo!()
+    }
 
     fn visit_expr(&mut self, _node: &'ast ast::Expr) {}
 

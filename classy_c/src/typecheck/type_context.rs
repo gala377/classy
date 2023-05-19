@@ -6,11 +6,11 @@ pub type TypeId = usize;
 pub type DefId = usize;
 pub type Name = String;
 
-pub struct TypCtx<'parent> {
+pub struct TypCtx {
     /// Associates type ids with their types. Useful for resolving aliases.
     pub definitions: HashMap<TypeId, Type>,
     /// Associates a type name with its type id.
-    pub names: HashMap<Name, TypeId>,
+    pub types: HashMap<Name, TypeId>,
     /// Associates a definition id with its original ast type definition node.
     pub nodes: HashMap<DefId, ast::TopLevelItem>,
     /// Associates names of items, that are not types, like variables or
@@ -20,37 +20,22 @@ pub struct TypCtx<'parent> {
     pub next_id: TypeId,
 
     pub unit_id: TypeId,
-
-    pub parent: Option<&'parent TypCtx<'parent>>,
 }
 
-impl TypCtx<'static> {
+impl TypCtx {
     pub fn new() -> Self {
         Self {
             next_id: 0,
             unit_id: 0,
             definitions: HashMap::new(),
-            names: HashMap::new(),
+            types: HashMap::new(),
             nodes: HashMap::new(),
             variables: HashMap::new(),
-            parent: None,
         }
     }
 }
 
-impl<'a> TypCtx<'a> {
-    pub fn new_child<'this>(&'this self) -> TypCtx<'this> {
-        TypCtx {
-            next_id: self.next_id,
-            unit_id: self.unit_id,
-            definitions: HashMap::new(),
-            names: HashMap::new(),
-            nodes: HashMap::new(),
-            variables: HashMap::new(),
-            parent: Some(self),
-        }
-    }
-
+impl TypCtx {
     pub fn mk_tuple(&mut self, of: &[Type]) -> TypeId {
         let typ = Type::Tuple(of.into());
         self.add_type(typ)
@@ -90,6 +75,18 @@ impl<'a> TypCtx<'a> {
         let id = self.next_id();
         self.add_type_definition(id, typ);
         id
+    }
+
+    /// Get a type of a variable with the given name.
+    pub fn type_of(&self, name: &str) -> Option<Type> {
+        let id = self.variables.get(name)?;
+        self.definitions.get(id).cloned()
+    }
+
+    /// Resolve the name of the type to its Type representation.
+    pub fn get_type(&self, name: &str) -> Option<Type> {
+        let id = self.types.get(name)?;
+        self.definitions.get(id).cloned()
     }
 
     pub fn add_variable(&mut self, name: impl Into<String>, typ: TypeId) {
@@ -147,11 +144,11 @@ impl<'a> TypCtx<'a> {
     pub fn add_type_name(&mut self, name: impl Into<Name>, id: TypeId) -> Option<TypeId> {
         let name = name.into();
         assert!(
-            !self.names.contains_key(&name),
+            !self.types.contains_key(&name),
             "double definition of type: {}",
             name
         );
-        self.names.insert(name, id)
+        self.types.insert(name, id)
     }
 
     pub fn reserve_id(&mut self) -> TypeId {
@@ -187,7 +184,7 @@ impl<'a> TypCtx<'a> {
         s = s + "\n\tnames:";
 
         let mut tmp = Vec::new();
-        for (id, def) in &self.names {
+        for (id, def) in &self.types {
             tmp.push((def, id));
         }
         tmp.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));

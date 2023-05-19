@@ -2,23 +2,23 @@ use crate::syntax::ast;
 
 use super::{r#type::Type, type_context::TypCtx};
 
-pub struct AddTypes<'ctx, 'parent> {
-    ctx: &'ctx mut TypCtx<'parent>,
+pub struct AddTypes<'ctx> {
+    ctx: &'ctx mut TypCtx,
 }
 
-impl<'ctx, 'parent> AddTypes<'ctx, 'parent> {
-    pub fn new(ctx: &'ctx mut TypCtx<'parent>) -> Self {
+impl<'ctx> AddTypes<'ctx> {
+    pub fn new(ctx: &'ctx mut TypCtx) -> Self {
         Self { ctx }
     }
 
-    pub fn with_primitive_types(ctx: &'ctx mut TypCtx<'parent>) -> Self {
+    pub fn with_primitive_types(ctx: &'ctx mut TypCtx) -> Self {
         let mut this = Self::new(ctx);
         insert_primitive_types(&mut this.ctx);
         this
     }
 }
 
-impl<'ast, 'ctx, 'parent> ast::Visitor<'ast> for AddTypes<'ctx, 'parent> {
+impl<'ast, 'ctx> ast::Visitor<'ast> for AddTypes<'ctx> {
     fn visit_fn_def(&mut self, node: &'ast ast::FunctionDefinition) {
         let _id = self.ctx.add_fn_node(node);
         let typ_id = self.ctx.reserve_id();

@@ -55,6 +55,7 @@ impl AliasResolver {
                 Type::Alias(..) => {
                     unreachable!("no alias should point to another alias at this point")
                 }
+                _ => unreachable!("other types should not be visible here"),
             };
             ctx.update_type_def(*type_id, t)
         }
@@ -62,13 +63,13 @@ impl AliasResolver {
 
     fn update_names(&mut self, ctx: &mut TypCtx) {
         let mut updates = Vec::new();
-        for (name, tid) in &ctx.names {
+        for (name, tid) in &ctx.types {
             if let Type::Alias(for_type) = ctx.definitions.get(tid).unwrap() {
                 updates.push((name.clone(), *for_type));
             }
         }
         for (name, tid) in updates {
-            ctx.names.insert(name, tid);
+            ctx.types.insert(name, tid);
         }
     }
 
@@ -161,6 +162,7 @@ impl AliasResolver {
                     Type::Tuple { .. } => Type::Alias(*for_type),
                     Type::ADT { .. } => Type::Alias(*for_type),
                     Type::Array { .. } => Type::Alias(*for_type),
+                    _ => unreachable!("other types should not be visible here"),
                 }
             }
             Type::Tuple(fields) => {

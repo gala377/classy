@@ -18,7 +18,7 @@ use self::{add_types::AddTypes, alias_resolver::AliasResolver};
 
 /// Create a top level type context containing all types and functions with their
 /// respective types in the simplest form possible.
-pub fn prepare_for_typechecking(program: &syntax::ast::Program) -> TypCtx<'static> {
+pub fn prepare_for_typechecking(program: &syntax::ast::Program) -> TypCtx {
     let mut tctx = TypCtx::new();
     let mut add_types = AddTypes::with_primitive_types(&mut tctx);
     add_types.visit(program);
@@ -66,7 +66,7 @@ fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String) {
                 .iter()
                 .map(|t| {
                     resolve_type(
-                        &ctx.names,
+                        &ctx.types,
                         &mut ctx.definitions,
                         &mut ctx.next_id,
                         ctx.unit_id,
@@ -76,7 +76,7 @@ fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String) {
                 .map(Type::Alias)
                 .collect();
             let resolved_ret = resolve_type(
-                &ctx.names,
+                &ctx.types,
                 &mut ctx.definitions,
                 &mut ctx.next_id,
                 ctx.unit_id,
@@ -103,11 +103,11 @@ fn resolve_top_level_type(
     updates: &mut HashMap<usize, Type>,
 ) {
     let exp_msg = format!("the types should have been prepopulated: {name}");
-    let type_id = ctx.names.get(name).expect(&exp_msg);
+    let type_id = ctx.types.get(name).expect(&exp_msg);
     let resolved_type = match definition {
         ast::DefinedType::Alias(ast::Alias { for_type: inner }) => {
             let resolved_id = resolve_type(
-                &ctx.names,
+                &ctx.types,
                 &mut ctx.definitions,
                 &mut ctx.next_id,
                 ctx.unit_id,
@@ -119,7 +119,7 @@ fn resolve_top_level_type(
             let mut resolved_fields = Vec::with_capacity(fields.len());
             for ast::TypedName { name, typ } in fields {
                 let resolved_id = resolve_type(
-                    &ctx.names,
+                    &ctx.types,
                     &mut ctx.definitions,
                     &mut ctx.next_id,
                     ctx.unit_id,
@@ -280,7 +280,7 @@ pub fn dedup_trivially_eq_types(ctx: &mut TypCtx) {
         println!("this type can be replaced with {id} => {typ_id}")
     }
     // update type aliases to point to the common type
-    for (_, id) in &mut ctx.names {
+    for (_, id) in &mut ctx.types {
         if let Some(new_id) = duplicates.get(id) {
             *id = *new_id;
         }
@@ -482,6 +482,8 @@ mod tests {
                         .zip(args2)
                         .all(|(t1, t2)| test_types_eq(ctx, t1, t2))
             }
+            (Type::Divergent, _) => true,
+            (_, Type::Divergent) => true,
             _ => false,
         }
     }
