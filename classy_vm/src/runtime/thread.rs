@@ -122,15 +122,7 @@ impl Thread {
                 OpCode::ConstLoadInteger => todo!(),
                 OpCode::ConstLoadFloat => todo!(),
                 OpCode::ConstLoadString => {
-                    // TODO: this is wrong, we should not allocate every time
-                    // if we just load a string literal
-                    // we should probably go through code when we first see it and allocate
-                    // every string into a static heap, then replace the instruction by
-                    // const load string ref and put string reference instead of an id to
-                    // a string table. This requires us to instead of having a byte after the instruction
-                    // have a full word to store the pointer.
                     instr += 1;
-                    // We need to read it as
                     let address_bytes = &self.code.instructions[instr..instr + size_of::<u64>()];
                     assert!(address_bytes.len() == 8);
                     let mut address_bytes_array: [u8; 8] = [0; 8];
@@ -139,7 +131,6 @@ impl Thread {
                     }
                     let address = u64::from_le_bytes(address_bytes_array);
                     let instance: Ptr<StringInst> = unsafe { std::mem::transmute(address) };
-                    // unsafe as heck, there is a possiblity we could not allocate
                     self.stack.push(
                         instance
                             .inner()
