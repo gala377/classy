@@ -110,6 +110,7 @@ pub enum Expr {
     IntConst(isize),
     StringConst(String),
     FloatConst(f64),
+    BoolConst(bool),
     Name(String),
     FunctionCall {
         func: Box<Expr>,

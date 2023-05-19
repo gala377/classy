@@ -76,7 +76,8 @@ fn main() {
         main { 
             let a = get_string
             let b = get_int()
-            print(b)
+            let c = if (false) { "Hello world" } else { get_string() }
+            print c
         }
     "#;
     let lex = Lexer::new(source);

@@ -51,6 +51,7 @@ pub trait Visitor<'ast>: Sized {
         _values: &'ast HashMap<String, ast::Expr>,
     ) {
     }
+    fn visit_bool_const(&mut self, _val: bool) {}
 }
 
 pub fn walk_program<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::Program) {
@@ -121,6 +122,7 @@ pub fn walk_expr<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::Expr) {
         ast::Expr::Let { name, typ, init } => {
             v.visit_let(name, typ, init);
         }
+        ast::Expr::BoolConst(val) => v.visit_bool_const(*val),
     }
 }
 

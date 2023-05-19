@@ -50,6 +50,10 @@ pub enum TokenType {
     Float(f64),
     #[regex(r#""(?:[^"]|\\")*""#, |lex| lex.slice()[1..lex.slice().len()-1].to_owned())]
     String(String),
+    #[token("true")]
+    True,
+    #[token("false")]
+    False,
 
     // Grouping
     #[token("{")]

@@ -107,6 +107,10 @@ impl<'s> TypeChecker<'s> {
     pub fn typecheck_expr(&mut self, expr: &ast::Expr) -> Type {
         match expr {
             ast::Expr::Unit => Type::Unit,
+            ast::Expr::BoolConst(_) => Type::Bool,
+            ast::Expr::IntConst(_) => Type::Int,
+            ast::Expr::StringConst(_) => Type::String,
+            ast::Expr::FloatConst(_) => Type::Float,
             ast::Expr::Sequence(exprs) => exprs
                 .iter()
                 .map(|expr| self.typecheck_expr(expr))
@@ -120,9 +124,6 @@ impl<'s> TypeChecker<'s> {
                 }
                 Type::Unit
             }
-            ast::Expr::IntConst(_) => Type::Int,
-            ast::Expr::StringConst(_) => Type::String,
-            ast::Expr::FloatConst(_) => Type::Float,
             ast::Expr::Name(name) => self
                 .scope
                 .type_of(name)
@@ -241,7 +242,7 @@ impl<'s> TypeChecker<'s> {
                     }
                 };
                 self.scope.add_variable(name, typ_t.clone());
-                typ_t
+                Type::Unit
             }
         }
     }
