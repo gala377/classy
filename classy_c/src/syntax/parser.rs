@@ -632,11 +632,11 @@ impl<'source> Parser<'source> {
             TokenType::True => {
                 self.lexer.advance();
                 Ok(ast::Expr::BoolConst(true))
-            },
+            }
             TokenType::False => {
                 self.lexer.advance();
                 Ok(ast::Expr::BoolConst(false))
-            },
+            }
             TokenType::Identifier(name) => {
                 self.lexer.advance();
                 if let Ok(_) = self.match_token(TokenType::FatArrow) {

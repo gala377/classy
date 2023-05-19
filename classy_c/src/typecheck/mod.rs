@@ -196,12 +196,18 @@ fn types_eq(ctx: &TypCtx, t1: &Type, t2: &Type) -> bool {
         _ => {}
     }
     let t1 = if let Type::Alias(for_type) = t1 {
-        ctx.definitions.get(for_type).unwrap()
+        match ctx.definitions.get(for_type) {
+            Some(t) => t,
+            None => return false,
+        }
     } else {
         t1
     };
     let t2 = if let Type::Alias(for_type) = t2 {
-        ctx.definitions.get(for_type).unwrap()
+        match ctx.definitions.get(for_type) {
+            Some(t) => t,
+            None => return false,
+        }
     } else {
         t2
     };

@@ -72,11 +72,15 @@ fn main() {
         get_int: () -> A
         get_int = 1
 
+        call: (() -> Int) -> Int
+        call f = f()
+
         main: () -> ()
         main { 
             let a = get_string
             let b = get_int()
             let c = if (false) { "Hello world" } else { get_string() }
+            call get_int
             print c
         }
     "#;

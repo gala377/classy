@@ -2,7 +2,11 @@ use std::collections::HashMap;
 
 use crate::syntax::ast::{self, Visitor};
 
-use super::{r#type::Type, type_context::TypCtx, types_eq};
+use super::{
+    r#type::Type,
+    type_context::{TypCtx, TypeId},
+    types_eq,
+};
 
 struct Scope<'s> {
     type_ctx: TypCtx,
@@ -76,6 +80,23 @@ impl<'s> Scope<'s> {
                 .as_ref()
                 .map_or(false, |parent| parent.types_eq(a, b))
     }
+
+    pub fn resolve_type_id(&self, typ_id: TypeId) -> Option<Type> {
+        self.type_ctx.definitions.get(&typ_id).cloned().or_else(|| {
+            self.parent
+                .as_ref()
+                .map(|parent| parent.resolve_type_id(typ_id))
+                .flatten()
+        })
+    }
+
+    pub fn resolve_alias(&self, for_type: TypeId) -> Type {
+        let mut t = Type::Alias(for_type);
+        while let Type::Alias(for_type) = t {
+            t = self.resolve_type_id(for_type).expect("Expected type to exist");
+        }
+        t
+    }
 }
 
 pub struct TypeChecker<'s> {
@@ -119,7 +140,7 @@ impl<'s> TypeChecker<'s> {
             ast::Expr::Assignment { lval, rval } => {
                 let lval_t = self.typecheck_expr(lval);
                 let rval_t = self.typecheck_expr(rval);
-                if !self.scope.types_eq( &lval_t, &rval_t) {
+                if !self.scope.types_eq(&lval_t, &rval_t) {
                     panic!("Expected type {:?} but got {:?}", lval_t, rval_t)
                 }
                 Type::Unit
@@ -129,7 +150,10 @@ impl<'s> TypeChecker<'s> {
                 .type_of(name)
                 .expect("Expected type of variable to exist"),
             ast::Expr::FunctionCall { func, args } => {
-                let func_t = self.typecheck_expr(func);
+                let mut func_t = self.typecheck_expr(func);
+                if let Type::Alias(f_id) = func_t {
+                    func_t = self.scope.resolve_alias(f_id);
+                }
                 let args_t = args
                     .iter()
                     .map(|arg| self.typecheck_expr(arg))
