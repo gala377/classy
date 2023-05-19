@@ -191,7 +191,7 @@ impl<'s> TypeChecker<'s> {
                 if cond_t != Type::Bool {
                     panic!("Expected type {:?} but got {:?}", Type::Bool, cond_t)
                 }
-                let body_t = self.typecheck_expr(body);
+                let body_t = self.new_scope().typecheck_expr(body);
                 if body_t != Type::Unit {
                     panic!("Expected type {:?} but got {:?}", Type::Unit, body_t)
                 }
@@ -217,10 +217,11 @@ impl<'s> TypeChecker<'s> {
                 if cond_t != Type::Bool {
                     panic!("Expected type {:?} but got {:?}", Type::Bool, cond_t)
                 }
-                let body_t = self.typecheck_expr(body);
+
+                let body_t = self.new_scope().typecheck_expr(body);
                 let else_body_t = else_body
                     .as_ref()
-                    .map(|e| self.typecheck_expr(e))
+                    .map(|e| self.new_scope().typecheck_expr(e))
                     .unwrap_or(Type::Unit);
                 if !self.scope.types_eq(&body_t, &else_body_t) {
                     panic!("Expected type {:?} but got {:?}", body_t, else_body_t)
