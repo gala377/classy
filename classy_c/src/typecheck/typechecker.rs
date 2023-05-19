@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
-use crate::syntax::ast::{self, visitor::walk_expr, Visitor};
+use crate::syntax::ast::{self, Visitor};
 
 use super::{
     r#type::Type,
-    type_context::{TypCtx, TypeId},
+    type_context::{TypCtx},
     types_eq,
 };
 
@@ -41,15 +41,6 @@ impl<'s> Scope<'s> {
             type_ctx,
             resolved_types,
             resolved_vars,
-            parent: None,
-        }
-    }
-
-    pub fn empty() -> Self {
-        Self {
-            type_ctx: TypCtx::new(),
-            resolved_types: HashMap::new(),
-            resolved_vars: HashMap::new(),
             parent: None,
         }
     }
