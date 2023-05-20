@@ -116,4 +116,13 @@ mod tests {
             });
         run_test(input, expected)
     }
+
+    #[test]
+    fn recognizes_struct_with_no_fields() {
+        let input = r#"type Foo {}; main: () -> (); main = Foo();"#;
+        let expected = ast::Builder::new()
+            .struct_def("Foo", |strct| strct)
+            .unit_fn("main", |body| body.struct_literal("Foo", |values| values));
+        run_test(input, expected)
+    }
 }
