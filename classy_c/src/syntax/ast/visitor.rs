@@ -14,7 +14,7 @@ pub trait Visitor<'ast>: Sized {
     fn visit_fn_def(&mut self, def: &'ast ast::FunctionDefinition) {
         walk_function_def(self, def)
     }
-    
+
     fn visit_type_def(&mut self, _node: &'ast ast::TypeDefinition) {}
 
     fn visit_expr(&mut self, node: &'ast ast::Expr) {
@@ -24,7 +24,7 @@ pub trait Visitor<'ast>: Sized {
     fn visit_sequence(&mut self, seq: &'ast [ast::Expr]) {
         walk_seq_expr(self, seq)
     }
-    
+
     fn visit_function_call(
         &mut self,
         func: &'ast ast::Expr,
@@ -33,27 +33,27 @@ pub trait Visitor<'ast>: Sized {
     ) {
         walk_function_call(self, func, args, kwargs)
     }
-    
+
     fn visit_access(&mut self, val: &'ast ast::Expr, field: &'ast str) {
         walk_access(self, val, field)
     }
-    
+
     fn visit_tuple(&mut self, fields: &'ast [ast::Expr]) {
         walk_tuple(self, fields)
     }
-    
+
     fn visit_lambda(&mut self, params: &'ast [ast::TypedName], body: &'ast ast::Expr) {
         walk_lambda(self, params, body)
     }
-    
+
     fn visit_while(&mut self, cond: &'ast ast::Expr, body: &'ast ast::Expr) {
         walk_while(self, cond, body)
     }
-    
+
     fn visit_return(&mut self, expr: &'ast ast::Expr) {
         walk_expr(self, expr)
     }
-    
+
     fn visit_if(
         &mut self,
         cond: &'ast ast::Expr,
@@ -62,15 +62,15 @@ pub trait Visitor<'ast>: Sized {
     ) {
         walk_if(self, cond, body, else_body)
     }
-    
+
     fn visit_let(&mut self, name: &'ast str, typ: &'ast ast::Typ, init: &'ast ast::Expr) {
         walk_let(self, name, typ, init)
     }
-    
+
     fn visit_assignment(&mut self, lval: &'ast ast::Expr, rval: &'ast ast::Expr) {
         walk_assignment(self, lval, rval)
     }
-    
+
     fn visit_typed_expr(&mut self, expr: &'ast ast::Expr, typ: &'ast ast::Typ) {
         walk_typed_expression(self, expr, typ)
     }
@@ -82,7 +82,6 @@ pub trait Visitor<'ast>: Sized {
     ) {
         walk_struct_literal(self, strct, values);
     }
-
 
     // leaf nodes
     fn visit_typ(&mut self, _node: &'ast ast::Typ) {}
@@ -274,10 +273,7 @@ pub fn walk_lambda<'ast, V: Visitor<'ast>>(
     v.visit_expr(body);
 }
 
-pub fn walk_function_def<'ast, V: Visitor<'ast>>(
-    v: &mut V,
-    def: &'ast ast::FunctionDefinition,
-) {
+pub fn walk_function_def<'ast, V: Visitor<'ast>>(v: &mut V, def: &'ast ast::FunctionDefinition) {
     v.visit_name(&def.name);
     v.visit_typ(&def.typ);
     for param in &def.parameters {
