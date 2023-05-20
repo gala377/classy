@@ -2,6 +2,7 @@ use std::{collections::HashMap, ops::Range};
 
 pub mod visitor;
 pub use visitor::Visitor;
+pub mod fold;
 
 // cargo is actually wrong about this, it confuses
 // usage of this function with unstable feature
@@ -153,7 +154,7 @@ pub enum Expr {
 
 #[derive(Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq))]
-pub struct Path(Vec<String>);
+pub struct Path(pub Vec<String>);
 
 impl Path {
     pub fn try_from_expr(expr: Expr) -> Option<Self> {
