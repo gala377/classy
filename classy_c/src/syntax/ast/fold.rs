@@ -6,7 +6,6 @@ use crate::syntax::ast::{
 
 use super::{DefinedType, TypeVariable};
 
-
 /// TODO: Not all travelsal methods are implemented yet.
 pub trait Folder: Sized {
     fn fold_program(&mut self, program: Program) -> Program {
@@ -69,7 +68,7 @@ pub trait Folder: Sized {
     }
 
     fn fold_access(&mut self, val: Expr, field: String) -> Expr {
-        fold_access(self, val, field)   
+        fold_access(self, val, field)
     }
 
     fn fold_tuple(&mut self, fields: Vec<Expr>) -> Expr {
@@ -202,7 +201,6 @@ pub fn fold_expr(folder: &mut impl Folder, expr: Expr) -> Expr {
         Expr::BoolConst(val) => Expr::BoolConst(folder.fold_bool_const(val)),
     }
 }
-
 
 pub fn fold_sequence(folder: &mut impl Folder, seq: Vec<Expr>) -> Vec<Expr> {
     let mut new_seq = Vec::new();

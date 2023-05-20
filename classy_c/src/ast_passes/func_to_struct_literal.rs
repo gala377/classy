@@ -89,8 +89,7 @@ mod tests {
 
     #[test]
     fn replaces_simple_struct_literal() {
-        let input =
-            r#"type Foo {bar: Int; baz: Int}; main: () -> (); main = Foo(bar=1, baz=2);"#;
+        let input = r#"type Foo {bar: Int; baz: Int}; main: () -> (); main = Foo(bar=1, baz=2);"#;
         let expected = ast::Builder::new()
             .struct_def("Foo", |strct| strct.field("bar", "Int").field("baz", "Int"))
             .unit_fn("main", |body| {

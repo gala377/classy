@@ -3,6 +3,7 @@ use std::{collections::HashMap, ops::Range};
 pub mod visitor;
 pub use visitor::Visitor;
 pub mod fold;
+pub mod typed;
 
 // cargo is actually wrong about this, it confuses
 // usage of this function with unstable feature
