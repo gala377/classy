@@ -335,10 +335,12 @@ impl<'ast, 'parent> Visitor<'ast> for TypeChecker<'parent> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{syntax::{lexer::Lexer, parser::Parser, ast::visitor::Visitor}, typecheck};
+    use crate::{
+        syntax::{ast::visitor::Visitor, lexer::Lexer, parser::Parser},
+        typecheck,
+    };
 
     use super::TypeChecker;
-
 
     fn run_typechecker(source: &str) {
         let lex = Lexer::new(source);
@@ -427,7 +429,6 @@ mod tests {
             "#;
         run_typechecker(source);
     }
-
 
     #[test]
     #[should_panic]
