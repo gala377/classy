@@ -20,25 +20,6 @@ impl<'ctx> ast_passes::AstPass for PromoteCallToStructLiteral<'ctx> {
 }
 
 impl<'ctx> ast::fold::Folder for PromoteCallToStructLiteral<'ctx> {
-    fn fold_program(&mut self, program: ast::Program) -> ast::Program {
-        ast::fold::fold_program(self, program)
-    }
-
-    fn fold_top_level_item(&mut self, item: ast::TopLevelItem) -> ast::TopLevelItem {
-        ast::fold::fold_top_level_item(self, item)
-    }
-
-    fn fold_function_definition(
-        &mut self,
-        def: ast::FunctionDefinition,
-    ) -> ast::FunctionDefinition {
-        ast::fold::fold_function_definition(self, def)
-    }
-
-    fn fold_expr(&mut self, expr: ast::Expr) -> ast::Expr {
-        ast::fold::fold_expr(self, expr)
-    }
-
     fn fold_function_call(
         &mut self,
         func: ast::Expr,
@@ -46,12 +27,19 @@ impl<'ctx> ast::fold::Folder for PromoteCallToStructLiteral<'ctx> {
         kwargs: std::collections::HashMap<String, ast::Expr>,
     ) -> ast::Expr {
         let ast::Expr::Name(name) = func else {
+            println!("Functiona call is not a name, so no struct");
             return ast::Expr::FunctionCall { func: Box::new(func), args, kwargs };
         };
-        let Some(typ) = self.tctx.get_type(&name) else {
+        let Some(mut typ) = self.tctx.get_type(&name) else {
+            println!("Function call is not a known name, so no struct");
             return ast::Expr::FunctionCall { func: Box::new(ast::Expr::Name(name.clone())), args, kwargs };
         };
+        if let Type::Alias(for_t) = typ {
+            println!("Function call is an alias, so resolving");
+            typ = self.tctx.resolve_alias(for_t);
+        }
         let Type::Struct { fields, .. } = typ else {
+            println!("Function call is not a struct, so no struct");
             return ast::Expr::FunctionCall { func: Box::new(ast::Expr::Name(name.clone())), args, kwargs };
         };
         if fields.len() != kwargs.len() {
@@ -65,10 +53,7 @@ impl<'ctx> ast::fold::Folder for PromoteCallToStructLiteral<'ctx> {
                 panic!("Struct literal missing field: {}", field)
             }
         }
-        ast::Expr::StructLiteral {
-            strct: ast::Path(vec![name]),
-            values: kwargs,
-        }
+        ast::fold::fold_struct_literal(self, ast::Path(vec![name]), kwargs)
     }
 }
 
@@ -104,7 +89,8 @@ mod tests {
 
     #[test]
     fn replaces_simple_struct_literal() {
-        let input = r#"type Foo {bar: Int; baz: Int}; main: () -> (); main = Foo(bar=1, baz=2);"#;
+        let input =
+            r#"type Foo {bar: Int; baz: Int}; main: () -> (); main = Foo(bar=1, baz=2);"#;
         let expected = ast::Builder::new()
             .struct_def("Foo", |strct| strct.field("bar", "Int").field("baz", "Int"))
             .unit_fn("main", |body| {

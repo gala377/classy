@@ -155,6 +155,14 @@ impl TypCtx {
         self.next_id()
     }
 
+    pub fn resolve_alias(&self, typ_id: TypeId) -> Type {
+        let mut typ = Type::Alias(typ_id);
+        while let Type::Alias(new_typ) = typ {
+            typ = self.definitions.get(&new_typ).unwrap().clone();
+        }
+        typ
+    }
+
     pub fn debug_string(&self) -> String {
         let mut s = "TypCtx {\n\tdefinitions:".to_owned();
         let mut tmp = Vec::new();

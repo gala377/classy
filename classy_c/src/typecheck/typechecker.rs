@@ -150,7 +150,7 @@ impl<'s> TypeChecker<'s> {
             ast::Expr::Name(name) => self
                 .scope
                 .type_of(name)
-                .expect("Expected type of variable to exist"),
+                .expect(&format!("Expected type of variable {} to exist", name)),
             ast::Expr::FunctionCall {
                 func,
                 args,
@@ -216,7 +216,25 @@ impl<'s> TypeChecker<'s> {
                 }
                 expr_t
             }
-            ast::Expr::StructLiteral { .. } => todo!(),
+            ast::Expr::StructLiteral { strct, values } => {
+                let name = &strct.0[0];
+                let mut strct_t = self.scope.lookup_type(name).expect("Expected type to exist");
+                if let Type::Alias(id) = strct_t {
+                    strct_t = self.scope.resolve_alias(id);
+                }
+                let fields = match &strct_t {
+                    Type::Struct { fields, .. } => fields,
+                    _ => panic!("Expected struct type but got {:?}", strct_t),
+                };
+                for (field, field_t) in fields {
+                    let expr = values.get(field).expect("Expected field to exist");
+                    let expr_t = self.typecheck_expr(expr);
+                    if !self.scope.types_eq(&field_t, &expr_t) {
+                        panic!("Expected type {:?} but got {:?}", field_t, expr_t)
+                    }
+                }
+                strct_t
+            },
             ast::Expr::While { cond, body } => {
                 let cond_t = self.typecheck_expr(cond);
                 if cond_t != Type::Bool {
@@ -341,7 +359,7 @@ impl<'ast, 'parent> Visitor<'ast> for TypeChecker<'parent> {
 mod tests {
     use crate::{
         syntax::{ast::visitor::Visitor, lexer::Lexer, parser::Parser},
-        typecheck,
+        typecheck, ast_passes::{self, AstPass},
     };
 
     use super::TypeChecker;
@@ -351,6 +369,8 @@ mod tests {
         let mut parser = Parser::new(lex);
         let res = parser.parse().unwrap();
         let tctx = typecheck::prepare_for_typechecking(&res);
+        let res = ast_passes::func_to_struct_literal::PromoteCallToStructLiteral::new(&tctx).run(res);
+        println!("Final ast {res:#?}");
         let mut type_check = TypeChecker::new(tctx);
         type_check.visit(&res);
     }
@@ -467,6 +487,26 @@ mod tests {
                 is_function a
             }
             "#;
+        run_typechecker(source);
+    }
+
+    #[test]
+    fn struct_literals_typecheck() {
+        let source = r#"
+            type Foo {
+                a: Int
+                b: String
+            }
+
+            is_foo: (Foo) -> ()
+            is_foo f = ()
+
+            main: () -> ()
+            main {
+                let a = Foo(a = 1, b = "Hello")
+                is_foo a
+            }
+        "#;
         run_typechecker(source);
     }
 }

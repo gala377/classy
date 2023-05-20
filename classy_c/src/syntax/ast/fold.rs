@@ -6,21 +6,23 @@ use crate::syntax::ast::{
 
 use super::{DefinedType, TypeVariable};
 
-pub trait Folder {
+
+/// TODO: Not all travelsal methods are implemented yet.
+pub trait Folder: Sized {
     fn fold_program(&mut self, program: Program) -> Program {
-        program
+        fold_program(self, program)
     }
 
     fn fold_top_level_item(&mut self, item: TopLevelItem) -> TopLevelItem {
-        item
+        fold_top_level_item(self, item)
     }
 
     fn fold_function_definition(&mut self, def: FunctionDefinition) -> FunctionDefinition {
-        def
+        fold_function_definition(self, def)
     }
 
     fn fold_type_definition(&mut self, def: TypeDefinition) -> TypeDefinition {
-        def
+        fold_type_definition(self, def)
     }
 
     fn fold_defined_type(&mut self, kind: DefinedType) -> DefinedType {
@@ -28,7 +30,7 @@ pub trait Folder {
     }
 
     fn fold_expr(&mut self, expr: Expr) -> Expr {
-        expr
+        fold_expr(self, expr)
     }
 
     fn fold_typ(&mut self, typ: Typ) -> Typ {
@@ -52,7 +54,7 @@ pub trait Folder {
     }
 
     fn fold_sequence(&mut self, seq: Vec<Expr>) -> Vec<Expr> {
-        seq
+        fold_sequence(self, seq)
     }
 
     fn fold_unit(&mut self) {}
@@ -63,74 +65,47 @@ pub trait Folder {
         args: Vec<Expr>,
         kwargs: HashMap<String, Expr>,
     ) -> Expr {
-        Expr::FunctionCall {
-            func: Box::new(func),
-            args,
-            kwargs,
-        }
+        fold_function_call(self, func, args, kwargs)
     }
 
     fn fold_access(&mut self, val: Expr, field: String) -> Expr {
-        Expr::Access {
-            val: Box::new(val),
-            field,
-        }
+        fold_access(self, val, field)   
     }
 
     fn fold_tuple(&mut self, fields: Vec<Expr>) -> Expr {
-        Expr::Tuple(fields)
+        fold_tuple(self, fields)
     }
 
     fn fold_lambda(&mut self, params: Vec<TypedName>, body: Expr) -> Expr {
-        Expr::Lambda {
-            parameters: params,
-            body: Box::new(body),
-        }
+        fold_lambda(self, params, body)
     }
 
     fn fold_while(&mut self, cond: Expr, body: Expr) -> Expr {
-        Expr::While {
-            cond: Box::new(cond),
-            body: Box::new(body),
-        }
+        fold_while(self, cond, body)
     }
 
     fn fold_return(&mut self, expr: Expr) -> Expr {
-        Expr::Return(Box::new(expr))
+        fold_return(self, expr)
     }
 
     fn fold_if(&mut self, cond: Expr, body: Expr, else_body: Option<Expr>) -> Expr {
-        Expr::If {
-            cond: Box::new(cond),
-            body: Box::new(body),
-            else_body: else_body.map(Box::new),
-        }
+        fold_if(self, cond, body, else_body)
     }
 
     fn fold_let(&mut self, name: String, typ: Typ, init: Expr) -> Expr {
-        Expr::Let {
-            name,
-            typ,
-            init: Box::new(init),
-        }
+        fold_let(self, name, typ, init)
     }
 
     fn fold_assignment(&mut self, lval: Expr, rval: Expr) -> Expr {
-        Expr::Assignment {
-            lval: Box::new(self.fold_expr(lval)),
-            rval: Box::new(self.fold_expr(rval)),
-        }
+        fold_assignment(self, lval, rval)
     }
 
     fn fold_typed_expr(&mut self, expr: Expr, typ: Typ) -> Expr {
-        Expr::TypedExpr {
-            expr: Box::new(expr),
-            typ,
-        }
+        fold_typed_expression(self, expr, typ)
     }
 
     fn fold_struct_literal(&mut self, strct: Path, values: HashMap<String, Expr>) -> Expr {
-        Expr::StructLiteral { strct, values }
+        fold_struct_literal(self, strct, values)
     }
 
     fn fold_bool_const(&mut self, val: bool) -> bool {
@@ -151,6 +126,10 @@ pub trait Folder {
 
     fn fold_type_variables(&mut self, type_variables: Vec<TypeVariable>) -> Vec<TypeVariable> {
         type_variables
+    }
+
+    fn fold_function_args(&mut self, args: Vec<Expr>) -> Vec<Expr> {
+        fold_function_args(self, args)
     }
 }
 
@@ -207,7 +186,7 @@ pub fn fold_expr(folder: &mut impl Folder, expr: Expr) -> Expr {
         Expr::Sequence(seq) => Expr::Sequence(folder.fold_sequence(seq)),
         Expr::FunctionCall { func, args, kwargs } => folder.fold_function_call(*func, args, kwargs),
         Expr::Access { val, field } => folder.fold_access(*val, field),
-        Expr::Tuple(fields) => Expr::Tuple(folder.fold_sequence(fields)),
+        Expr::Tuple(fields) => folder.fold_tuple(fields),
         Expr::Lambda { parameters, body } => folder.fold_lambda(parameters, *body),
         Expr::While { cond, body } => folder.fold_while(*cond, *body),
         Expr::Return(expr) => folder.fold_return(*expr),
@@ -222,4 +201,114 @@ pub fn fold_expr(folder: &mut impl Folder, expr: Expr) -> Expr {
         Expr::StructLiteral { strct, values } => folder.fold_struct_literal(strct, values),
         Expr::BoolConst(val) => Expr::BoolConst(folder.fold_bool_const(val)),
     }
+}
+
+
+pub fn fold_sequence(folder: &mut impl Folder, seq: Vec<Expr>) -> Vec<Expr> {
+    let mut new_seq = Vec::new();
+    for expr in seq {
+        new_seq.push(folder.fold_expr(expr));
+    }
+    new_seq
+}
+
+pub fn fold_if(folder: &mut impl Folder, cond: Expr, body: Expr, else_body: Option<Expr>) -> Expr {
+    Expr::If {
+        cond: Box::new(folder.fold_expr(cond)),
+        body: Box::new(folder.fold_expr(body)),
+        else_body: else_body.map(|e| Box::new(folder.fold_expr(e))),
+    }
+}
+
+pub fn fold_while(folder: &mut impl Folder, cond: Expr, body: Expr) -> Expr {
+    Expr::While {
+        cond: Box::new(folder.fold_expr(cond)),
+        body: Box::new(folder.fold_expr(body)),
+    }
+}
+
+pub fn fold_assignment(folder: &mut impl Folder, lval: Expr, rval: Expr) -> Expr {
+    Expr::Assignment {
+        lval: Box::new(folder.fold_expr(lval)),
+        rval: Box::new(folder.fold_expr(rval)),
+    }
+}
+
+pub fn fold_access(folder: &mut impl Folder, val: Expr, field: String) -> Expr {
+    Expr::Access {
+        val: Box::new(folder.fold_expr(val)),
+        field,
+    }
+}
+
+pub fn fold_function_call(
+    folder: &mut impl Folder,
+    func: Expr,
+    args: Vec<Expr>,
+    kwargs: HashMap<String, Expr>,
+) -> Expr {
+    Expr::FunctionCall {
+        func: Box::new(folder.fold_expr(func)),
+        args: folder.fold_function_args(args),
+        kwargs: kwargs
+            .into_iter()
+            .map(|(k, v)| (k, folder.fold_expr(v)))
+            .collect(),
+    }
+}
+
+pub fn fold_tuple(folder: &mut impl Folder, fields: Vec<Expr>) -> Expr {
+    let mut new_vals = Vec::new();
+    for val in fields {
+        new_vals.push(folder.fold_expr(val));
+    }
+    Expr::Tuple(new_vals)
+}
+
+pub fn fold_lambda(folder: &mut impl Folder, params: Vec<TypedName>, body: Expr) -> Expr {
+    Expr::Lambda {
+        parameters: params,
+        body: Box::new(folder.fold_expr(body)),
+    }
+}
+
+pub fn fold_return(folder: &mut impl Folder, expr: Expr) -> Expr {
+    Expr::Return(Box::new(folder.fold_expr(expr)))
+}
+
+pub fn fold_let(folder: &mut impl Folder, name: String, typ: Typ, init: Expr) -> Expr {
+    Expr::Let {
+        name,
+        typ: folder.fold_typ(typ),
+        init: Box::new(folder.fold_expr(init)),
+    }
+}
+
+pub fn fold_typed_expression(folder: &mut impl Folder, expr: Expr, typ: Typ) -> Expr {
+    Expr::TypedExpr {
+        expr: Box::new(folder.fold_expr(expr)),
+        typ: folder.fold_typ(typ),
+    }
+}
+
+pub fn fold_struct_literal(
+    folder: &mut impl Folder,
+    strct: Path,
+    values: HashMap<String, Expr>,
+) -> Expr {
+    Expr::StructLiteral {
+        strct,
+        values: values
+            .into_iter()
+            .map(|(k, v)| (k, folder.fold_expr(v)))
+            .collect(),
+    }
+}
+
+pub fn fold_function_args(folder: &mut impl Folder, args: Vec<Expr>) -> Vec<Expr> {
+    let mut new_args = Vec::new();
+    for arg in args {
+        new_args.push(folder.fold_expr(arg));
+    }
+    new_args
 }
