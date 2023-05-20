@@ -101,4 +101,19 @@ mod tests {
         });
         run_test(input, expected)
     }
+
+    #[test]
+    fn replaces_simple_struct_literal() {
+        let input = r#"type Foo {bar: Int; baz: Int}; main: () -> (); main = Foo(bar=1, baz=2);"#;
+        let expected = ast::Builder::new()
+            .struct_def("Foo", |strct| strct.field("bar", "Int").field("baz", "Int"))
+            .unit_fn("main", |body| {
+                body.struct_literal("Foo", |values| {
+                    values
+                        .add("bar", |e| e.integer(1))
+                        .add("baz", |e| e.integer(2))
+                })
+            });
+        run_test(input, expected)
+    }
 }

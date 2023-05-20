@@ -608,6 +608,19 @@ impl ExprBuilder {
         self
     }
 
+    pub fn struct_literal(
+        mut self,
+        strct: impl Into<String>,
+        values: impl FnOnce(KwArgsBuilder) -> KwArgsBuilder,
+    ) -> Self {
+        let values = values(default()).build();
+        self.res = Some(Expr::StructLiteral {
+            strct: Path(vec![strct.into()]),
+            values,
+        });
+        self
+    }
+
     pub fn build(self) -> Expr {
         self.res.unwrap()
     }
