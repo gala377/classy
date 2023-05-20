@@ -47,11 +47,11 @@ impl ConstantPool {
             match &entry {
                 TypedEntry::Int(val) => self.entries.push(Entry {
                     typ: EntryType::Int,
-                    val: std::mem::transmute(val),
+                    val: std::mem::transmute_copy(val),
                 }),
                 TypedEntry::Float(val) => self.entries.push(Entry {
                     typ: EntryType::Float,
-                    val: std::mem::transmute(val),
+                    val: std::mem::transmute_copy(val),
                 }),
                 TypedEntry::String(val) => {
                     let offset = self.strings.len();
@@ -93,7 +93,8 @@ impl ConstantPool {
             "cannot get constant of type {} as it is not the same size as Word",
             std::any::type_name::<T>()
         );
-        std::mem::transmute_copy(&self.entries[index].val)
+        let entry_val = self.entries[index].val;
+        std::mem::transmute_copy(&entry_val)
     }
 
     pub fn get<T: Tagged>(&self, index: usize) -> Result<T, TypeMismatched> {
@@ -107,7 +108,7 @@ impl ConstantPool {
         match T::tag() {
             EntryType::Float | EntryType::Int => {
                 // SAFETY: safe, we checked the entry's type.
-                Ok(unsafe { self.get_unchecked(index) })
+                Ok(unsafe { self.get_unchecked::<T>(index) })
             }
             EntryType::String => {
                 let string_word = self.entries[index].val;
@@ -167,7 +168,7 @@ pub enum EntryType {
 ///
 /// This type also provides `From` implementations for basic types
 /// to create this enum without caring about its inner representation.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum TypedEntry {
     Int(isize),
     Float(f64),
@@ -244,7 +245,8 @@ mod tests {
     fn test_storing_and_retrieving_int_value() {
         let mut cp = ConstantPool::new();
         let id = cp.add_entry(TypedEntry::Int(10));
-        assert_eq!(cp.get::<isize>(id).unwrap(), 10)
+        let val = cp.get::<isize>(id).unwrap();
+        assert_eq!(val, 10)
     }
 
     #[test]

@@ -141,7 +141,7 @@ mod tests {
             Token {
                 typ: TokenType::String(s),
                 ..
-            } if s == r#""Hello world""# => {}
+            } if s == r#"Hello world"# => {}
             Token {
                 typ: TokenType::String(s),
                 ..
