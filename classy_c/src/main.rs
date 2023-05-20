@@ -1,3 +1,4 @@
+use classy_c::ast_passes::{self, AstPass};
 use classy_c::typecheck::{self, type_context::TypCtx};
 use classy_c::{
     syntax::{
@@ -105,6 +106,7 @@ fn main() {
     println!("{}", tctx.debug_string());
     typecheck::dedup_trivially_eq_types(&mut tctx);
     println!("{}", tctx.debug_string());
+    let res = ast_passes::func_to_struct_literal::PromoteCallToStructLiteral::new(&tctx).run(res);
     let mut type_check = typecheck::typechecker::TypeChecker::new(tctx);
     type_check.visit(&res);
 }
