@@ -640,7 +640,11 @@ impl KwArgsBuilder {
         self.res
     }
 
-    pub fn add(mut self, name: impl Into<String>, expr: impl FnOnce(ExprBuilder) -> ExprBuilder) -> KwArgsBuilder{
+    pub fn add(
+        mut self,
+        name: impl Into<String>,
+        expr: impl FnOnce(ExprBuilder) -> ExprBuilder,
+    ) -> KwArgsBuilder {
         let expr = expr(default()).build();
         self.res.insert(name.into(), expr);
         self

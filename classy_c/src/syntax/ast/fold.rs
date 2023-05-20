@@ -205,9 +205,7 @@ pub fn fold_expr(folder: &mut impl Folder, expr: Expr) -> Expr {
         Expr::FloatConst(val) => Expr::FloatConst(folder.fold_float_const(val)),
         Expr::Name(name) => Expr::Name(folder.fold_name(name)),
         Expr::Sequence(seq) => Expr::Sequence(folder.fold_sequence(seq)),
-        Expr::FunctionCall { func, args, kwargs } => {
-            folder.fold_function_call(*func, args, kwargs)
-        }
+        Expr::FunctionCall { func, args, kwargs } => folder.fold_function_call(*func, args, kwargs),
         Expr::Access { val, field } => folder.fold_access(*val, field),
         Expr::Tuple(fields) => Expr::Tuple(folder.fold_sequence(fields)),
         Expr::Lambda { parameters, body } => folder.fold_lambda(parameters, *body),

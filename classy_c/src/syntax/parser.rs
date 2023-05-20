@@ -597,21 +597,28 @@ impl<'source> Parser<'source> {
             }
             args
         };
-        
-        let kwargs = args.iter().filter_map(|expr| match expr {
-            ast::Expr::Assignment { lval, rval } => {
-                if let ast::Expr::Name(name) = lval.as_ref() {
-                    Some((name.clone(), rval.as_ref().clone()))
-                } else {
-                    panic!("Invalid assignment in a function call");
+
+        let kwargs = args
+            .iter()
+            .filter_map(|expr| match expr {
+                ast::Expr::Assignment { lval, rval } => {
+                    if let ast::Expr::Name(name) = lval.as_ref() {
+                        Some((name.clone(), rval.as_ref().clone()))
+                    } else {
+                        panic!("Invalid assignment in a function call");
+                    }
                 }
-            }
-            _ => None,
-        }).collect();
-        let args = args.iter().filter(|expr| match expr {
-            ast::Expr::Assignment { .. } => false,
-            _ => true,
-        }).cloned().collect();
+                _ => None,
+            })
+            .collect();
+        let args = args
+            .iter()
+            .filter(|expr| match expr {
+                ast::Expr::Assignment { .. } => false,
+                _ => true,
+            })
+            .cloned()
+            .collect();
         // todo split args into kwargs and args
         Ok(ast::Expr::FunctionCall {
             func: Box::new(func),
@@ -1174,7 +1181,7 @@ mod tests {
                             &[],
                             |body| body.sequence(|seq|
                                 seq.add(|expr| expr.integer(1))))
-                    }), 
+                    }),
                     |k| k))
     }
 
