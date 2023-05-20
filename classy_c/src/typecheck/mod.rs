@@ -218,6 +218,8 @@ fn types_eq(ctx: &TypCtx, t1: &Type, t2: &Type) -> bool {
         (Type::String, Type::String) => true,
         (Type::Float, Type::Float) => true,
         (Type::Unit, Type::Unit) => true,
+        (Type::Divergent, _) => true,
+        (_, Type::Divergent) => true,
         (Type::Struct { def: def1, .. }, Type::Struct { def: def2, .. }) => def1 == def2,
         (Type::Tuple(fields1), Type::Tuple(fields2)) => {
             if fields1.len() != fields2.len() {

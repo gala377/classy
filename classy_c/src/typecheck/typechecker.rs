@@ -119,7 +119,7 @@ impl<'s> TypeChecker<'s> {
     pub fn new_scope<'this: 's>(&'this self) -> TypeChecker<'this> {
         Self {
             scope: Scope::empty_scope_with_parent(&self.scope),
-            functions_ret_type: None,
+            functions_ret_type: self.functions_ret_type.clone(),
         }
     }
 
@@ -330,5 +330,138 @@ impl<'ast, 'parent> Visitor<'ast> for TypeChecker<'parent> {
                 name, ret, actual_type
             )
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{syntax::{lexer::Lexer, parser::Parser, ast::visitor::Visitor}, typecheck};
+
+    use super::TypeChecker;
+
+
+    fn run_typechecker(source: &str) {
+        let lex = Lexer::new(source);
+        let mut parser = Parser::new(lex);
+        let res = parser.parse().unwrap();
+        let tctx = typecheck::prepare_for_typechecking(&res);
+        let mut type_check = TypeChecker::new(tctx);
+        type_check.visit(&res);
+    }
+
+    #[test]
+    fn function_returning_literal_typechecks() {
+        let source = r#"
+            main: () -> Int
+            main = 1
+        "#;
+        run_typechecker(source);
+    }
+
+    #[test]
+    #[should_panic]
+    fn function_returning_wrong_type_panics() {
+        let source = r#"
+            main: () -> Int
+            main = "Hello world"
+        "#;
+        run_typechecker(source);
+    }
+
+    #[test]
+    fn variable_defined_in_if_does_not_propagate_type() {
+        let source = r#"
+            is_string: (String) -> ()
+            is_string s = ()
+            
+            is_int: (Int) -> ()
+            is_int i = ()
+
+            main: () -> ()
+            main {
+                let a = 1
+                if (true) {
+                    let a = "Hello world"
+                    is_string a
+                }
+                is_int a
+            }
+        "#;
+        run_typechecker(source);
+    }
+
+    #[test]
+    fn return_in_if_diverges_and_typechecks() {
+        let source = r#"
+            is_string: (String) -> ()
+            is_string s = ()
+            
+            main: () -> ()
+            main {
+                let a = if (true) {
+                    return ()
+                } else {
+                    "Hello"
+                }
+                is_string a
+            }
+            "#;
+        run_typechecker(source);
+    }
+
+    #[test]
+    fn return_type_of_if_is_based_on_both_branches() {
+        let source = r#"
+            is_string: (String) -> ()
+            is_string s = ()
+            
+            main: () -> ()
+            main {
+                let a = if (true) {
+                    "Hello"
+                } else {
+                    "World"
+                }
+                is_string a
+            }
+            "#;
+        run_typechecker(source);
+    }
+
+
+    #[test]
+    #[should_panic]
+    fn return_type_of_if_is_based_on_both_branches_error() {
+        let source = r#"
+            is_string: (String) -> ()
+            is_string s = ()
+            
+            main: () -> ()
+            main {
+                let a = if (true) {
+                    "Hello"
+                } else {
+                    1
+                }
+                is_string a
+            }
+            "#;
+        run_typechecker(source);
+    }
+
+    #[test]
+    fn assigning_functions_typecheck() {
+        let source = r#"
+            is_function: (() -> ()) -> ()
+            is_function f = ()
+
+            main: () -> ()
+            main {
+                let a = main
+                is_function main
+                is_function a
+            }
+            "#;
+        run_typechecker(source);
     }
 }
