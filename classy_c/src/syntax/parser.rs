@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::ops::Range;
 
 use thiserror::Error;
@@ -599,6 +600,7 @@ impl<'source> Parser<'source> {
         Ok(ast::Expr::FunctionCall {
             func: Box::new(func),
             args,
+            kwargs: HashMap::new(),
         })
     }
 
@@ -1071,7 +1073,8 @@ mod tests {
                     |args| args
                         .add(|arg| arg.integer(10))
                         .add(|arg| arg.integer(20))
-                        .add(|arg| arg.integer(30)))
+                        .add(|arg| arg.integer(30)),
+                    |k| k)
             })
     }
 
@@ -1155,7 +1158,8 @@ mod tests {
                             &[],
                             |body| body.sequence(|seq|
                                 seq.add(|expr| expr.integer(1))))
-                    })))
+                    }), 
+                    |k| k))
     }
 
     ptest! {
@@ -1167,8 +1171,8 @@ mod tests {
                 |args| args.add(
                     |a| a.access(
                         |lhs| lhs.name("a"),
-                        "b")))
-        )
+                        "b")),
+                |k| k))
     }
 
     ptest! {
@@ -1180,7 +1184,8 @@ mod tests {
                 |args| args
                     .add(|l| l.lambda_no_types(
                         &["c"],
-                        |body| body.integer(1)))))
+                        |body| body.integer(1))),
+                |k| k))
     }
 
     ptest! {
@@ -1192,7 +1197,8 @@ mod tests {
                 |args| args
                     .add(|l| l.lambda_no_types::<&str>(
                         &[],
-                        |body| body.integer(1)))))
+                        |body| body.integer(1))),
+                |k| k))
     }
 
     ptest! {
@@ -1204,7 +1210,8 @@ mod tests {
                 |args| args
                     .add(|l| l.lambda_no_types(
                         &["a", "b", "c"],
-                        |body| body.integer(1)))))
+                        |body| body.integer(1))),
+                |k| k))
     }
 
     ptest! {
@@ -1221,7 +1228,8 @@ mod tests {
                         &[],
                         |body| body.sequence(
                             |s| s.add(
-                                |e| e.integer(1)))))))
+                                |e| e.integer(1))))),
+                |k| k))
     }
 
     ptest! {
@@ -1238,7 +1246,8 @@ mod tests {
                         &["d", "e"],
                         |body| body.sequence(
                             |s| s.add(
-                                |e| e.integer(1)))))))
+                                |e| e.integer(1))))),
+                |k| k))
     }
 
     ptest! {
@@ -1252,7 +1261,8 @@ mod tests {
                         |pars| pars
                             .name("b", "c")
                             .name("d", "e"),
-                        |body| body.integer(1)))))
+                        |body| body.integer(1))),
+                |k| k))
     }
 
     ptest! {
@@ -1268,7 +1278,8 @@ mod tests {
                                 "b"
                             ),
                             |args| args.add(
-                                |a| a.name("c")))
+                                |a| a.name("c")),
+                            |k| k)
                     },
                     "d",
                 )
@@ -1331,7 +1342,8 @@ mod tests {
                 |args| args
                     .add(|a| a.name("b"))
                     .add(|a| a.lambda_no_types::<&str>(
-                        &["c"], |body| body.integer(1)))
+                        &["c"], |body| body.integer(1))),
+                |k| k,
             )
         )
     }
@@ -1348,7 +1360,8 @@ mod tests {
                             |l| l.lambda_no_types::<&str>(
                                 &[],
                                 |body| body.sequence(
-                                    |seq| seq.add(|e| e.name("b"))))))
+                                    |seq| seq.add(|e| e.name("b"))))),
+                        |k| k)
                 },
                 |body| { body.add(|e| e.name("c"))
             })})
@@ -1394,7 +1407,8 @@ mod tests {
                 body.r#return(|e| {
                     e.function_call(
                         |callee| callee.name("a"),
-                        |args| args.add(|a| a.name("b")))
+                        |args| args.add(|a| a.name("b")),
+                    |k| k)
                 })
             })
     }

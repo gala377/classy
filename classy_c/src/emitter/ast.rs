@@ -59,7 +59,7 @@ impl AstEmmiter {
                 self.emit_instr(code, OpCode::LookUpGlobal);
                 self.emit_word(code, id as u64);
             }
-            ast::Expr::FunctionCall { func, args } => {
+            ast::Expr::FunctionCall { func, args, kwargs: _kwargs } => {
                 if args.len() != 1 {
                     todo!()
                 }

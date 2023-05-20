@@ -115,6 +115,7 @@ pub enum Expr {
     FunctionCall {
         func: Box<Expr>,
         args: Vec<Expr>,
+        kwargs: HashMap<String, Expr>,
     },
     Access {
         val: Box<Expr>,
@@ -417,13 +418,16 @@ impl ExprBuilder {
         mut self,
         callee: impl FnOnce(ExprBuilder) -> ExprBuilder,
         args: impl FnOnce(ExprListBuilder) -> ExprListBuilder,
+        kwargs: impl FnOnce(KwArgsBuilder) -> KwArgsBuilder,
     ) -> Self {
         assert!(self.res.is_none());
         let func = callee(default()).build();
         let args = args(default()).build();
+        let kwargs = kwargs(default()).build();
         self.res = Some(Expr::FunctionCall {
             func: Box::new(func),
             args,
+            kwargs,
         });
         self
     }
@@ -622,5 +626,21 @@ impl ExprListBuilder {
         let expr = f(default()).build();
         self.res.push(expr);
         self
+    }
+}
+
+#[derive(Default)]
+pub struct KwArgsBuilder {
+    res: HashMap<String, Expr>,
+}
+
+impl KwArgsBuilder {
+    pub fn build(self) -> HashMap<String, Expr> {
+        self.res
+    }
+
+    pub fn add(mut self, name: impl Into<String>, expr: impl FnOnce(ExprBuilder) -> ExprBuilder) {
+        let expr = expr(default()).build();
+        self.res.insert(name.into(), expr);
     }
 }

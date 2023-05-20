@@ -151,7 +151,7 @@ impl<'s> TypeChecker<'s> {
                 .scope
                 .type_of(name)
                 .expect("Expected type of variable to exist"),
-            ast::Expr::FunctionCall { func, args } => {
+            ast::Expr::FunctionCall { func, args, kwargs: _kwargs } => {
                 let mut func_t = self.typecheck_expr(func);
                 if let Type::Alias(f_id) = func_t {
                     func_t = self.scope.resolve_alias(f_id);

@@ -29,7 +29,7 @@ pub trait Visitor<'ast>: Sized {
         walk_seq_expr(self, seq)
     }
     fn visit_unit(&mut self) {}
-    fn visit_function_call(&mut self, _func: &'ast ast::Expr, _args: &'ast [ast::Expr]) {}
+    fn visit_function_call(&mut self, _func: &'ast ast::Expr, _args: &'ast [ast::Expr], _kwargs: &'ast HashMap<String, ast::Expr>) {}
     fn visit_access(&mut self, _val: &'ast ast::Expr, _field: &'ast str) {}
     fn visit_tuple(&mut self, _fields: &'ast [ast::Expr]) {}
     fn visit_lambda(&mut self, _params: &'ast [ast::TypedName], _body: &'ast ast::Expr) {}
@@ -87,8 +87,8 @@ pub fn walk_expr<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::Expr) {
             v.visit_float_const(*val);
         }
         ast::Expr::Name(name) => v.visit_name(name),
-        ast::Expr::FunctionCall { func, args } => {
-            v.visit_function_call(func, args);
+        ast::Expr::FunctionCall { func, args, kwargs } => {
+            v.visit_function_call(func, args, kwargs);
         }
         ast::Expr::Access { val, field } => {
             v.visit_access(val, field);
