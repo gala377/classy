@@ -130,6 +130,10 @@ pub trait Folder: Sized {
     fn fold_function_args(&mut self, args: Vec<Expr>) -> Vec<Expr> {
         fold_function_args(self, args)
     }
+
+    fn fold_anon_type(&mut self, fields: Vec<(String, Expr)>) -> Expr {
+        fold_anon_type(self, fields)
+    }
 }
 
 pub fn fold_program<F: Folder>(folder: &mut F, program: Program) -> Program {
@@ -199,6 +203,7 @@ pub fn fold_expr(folder: &mut impl Folder, expr: Expr) -> Expr {
         Expr::TypedExpr { expr, typ } => folder.fold_typed_expr(*expr, typ),
         Expr::StructLiteral { strct, values } => folder.fold_struct_literal(strct, values),
         Expr::BoolConst(val) => Expr::BoolConst(folder.fold_bool_const(val)),
+        Expr::AnonType { fields } => folder.fold_anon_type(fields),
     }
 }
 
@@ -309,4 +314,12 @@ pub fn fold_function_args(folder: &mut impl Folder, args: Vec<Expr>) -> Vec<Expr
         new_args.push(folder.fold_expr(arg));
     }
     new_args
+}
+
+pub fn fold_anon_type(folder: &mut impl Folder, fields: Vec<(String, Expr)>) -> Expr {
+    let mut new_fields = Vec::new();
+    for (name, val) in fields {
+        new_fields.push((name, folder.fold_expr(val)));
+    }
+    Expr::AnonType { fields: new_fields }
 }

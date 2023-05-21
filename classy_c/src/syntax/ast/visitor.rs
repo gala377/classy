@@ -83,6 +83,10 @@ pub trait Visitor<'ast>: Sized {
         walk_struct_literal(self, strct, values);
     }
 
+    fn visit_anon_type(&mut self, fields: &'ast [(String, ast::Expr)]) {
+        walk_anon_type(self, fields);
+    }
+
     // leaf nodes
     fn visit_typ(&mut self, _node: &'ast ast::Typ) {}
     fn visit_name(&mut self, _node: &'ast str) {}
@@ -164,6 +168,7 @@ pub fn walk_expr<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::Expr) {
             v.visit_let(name, typ, init);
         }
         ast::Expr::BoolConst(val) => v.visit_bool_const(*val),
+        ast::Expr::AnonType { fields } => v.visit_anon_type(fields),
     }
 }
 
@@ -280,4 +285,11 @@ pub fn walk_function_def<'ast, V: Visitor<'ast>>(v: &mut V, def: &'ast ast::Func
         v.visit_name(&param);
     }
     v.visit_expr(&def.body);
+}
+
+pub fn walk_anon_type<'ast, V: Visitor<'ast>>(v: &mut V, fields: &'ast [(String, ast::Expr)]) {
+    for (name, expr) in fields {
+        v.visit_name(name);
+        v.visit_expr(expr);
+    }
 }

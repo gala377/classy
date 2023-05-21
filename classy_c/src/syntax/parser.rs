@@ -6,39 +6,6 @@ use super::ast::{self, TypedName};
 use super::lexer::Lexer;
 use super::tokens::{Token, TokenType};
 
-/*
-TODO - for now:
-
-- struct creation
-    expr { field: epxr, field: expr }
-    // the problem is taht
-    expr { field: expr } is ambigius with trailing lambda, for example
-    Person { name: john }
-    can either mean a struct Person with field name set to john or
-    a function person called with a trailing lambda that returns a
-    "name" variable and sets the type explicitly to "john".
-
-    Maybe we should actually have something like
-    Person(name="john", age=18)
-    with we would parse as a function call with named arguments
-    and then we can resolve it later on the typechecking stage
-
-    So we need to add "named" fields to the syntax. Basically in case of a function
-    call we need to catch patterns in the argument list in the shape
-    Name "=" Expr
-    and threat them as a named arguments.
-
-- control structures
-    let name = expr
-    return expr
-    // these 2 again require us to not allow trailing lambdas because
-    // while a { body } can be ambigious, maybe we can just have
-    // while (cond) { body }
-    // and if (cond) { body }
-    while expr { body }
-    if cond { body } else { body }
-*/
-
 #[derive(Error, Debug, Clone)]
 #[error("Syntax error [{span:?}] {msg}")]
 pub struct SyntaxError {
@@ -356,6 +323,7 @@ impl<'source> Parser<'source> {
             TokenType::While => self.parse_while(),
             TokenType::Return => self.parse_return(),
             TokenType::Let => self.parse_let(),
+            TokenType::Type => self.parse_type_expr(),
             _ => self.parse_assignment(),
         }
     }
@@ -801,6 +769,26 @@ impl<'source> Parser<'source> {
         }
         let typ = self.parse_type()?;
         Ok(ast::TypedName { name, typ })
+    }
+
+    fn parse_type_expr(&mut self) -> ParseRes<ast::Expr> {
+        self.match_token(TokenType::Type)?;
+        let _ = self.expect_token(TokenType::LBrace);
+        let fields = self.parse_delimited(Self::parse_anon_field_def, TokenType::Semicolon);
+        let _ = self.expect_token(TokenType::RBrace);
+        Ok(ast::Expr::AnonType { fields })
+    }
+
+    fn parse_anon_field_def(&mut self) -> ParseRes<(String, ast::Expr)> {
+        let beg = self.curr_pos();
+        let name = self.parse_identifier()?;
+        let _ = self.expect_token(TokenType::Assignment);
+        let init = self.parse_expr().error(
+            self,
+            beg,
+            "init expression is required in the let expression",
+        )?;
+        Ok((name, init))
     }
 
     fn parse_let(&mut self) -> ParseRes<ast::Expr> {

@@ -153,6 +153,9 @@ pub enum Expr {
         typ: Typ,
         init: Box<Expr>,
     },
+    AnonType {
+        fields: Vec<(String, Expr)>,
+    }
 }
 
 #[derive(Debug, Clone)]

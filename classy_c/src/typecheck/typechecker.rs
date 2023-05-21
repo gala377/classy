@@ -409,7 +409,8 @@ impl<'s> TypeChecker<'s> {
                         }),
                     },
                 )
-            }
+            },
+            ast::Expr::AnonType { .. } => todo!("AnonType not supported for typechecking"),
         }
     }
 

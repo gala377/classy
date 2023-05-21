@@ -84,6 +84,7 @@ impl AstEmmiter {
             ast::Expr::If { .. } => todo!(),
             ast::Expr::Let { .. } => todo!(),
             ast::Expr::BoolConst(_) => todo!(),
+            ast::Expr::AnonType { .. } => todo!(),
         }
     }
 
