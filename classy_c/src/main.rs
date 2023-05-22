@@ -1,5 +1,5 @@
 use classy_c::{
-    ast_passes::{self, AstPass},
+    ast_passes::{self, run_befor_type_context_passes, run_before_typechecking_passes, AstPass},
     syntax::{ast, ast::Visitor, lexer::Lexer, parser::Parser},
     typecheck::{self, add_types::AddTypes, type_context::TypCtx},
 };
@@ -72,10 +72,10 @@ const SOURCE: &'static str = r#"
 
 fn main() {
     let res = parse_source(SOURCE);
-    let res = run_initial_passes(res);
+    let res = run_befor_type_context_passes(res);
     let mut tctx = prepare_type_ctx(&res);
     println!("{}", tctx.debug_string());
-    let res = run_type_before_typechecking_passes(res, &tctx);
+    let res = run_before_typechecking_passes(&tctx, res);
     let mut type_check = typecheck::typechecker::TypeChecker::new(&mut tctx);
     type_check.visit(&res);
 }
@@ -94,12 +94,6 @@ pub fn parse_source(source: &str) -> ast::Program {
     res
 }
 
-pub fn run_initial_passes(ast: ast::Program) -> ast::Program {
-    let mut verify_lvalues = ast_passes::verify_lvalues::VerifyLvalues;
-    let ast = verify_lvalues.run(ast);
-    ast
-}
-
 pub fn prepare_type_ctx(ast: &ast::Program) -> TypCtx {
     let mut tctx = TypCtx::new();
     let mut add_types = AddTypes::with_primitive_types(&mut tctx);
@@ -112,11 +106,4 @@ pub fn prepare_type_ctx(ast: &ast::Program) -> TypCtx {
     println!("{}", tctx.debug_string());
     typecheck::dedup_trivially_eq_types(&mut tctx);
     tctx
-}
-
-pub fn run_type_before_typechecking_passes(ast: ast::Program, tctx: &TypCtx) -> ast::Program {
-    let mut promote_to_struct_literals =
-        ast_passes::func_to_struct_literal::PromoteCallToStructLiteral::new(&tctx);
-    let ast = promote_to_struct_literals.run(ast);
-    ast
 }

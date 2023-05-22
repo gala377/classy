@@ -155,7 +155,8 @@ impl AliasResolver {
                     | Type::Bool
                     | Type::Float
                     | Type::String
-                    | Type::Unit) => t.clone(),
+                    | Type::Unit
+                    | Type::ToInfere) => t.clone(),
                     // Do not resolve this types as they migh create reference cycles.
                     Type::Struct { .. } => Type::Alias(*for_type),
                     Type::Function { .. } => Type::Alias(*for_type),
