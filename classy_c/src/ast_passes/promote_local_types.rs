@@ -14,7 +14,6 @@ impl AstPass for PromoteAnonTypes {
     }
 }
 
-
 impl PromoteAnonTypes {
     pub fn new() -> Self {
         Self {
@@ -46,8 +45,10 @@ impl Folder for PromoteAnonTypes {
         program
     }
 
-
-    fn fold_function_definition(&mut self, def: ast::FunctionDefinition) -> ast::FunctionDefinition {
+    fn fold_function_definition(
+        &mut self,
+        def: ast::FunctionDefinition,
+    ) -> ast::FunctionDefinition {
         self.current_function = def.name.clone();
         let def = ast::fold::fold_function_definition(self, def);
         self.current_function = "<not in function>".to_owned();
@@ -57,8 +58,16 @@ impl Folder for PromoteAnonTypes {
     fn fold_anon_type(&mut self, fields: Vec<(String, ast::Expr)>) -> ast::Expr {
         let id = self.next_id();
         let name = format!("{}@anon_{}", self.current_function, id);
-        let record_fields = fields.iter().map(|(name, _)| ast::TypedName{ name: name.clone(), typ: ast::Typ::ToInfere }).collect();
-        let record = ast::Record { fields: record_fields };
+        let record_fields = fields
+            .iter()
+            .map(|(name, _)| ast::TypedName {
+                name: name.clone(),
+                typ: ast::Typ::ToInfere,
+            })
+            .collect();
+        let record = ast::Record {
+            fields: record_fields,
+        };
         self.types_to_promote.push((name.clone(), record));
         ast::fold::fold_struct_literal(self, ast::Path(vec![name]), fields.into_iter().collect())
     }

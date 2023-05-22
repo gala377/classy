@@ -1,8 +1,8 @@
 use std::{collections::HashMap, ops::Range};
 
-pub mod visitor;
 pub mod fold;
 pub mod typed;
+pub mod visitor;
 
 pub use fold::Folder;
 pub use visitor::Visitor;
@@ -155,7 +155,7 @@ pub enum Expr {
     },
     AnonType {
         fields: Vec<(String, Expr)>,
-    }
+    },
 }
 
 #[derive(Debug, Clone)]

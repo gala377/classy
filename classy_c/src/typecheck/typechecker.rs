@@ -43,7 +43,10 @@ impl<'s> Scope<'s> {
         }
     }
 
-    pub fn empty_scope_with_parent<'scope>(parent: &'scope Scope<'scope>) -> Self where 'scope: 's {
+    pub fn empty_scope_with_parent<'scope>(parent: &'scope Scope<'scope>) -> Self
+    where
+        'scope: 's,
+    {
         Self {
             resolved_types: HashMap::new(),
             resolved_vars: HashMap::new(),
@@ -102,7 +105,6 @@ pub struct TypeChecker<'ctx> {
     tctx: &'ctx mut TypCtx,
     functions_ret_type: Option<Type>,
     typed_ast: ast::typed::Program,
-
 }
 
 impl<'ctx> TypeChecker<'ctx> {
@@ -120,12 +122,15 @@ impl<'ctx> TypeChecker<'ctx> {
 }
 
 impl<'ctx> TypeChecker<'ctx> {
-
     fn add_variable(&mut self, scope: &mut Scope, name: &str, typ: Type) {
         scope.add_variable(name, typ)
     }
 
-    fn typecheck_expr(&mut self, scope: &mut Scope, expr: &ast::Expr) -> (Type, ast::typed::ExprKind) {
+    fn typecheck_expr(
+        &mut self,
+        scope: &mut Scope,
+        expr: &ast::Expr,
+    ) -> (Type, ast::typed::ExprKind) {
         match expr {
             ast::Expr::Unit => (Type::Unit, ast::typed::ExprKind::Unit),
             ast::Expr::BoolConst(v) => (Type::Bool, ast::typed::ExprKind::BoolConst(*v)),
@@ -261,9 +266,7 @@ impl<'ctx> TypeChecker<'ctx> {
             }
             ast::Expr::StructLiteral { strct, values } => {
                 let name = &strct.0[0];
-                let mut strct_t = scope
-                    .lookup_type(name)
-                    .expect("Expected type to exist");
+                let mut strct_t = scope.lookup_type(name).expect("Expected type to exist");
                 if let Type::Alias(id) = strct_t {
                     strct_t = scope.resolve_alias(self.tctx, id);
                 }
@@ -275,7 +278,7 @@ impl<'ctx> TypeChecker<'ctx> {
                 for (field, field_t) in fields {
                     let expr = values.get(field).expect("Expected field to exist");
                     let (expr_t, expr_typed) = self.typecheck_expr(scope, expr);
-                    if !scope.types_eq(self.tctx,&field_t, &expr_t) {
+                    if !scope.types_eq(self.tctx, &field_t, &expr_t) {
                         panic!("Expected type {:?} but got {:?}", field_t, expr_t)
                     }
                     str_typed_fields.insert(
@@ -299,7 +302,8 @@ impl<'ctx> TypeChecker<'ctx> {
                 if cond_t != Type::Bool {
                     panic!("Expected type {:?} but got {:?}", Type::Bool, cond_t)
                 }
-                let (body_t, body_typed) = self.typecheck_expr(&mut Scope::empty_scope_with_parent(scope), body);
+                let (body_t, body_typed) =
+                    self.typecheck_expr(&mut Scope::empty_scope_with_parent(scope), body);
                 if body_t != Type::Unit {
                     panic!("Expected type {:?} but got {:?}", Type::Unit, body_t)
                 }
@@ -323,7 +327,7 @@ impl<'ctx> TypeChecker<'ctx> {
                     .functions_ret_type
                     .clone()
                     .expect("Expected return type to be set");
-                if !scope.types_eq(self.tctx,&expr_t, &ret_t) {
+                if !scope.types_eq(self.tctx, &expr_t, &ret_t) {
                     panic!("Expected type {:?} but got {:?}", ret_t, expr_t)
                 }
                 (
@@ -343,7 +347,8 @@ impl<'ctx> TypeChecker<'ctx> {
                 if cond_t != Type::Bool {
                     panic!("Expected type {:?} but got {:?}", Type::Bool, cond_t)
                 }
-                let (body_t, body_typed) = self.typecheck_expr(&mut Scope::empty_scope_with_parent(scope), body);
+                let (body_t, body_typed) =
+                    self.typecheck_expr(&mut Scope::empty_scope_with_parent(scope), body);
                 let else_body_opt = else_body
                     .as_ref()
                     .map(|e| self.typecheck_expr(&mut Scope::empty_scope_with_parent(scope), e));
@@ -398,7 +403,7 @@ impl<'ctx> TypeChecker<'ctx> {
                         }),
                     },
                 )
-            },
+            }
             ast::Expr::AnonType { .. } => todo!("AnonType not supported for typechecking"),
         }
     }
@@ -435,13 +440,11 @@ impl<'ctx> TypeChecker<'ctx> {
     }
 }
 
-
 impl<'ast, 'parent> Visitor<'ast> for TypeChecker<'parent> {
     fn visit(&mut self, node: &'ast ast::Program) {
         let mut global_scope = Scope::from_type_ctx(self.tctx);
         for item in &node.items {
             if let ast::TopLevelItem::FunctionDefinition(fn_def) = item {
-                
                 let ast::FunctionDefinition {
                     name,
                     body,
@@ -482,7 +485,6 @@ impl<'ast, 'parent> Visitor<'ast> for TypeChecker<'parent> {
             }
         }
     }
-
 }
 
 #[cfg(test)]

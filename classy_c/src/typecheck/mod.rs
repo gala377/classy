@@ -174,7 +174,14 @@ fn resolve_type(
                 .map(|t| resolve_type(names, definitions, next_id, unit_id, to_infere_id, t))
                 .map(Type::Alias)
                 .collect();
-            let resolved_ret = Type::Alias(resolve_type(names, definitions, next_id, unit_id, to_infere_id, ret));
+            let resolved_ret = Type::Alias(resolve_type(
+                names,
+                definitions,
+                next_id,
+                unit_id,
+                to_infere_id,
+                ret,
+            ));
             let id = *next_id;
             *next_id += 1;
             definitions.insert(
@@ -314,9 +321,13 @@ pub fn dedup_trivially_eq_types(ctx: &mut TypCtx) {
 
 fn replace_aliases_with_map(typ: &Type, map: &HashMap<TypeId, TypeId>) -> Type {
     match typ {
-        t @ (Type::UInt | Type::Int | Type::Bool | Type::Float | Type::String | Type::Unit | Type::ToInfere ) => {
-            t.clone()
-        }
+        t @ (Type::UInt
+        | Type::Int
+        | Type::Bool
+        | Type::Float
+        | Type::String
+        | Type::Unit
+        | Type::ToInfere) => t.clone(),
         Type::Struct { def, fields } => Type::Struct {
             def: *def,
             fields: fields

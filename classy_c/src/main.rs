@@ -1,10 +1,8 @@
-
-use classy_c::{ast_passes::{self, AstPass}, typecheck::{self, type_context::TypCtx, add_types::AddTypes}, syntax::{
-        ast,
-        ast::Visitor,
-        lexer::Lexer,
-        parser::Parser,
-    }};
+use classy_c::{
+    ast_passes::{self, AstPass},
+    syntax::{ast, ast::Visitor, lexer::Lexer, parser::Parser},
+    typecheck::{self, add_types::AddTypes, type_context::TypCtx},
+};
 
 const SOURCE: &'static str = r#"
     type A = Int
@@ -72,7 +70,6 @@ const SOURCE: &'static str = r#"
     }
 "#;
 
-
 fn main() {
     let res = parse_source(SOURCE);
     let res = run_initial_passes(res);
@@ -82,7 +79,6 @@ fn main() {
     let mut type_check = typecheck::typechecker::TypeChecker::new(&mut tctx);
     type_check.visit(&res);
 }
-
 
 pub fn parse_source(source: &str) -> ast::Program {
     let lex = Lexer::new(source);
@@ -119,7 +115,8 @@ pub fn prepare_type_ctx(ast: &ast::Program) -> TypCtx {
 }
 
 pub fn run_type_before_typechecking_passes(ast: ast::Program, tctx: &TypCtx) -> ast::Program {
-    let mut promote_to_struct_literals = ast_passes::func_to_struct_literal::PromoteCallToStructLiteral::new(&tctx);
+    let mut promote_to_struct_literals =
+        ast_passes::func_to_struct_literal::PromoteCallToStructLiteral::new(&tctx);
     let ast = promote_to_struct_literals.run(ast);
     ast
 }
