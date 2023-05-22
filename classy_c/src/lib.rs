@@ -4,3 +4,4 @@ pub mod emitter;
 pub mod ir;
 pub mod syntax;
 pub mod typecheck;
+pub mod package;
