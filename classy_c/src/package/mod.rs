@@ -35,7 +35,7 @@ pub fn make_package(name: &str, tctx: &TypCtx) -> Package {
         types: Vec::new(),
     };
     for (name, _) in &tctx.types {
-        let serialized = serialize_type(tctx, &tctx.get_type(name).unwrap());
+        let serialized = serialize_type(tctx, &tctx.get_type(name).unwrap(), true);
         package.types.push((name.clone(), serialized));
     }
     package
@@ -109,7 +109,7 @@ pub fn make_package(name: &str, tctx: &TypCtx) -> Package {
 //     }
 // }
 
-fn serialize_type(tctx: &TypCtx, typ: &typecheck::r#type::Type) -> Type {
+fn serialize_type(tctx: &TypCtx, typ: &typecheck::r#type::Type, top_level: bool) -> Type {
     match typ {
         typecheck::r#type::Type::Int => Type::Name("Int".to_owned()),
         typecheck::r#type::Type::Float => Type::Name("Float".to_owned()),
@@ -117,22 +117,40 @@ fn serialize_type(tctx: &TypCtx, typ: &typecheck::r#type::Type) -> Type {
         typecheck::r#type::Type::String => Type::Name("String".to_owned()),
         typecheck::r#type::Type::UInt => Type::Name("UInt".to_owned()),
         typecheck::r#type::Type::Unit => Type::Unit,
-        typecheck::r#type::Type::Struct { fields, .. } => {
-            let fields = fields
-                .iter()
-                .map(|(name, typ)| (name.clone(), serialize_type(tctx, typ)))
-                .collect();
-            Type::Struct { fields }
+        typecheck::r#type::Type::Struct { def, fields } => {
+            if top_level {
+                let fields = fields
+                    .iter()
+                    .map(|(name, typ)| (name.clone(), serialize_type(tctx, typ, false)))
+                    .collect();
+                Type::Struct { fields }
+            } else {
+                let node = tctx.nodes.get(def).unwrap();
+                match node {
+                    crate::syntax::ast::TopLevelItem::TypeDefinition(ast::TypeDefinition {
+                        name,
+                        ..
+                    }) => Type::Name(name.clone()),
+                    crate::syntax::ast::TopLevelItem::FunctionDefinition(_) => {
+                        panic!("No struct node should map to a function definition")
+                    }
+                }
+            }
         }
         typecheck::r#type::Type::ADT { .. } => todo!(),
         typecheck::r#type::Type::Function { args, ret } => {
-            let args = args.iter().map(|t| serialize_type(tctx, t)).collect();
-            let ret = Box::new(serialize_type(tctx, ret));
+            let args = args
+                .iter()
+                .map(|t| serialize_type(tctx, t, false))
+                .collect();
+            let ret = Box::new(serialize_type(tctx, ret, false));
             Type::Function { args, ret }
         }
-        typecheck::r#type::Type::Tuple(vals) => {
-            Type::Tuple(vals.iter().map(|t| serialize_type(tctx, t)).collect())
-        }
+        typecheck::r#type::Type::Tuple(vals) => Type::Tuple(
+            vals.iter()
+                .map(|t| serialize_type(tctx, t, false))
+                .collect(),
+        ),
         typecheck::r#type::Type::Array(_) => todo!(),
         typecheck::r#type::Type::Alias(id) => tctx
             .types
