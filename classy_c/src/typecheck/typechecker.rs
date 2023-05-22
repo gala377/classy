@@ -442,7 +442,7 @@ impl<'ctx> TypeChecker<'ctx> {
 
 impl<'ast, 'parent> Visitor<'ast> for TypeChecker<'parent> {
     fn visit(&mut self, node: &'ast ast::Program) {
-        let mut global_scope = Scope::from_type_ctx(self.tctx);
+        let global_scope = Scope::from_type_ctx(self.tctx);
         for item in &node.items {
             if let ast::TopLevelItem::FunctionDefinition(fn_def) = item {
                 let ast::FunctionDefinition {
