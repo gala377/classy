@@ -540,7 +540,7 @@ impl<'ast, 'parent> Visitor<'ast> for TypeChecker<'parent> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        ast_passes::{self, AstPass},
+        ast_passes::{self},
         syntax::{ast::visitor::Visitor, lexer::Lexer, parser::Parser},
         typecheck,
     };

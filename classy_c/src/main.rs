@@ -1,5 +1,5 @@
 use classy_c::{
-    ast_passes::{self, run_befor_type_context_passes, run_before_typechecking_passes, AstPass},
+    ast_passes::{run_befor_type_context_passes, run_before_typechecking_passes},
     syntax::{ast, ast::Visitor, lexer::Lexer, parser::Parser},
     typecheck::{self, add_types::AddTypes, type_context::TypCtx},
 };
