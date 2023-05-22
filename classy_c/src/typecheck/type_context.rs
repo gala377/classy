@@ -20,6 +20,7 @@ pub struct TypCtx {
     pub next_id: TypeId,
 
     pub unit_id: TypeId,
+    pub to_infere_id: TypeId,
 }
 
 impl TypCtx {
@@ -27,6 +28,7 @@ impl TypCtx {
         Self {
             next_id: 0,
             unit_id: 0,
+            to_infere_id: 0,
             definitions: HashMap::new(),
             types: HashMap::new(),
             nodes: HashMap::new(),

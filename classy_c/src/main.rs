@@ -65,9 +65,10 @@ const SOURCE: &'static str = r#"
     main { 
         let a = get_string
         let b = get_int()
+        let d = type { a=a; b=b }
         let c = if (false) { "Hello world" } else { get_string() }
         call get_int
-        print c
+        print((a.a)())
     }
 "#;
 
@@ -75,10 +76,10 @@ const SOURCE: &'static str = r#"
 fn main() {
     let res = parse_source(SOURCE);
     let res = run_initial_passes(res);
-    let tctx = prepare_type_ctx(&res);
+    let mut tctx = prepare_type_ctx(&res);
     println!("{}", tctx.debug_string());
     let res = run_type_before_typechecking_passes(res, &tctx);
-    let mut type_check = typecheck::typechecker::TypeChecker::new(tctx);
+    let mut type_check = typecheck::typechecker::TypeChecker::new(&mut tctx);
     type_check.visit(&res);
 }
 

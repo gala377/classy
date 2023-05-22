@@ -70,6 +70,7 @@ fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String) {
                         &mut ctx.definitions,
                         &mut ctx.next_id,
                         ctx.unit_id,
+                        ctx.to_infere_id,
                         t,
                     )
                 })
@@ -80,6 +81,7 @@ fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String) {
                 &mut ctx.definitions,
                 &mut ctx.next_id,
                 ctx.unit_id,
+                ctx.to_infere_id,
                 ret,
             );
             let function_t = ctx.mk_function(&resolved_args, Type::Alias(resolved_ret));
@@ -111,6 +113,7 @@ fn resolve_top_level_type(
                 &mut ctx.definitions,
                 &mut ctx.next_id,
                 ctx.unit_id,
+                ctx.to_infere_id,
                 inner,
             );
             Type::Alias(resolved_id)
@@ -123,6 +126,7 @@ fn resolve_top_level_type(
                     &mut ctx.definitions,
                     &mut ctx.next_id,
                     ctx.unit_id,
+                    ctx.to_infere_id,
                     typ,
                 );
                 resolved_fields.push((name.clone(), Type::Alias(resolved_id)));
@@ -148,6 +152,7 @@ fn resolve_type(
     definitions: &mut HashMap<TypeId, Type>,
     next_id: &mut TypeId,
     unit_id: TypeId,
+    to_infere_id: TypeId,
     typ: &ast::Typ,
 ) -> TypeId {
     match typ {
@@ -155,7 +160,7 @@ fn resolve_type(
         ast::Typ::Tuple(types) => {
             let resolved = types
                 .iter()
-                .map(|t| resolve_type(names, definitions, next_id, unit_id, t))
+                .map(|t| resolve_type(names, definitions, next_id, unit_id, to_infere_id, t))
                 .map(Type::Alias)
                 .collect();
             let id = *next_id;
@@ -166,10 +171,10 @@ fn resolve_type(
         ast::Typ::Function { args, ret } => {
             let resolved_args = args
                 .iter()
-                .map(|t| resolve_type(names, definitions, next_id, unit_id, t))
+                .map(|t| resolve_type(names, definitions, next_id, unit_id, to_infere_id, t))
                 .map(Type::Alias)
                 .collect();
-            let resolved_ret = Type::Alias(resolve_type(names, definitions, next_id, unit_id, ret));
+            let resolved_ret = Type::Alias(resolve_type(names, definitions, next_id, unit_id, to_infere_id, ret));
             let id = *next_id;
             *next_id += 1;
             definitions.insert(
@@ -182,6 +187,7 @@ fn resolve_type(
             id
         }
         ast::Typ::Unit => unit_id,
+        ast::Typ::ToInfere => to_infere_id,
         // todo: for other types like a function or an array, we actually
         // need to create them first.
         _ => unimplemented!(),
@@ -218,6 +224,7 @@ fn types_eq(ctx: &TypCtx, t1: &Type, t2: &Type) -> bool {
         (Type::String, Type::String) => true,
         (Type::Float, Type::Float) => true,
         (Type::Unit, Type::Unit) => true,
+        (Type::ToInfere, Type::ToInfere) => true,
         (Type::Divergent, _) => true,
         (_, Type::Divergent) => true,
         (Type::Struct { def: def1, .. }, Type::Struct { def: def2, .. }) => def1 == def2,
@@ -307,7 +314,7 @@ pub fn dedup_trivially_eq_types(ctx: &mut TypCtx) {
 
 fn replace_aliases_with_map(typ: &Type, map: &HashMap<TypeId, TypeId>) -> Type {
     match typ {
-        t @ (Type::UInt | Type::Int | Type::Bool | Type::Float | Type::String | Type::Unit) => {
+        t @ (Type::UInt | Type::Int | Type::Bool | Type::Float | Type::String | Type::Unit | Type::ToInfere ) => {
             t.clone()
         }
         Type::Struct { def, fields } => Type::Struct {

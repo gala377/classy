@@ -183,7 +183,7 @@ impl AliasResolver {
                     ret: Box::new(resolved_ret),
                 }
             }
-            t @ (Type::UInt | Type::Int | Type::Bool | Type::Float | Type::String | Type::Unit) => {
+            t @ (Type::UInt | Type::Int | Type::Bool | Type::Float | Type::String | Type::Unit | Type::ToInfere ) => {
                 t.clone()
             }
             _ => unimplemented!(),

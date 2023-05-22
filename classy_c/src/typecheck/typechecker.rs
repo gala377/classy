@@ -9,14 +9,13 @@ use super::{
 };
 
 struct Scope<'s> {
-    type_ctx: TypCtx,
     resolved_types: HashMap<String, Type>,
     resolved_vars: HashMap<String, Type>,
     parent: Option<&'s Scope<'s>>,
 }
 
 impl<'s> Scope<'s> {
-    pub fn from_type_ctx(type_ctx: TypCtx) -> Self {
+    pub fn from_type_ctx(type_ctx: &TypCtx) -> Self {
         let resolved_vars = {
             type_ctx
                 .variables
@@ -38,19 +37,17 @@ impl<'s> Scope<'s> {
                 .collect()
         };
         Self {
-            type_ctx,
             resolved_types,
             resolved_vars,
             parent: None,
         }
     }
 
-    pub fn empty_scope_with_parent<'outer: 's>(parent: &'outer Scope) -> Self {
+    pub fn empty_scope_with_parent<'scope>(parent: &'scope Scope<'scope>) -> Self where 'scope: 's {
         Self {
-            type_ctx: TypCtx::new(),
             resolved_types: HashMap::new(),
             resolved_vars: HashMap::new(),
-            parent: Some(&parent),
+            parent: Some(parent),
         }
     }
 
@@ -73,44 +70,45 @@ impl<'s> Scope<'s> {
         self.resolved_vars.insert(name.to_owned(), typ);
     }
 
-    pub fn types_eq(&self, a: &Type, b: &Type) -> bool {
-        types_eq(&self.type_ctx, a, b)
+    pub fn types_eq(&self, tctx: &TypCtx, a: &Type, b: &Type) -> bool {
+        types_eq(tctx, a, b)
             || self
                 .parent
                 .as_ref()
-                .map_or(false, |parent| parent.types_eq(a, b))
+                .map_or(false, |parent| parent.types_eq(tctx, a, b))
     }
 
-    pub fn resolve_type_id(&self, typ_id: TypeId) -> Option<Type> {
-        self.type_ctx.definitions.get(&typ_id).cloned().or_else(|| {
+    pub fn resolve_type_id(&self, tctx: &TypCtx, typ_id: TypeId) -> Option<Type> {
+        tctx.definitions.get(&typ_id).cloned().or_else(|| {
             self.parent
                 .as_ref()
-                .map(|parent| parent.resolve_type_id(typ_id))
+                .map(|parent| parent.resolve_type_id(tctx, typ_id))
                 .flatten()
         })
     }
 
-    pub fn resolve_alias(&self, for_type: TypeId) -> Type {
+    pub fn resolve_alias(&self, tctx: &TypCtx, for_type: TypeId) -> Type {
         let mut t = Type::Alias(for_type);
         while let Type::Alias(for_type) = t {
             t = self
-                .resolve_type_id(for_type)
+                .resolve_type_id(tctx, for_type)
                 .expect("Expected type to exist");
         }
         t
     }
 }
 
-pub struct TypeChecker<'s> {
-    scope: Scope<'s>,
+pub struct TypeChecker<'ctx> {
+    tctx: &'ctx mut TypCtx,
     functions_ret_type: Option<Type>,
     typed_ast: ast::typed::Program,
+
 }
 
-impl TypeChecker<'static> {
-    pub fn new(type_ctx: TypCtx) -> Self {
+impl<'ctx> TypeChecker<'ctx> {
+    pub fn new(type_ctx: &'ctx mut TypCtx) -> Self {
         Self {
-            scope: Scope::from_type_ctx(type_ctx),
+            tctx: type_ctx,
             functions_ret_type: None,
             typed_ast: ast::typed::Program::default(),
         }
@@ -121,20 +119,13 @@ impl TypeChecker<'static> {
     }
 }
 
-impl<'s> TypeChecker<'s> {
-    pub fn new_scope<'this: 's>(&'this self) -> TypeChecker<'this> {
-        Self {
-            scope: Scope::empty_scope_with_parent(&self.scope),
-            functions_ret_type: self.functions_ret_type.clone(),
-            typed_ast: ast::typed::Program::default(),
-        }
+impl<'ctx> TypeChecker<'ctx> {
+
+    fn add_variable(&mut self, scope: &mut Scope, name: &str, typ: Type) {
+        scope.add_variable(name, typ)
     }
 
-    pub fn add_variable(&mut self, name: &str, typ: Type) {
-        self.scope.add_variable(name, typ)
-    }
-
-    pub fn typecheck_expr(&mut self, expr: &ast::Expr) -> (Type, ast::typed::ExprKind) {
+    fn typecheck_expr(&mut self, scope: &mut Scope, expr: &ast::Expr) -> (Type, ast::typed::ExprKind) {
         match expr {
             ast::Expr::Unit => (Type::Unit, ast::typed::ExprKind::Unit),
             ast::Expr::BoolConst(v) => (Type::Bool, ast::typed::ExprKind::BoolConst(*v)),
@@ -146,16 +137,16 @@ impl<'s> TypeChecker<'s> {
             ast::Expr::Sequence(exprs) => {
                 let seqs: Vec<_> = exprs
                     .iter()
-                    .map(|expr| self.typecheck_expr(expr))
+                    .map(|expr| self.typecheck_expr(scope, expr))
                     .map(|(typ, inner)| ast::typed::Expr { typ, inner })
                     .collect();
                 let typ = seqs.last().map(|e| e.typ.clone()).unwrap_or(Type::Unit);
                 (typ, ast::typed::ExprKind::Sequence(seqs))
             }
             ast::Expr::Assignment { lval, rval } => {
-                let (lval_t, lexpr) = self.typecheck_expr(lval);
-                let (rval_t, rexpr) = self.typecheck_expr(rval);
-                if !self.scope.types_eq(&lval_t, &rval_t) {
+                let (lval_t, lexpr) = self.typecheck_expr(scope, lval);
+                let (rval_t, rexpr) = self.typecheck_expr(scope, rval);
+                if !scope.types_eq(self.tctx, &lval_t, &rval_t) {
                     panic!("Expected type {:?} but got {:?}", lval_t, rval_t)
                 }
                 (
@@ -173,8 +164,7 @@ impl<'s> TypeChecker<'s> {
                 )
             }
             ast::Expr::Name(name) => {
-                let typ = self
-                    .scope
+                let typ = scope
                     .type_of(name)
                     .expect(&format!("Expected type of variable {} to exist", name));
                 (typ, ast::typed::ExprKind::Name(name.clone()))
@@ -184,13 +174,13 @@ impl<'s> TypeChecker<'s> {
                 args,
                 kwargs: _kwargs,
             } => {
-                let (mut func_t, func_expr) = self.typecheck_expr(func);
+                let (mut func_t, func_expr) = self.typecheck_expr(scope, func);
                 if let Type::Alias(f_id) = func_t {
-                    func_t = self.scope.resolve_alias(f_id);
+                    func_t = scope.resolve_alias(self.tctx, f_id);
                 }
                 let args_t = args
                     .iter()
-                    .map(|arg| self.typecheck_expr(arg))
+                    .map(|arg| self.typecheck_expr(scope, arg))
                     .map(|(typ, inner)| ast::typed::Expr { typ, inner })
                     .collect::<Vec<_>>();
                 match &func_t {
@@ -206,7 +196,7 @@ impl<'s> TypeChecker<'s> {
                             )
                         }
                         for (expected_arg, arg) in expected_args.iter().zip(&args_t) {
-                            if !self.scope.types_eq(&expected_arg, &arg.typ) {
+                            if !scope.types_eq(self.tctx, &expected_arg, &arg.typ) {
                                 panic!("Expected type {:?} but got {:?}", expected_arg, arg.typ)
                             }
                         }
@@ -226,7 +216,7 @@ impl<'s> TypeChecker<'s> {
                 }
             }
             ast::Expr::Access { val, field } => {
-                let (val_t, val_typed) = self.typecheck_expr(val);
+                let (val_t, val_typed) = self.typecheck_expr(scope, val);
                 match &val_t {
                     Type::Struct { fields, .. } => {
                         let field_t = fields
@@ -251,7 +241,7 @@ impl<'s> TypeChecker<'s> {
             ast::Expr::Tuple(exprs) => {
                 let typed_exprs = exprs
                     .iter()
-                    .map(|expr| self.typecheck_expr(expr))
+                    .map(|expr| self.typecheck_expr(scope, expr))
                     .map(|(typ, inner)| ast::typed::Expr { typ, inner })
                     .collect::<Vec<_>>();
                 let types = typed_exprs
@@ -262,21 +252,20 @@ impl<'s> TypeChecker<'s> {
             }
             ast::Expr::Lambda { .. } => todo!(),
             ast::Expr::TypedExpr { expr, typ } => {
-                let (expr_t, exptr_body) = self.typecheck_expr(expr);
-                let typ_t = self.ast_type_to_type(typ);
-                if !self.scope.types_eq(&expr_t, &typ_t) {
+                let (expr_t, exptr_body) = self.typecheck_expr(scope, expr);
+                let typ_t = self.ast_type_to_type(scope, typ);
+                if !scope.types_eq(self.tctx, &expr_t, &typ_t) {
                     panic!("Expected type {:?} but got {:?}", typ_t, expr_t)
                 }
                 (expr_t, exptr_body)
             }
             ast::Expr::StructLiteral { strct, values } => {
                 let name = &strct.0[0];
-                let mut strct_t = self
-                    .scope
+                let mut strct_t = scope
                     .lookup_type(name)
                     .expect("Expected type to exist");
                 if let Type::Alias(id) = strct_t {
-                    strct_t = self.scope.resolve_alias(id);
+                    strct_t = scope.resolve_alias(self.tctx, id);
                 }
                 let fields = match &strct_t {
                     Type::Struct { fields, .. } => fields,
@@ -285,8 +274,8 @@ impl<'s> TypeChecker<'s> {
                 let mut str_typed_fields = HashMap::new();
                 for (field, field_t) in fields {
                     let expr = values.get(field).expect("Expected field to exist");
-                    let (expr_t, expr_typed) = self.typecheck_expr(expr);
-                    if !self.scope.types_eq(&field_t, &expr_t) {
+                    let (expr_t, expr_typed) = self.typecheck_expr(scope, expr);
+                    if !scope.types_eq(self.tctx,&field_t, &expr_t) {
                         panic!("Expected type {:?} but got {:?}", field_t, expr_t)
                     }
                     str_typed_fields.insert(
@@ -306,11 +295,11 @@ impl<'s> TypeChecker<'s> {
                 )
             }
             ast::Expr::While { cond, body } => {
-                let (cond_t, cond_typed) = self.typecheck_expr(cond);
+                let (cond_t, cond_typed) = self.typecheck_expr(scope, cond);
                 if cond_t != Type::Bool {
                     panic!("Expected type {:?} but got {:?}", Type::Bool, cond_t)
                 }
-                let (body_t, body_typed) = self.new_scope().typecheck_expr(body);
+                let (body_t, body_typed) = self.typecheck_expr(&mut Scope::empty_scope_with_parent(scope), body);
                 if body_t != Type::Unit {
                     panic!("Expected type {:?} but got {:?}", Type::Unit, body_t)
                 }
@@ -329,12 +318,12 @@ impl<'s> TypeChecker<'s> {
                 )
             }
             ast::Expr::Return(expr) => {
-                let (expr_t, expr_typed) = self.typecheck_expr(expr);
+                let (expr_t, expr_typed) = self.typecheck_expr(scope, expr);
                 let ret_t = self
                     .functions_ret_type
                     .clone()
                     .expect("Expected return type to be set");
-                if !self.scope.types_eq(&expr_t, &ret_t) {
+                if !scope.types_eq(self.tctx,&expr_t, &ret_t) {
                     panic!("Expected type {:?} but got {:?}", ret_t, expr_t)
                 }
                 (
@@ -350,19 +339,19 @@ impl<'s> TypeChecker<'s> {
                 body,
                 else_body,
             } => {
-                let (cond_t, cond_typed) = self.typecheck_expr(cond);
+                let (cond_t, cond_typed) = self.typecheck_expr(scope, cond);
                 if cond_t != Type::Bool {
                     panic!("Expected type {:?} but got {:?}", Type::Bool, cond_t)
                 }
-                let (body_t, body_typed) = self.new_scope().typecheck_expr(body);
+                let (body_t, body_typed) = self.typecheck_expr(&mut Scope::empty_scope_with_parent(scope), body);
                 let else_body_opt = else_body
                     .as_ref()
-                    .map(|e| self.new_scope().typecheck_expr(e));
+                    .map(|e| self.typecheck_expr(&mut Scope::empty_scope_with_parent(scope), e));
                 let (else_body_t, else_typed) = match else_body_opt {
                     Some((t, e)) => (t, Some(e)),
                     None => (Type::Unit, None),
                 };
-                if !self.scope.types_eq(&body_t, &else_body_t) {
+                if !scope.types_eq(self.tctx, &body_t, &else_body_t) {
                     panic!("Expected type {:?} but got {:?}", body_t, else_body_t)
                 }
                 (
@@ -386,18 +375,18 @@ impl<'s> TypeChecker<'s> {
                 )
             }
             ast::Expr::Let { name, typ, init } => {
-                let (init_t, init_typed_expr) = self.typecheck_expr(init);
+                let (init_t, init_typed_expr) = self.typecheck_expr(scope, init);
                 let typ_t = match typ {
                     ast::Typ::ToInfere => init_t,
                     _ => {
-                        let typ_t = self.ast_type_to_type(typ);
-                        if !self.scope.types_eq(&init_t, &typ_t) {
+                        let typ_t = self.ast_type_to_type(scope, typ);
+                        if !scope.types_eq(self.tctx, &init_t, &typ_t) {
                             panic!("Expected type {:?} but got {:?}", typ_t, init_t)
                         }
                         typ_t
                     }
                 };
-                self.scope.add_variable(name, typ_t.clone());
+                self.add_variable(scope, name, typ_t.clone());
                 (
                     Type::Unit,
                     ast::typed::ExprKind::Let {
@@ -414,30 +403,30 @@ impl<'s> TypeChecker<'s> {
         }
     }
 
-    fn ast_type_to_type(&self, typ: &ast::Typ) -> Type {
+    fn ast_type_to_type<'s>(&self, scope: &Scope<'s>, typ: &ast::Typ) -> Type {
         // convert ast::Typ to Type
         match typ {
             ast::Typ::Unit => Type::Unit,
-            ast::Typ::Name(name) => self.scope.lookup_type(name).expect("unknown type"),
+            ast::Typ::Name(name) => scope.lookup_type(name).expect("unknown type"),
             ast::Typ::Application { .. } => {
                 todo!()
             }
             ast::Typ::Array(t) => {
-                let t = Box::new(self.ast_type_to_type(t));
+                let t = Box::new(self.ast_type_to_type(scope, t));
                 Type::Array(t)
             }
             ast::Typ::Function { args, ret } => {
                 let args = args
                     .iter()
-                    .map(|typ| self.ast_type_to_type(typ))
+                    .map(|typ| self.ast_type_to_type(scope, typ))
                     .collect::<Vec<_>>();
-                let ret = Box::new(self.ast_type_to_type(ret));
+                let ret = Box::new(self.ast_type_to_type(scope, ret));
                 Type::Function { args, ret }
             }
             ast::Typ::Tuple(types) => {
                 let types = types
                     .iter()
-                    .map(|typ| self.ast_type_to_type(typ))
+                    .map(|typ| self.ast_type_to_type(scope, typ))
                     .collect::<Vec<_>>();
                 Type::Tuple(types)
             }
@@ -446,48 +435,54 @@ impl<'s> TypeChecker<'s> {
     }
 }
 
-impl<'ast, 'parent> Visitor<'ast> for TypeChecker<'parent> {
-    fn visit_type_def(&mut self, _node: &'ast ast::TypeDefinition) {}
 
-    fn visit_fn_def(&mut self, fn_def: &'ast ast::FunctionDefinition) {
-        let ast::FunctionDefinition {
-            name,
-            body,
-            parameters,
-            ..
-        } = fn_def;
-        let Type::Function { args, ret } = self.scope.type_of(name).expect("Expected type of function to exist") else {
-            panic!("Expected function to have a function type")
-        };
-        let mut fn_scope = self.new_scope();
-        fn_scope.functions_ret_type = Some(*ret.clone());
-        for (param, typ) in parameters.iter().zip(&args) {
-            fn_scope.add_variable(&param, typ.clone());
+impl<'ast, 'parent> Visitor<'ast> for TypeChecker<'parent> {
+    fn visit(&mut self, node: &'ast ast::Program) {
+        let mut global_scope = Scope::from_type_ctx(self.tctx);
+        for item in &node.items {
+            if let ast::TopLevelItem::FunctionDefinition(fn_def) = item {
+                
+                let ast::FunctionDefinition {
+                    name,
+                    body,
+                    parameters,
+                    ..
+                } = fn_def;
+                let Type::Function { args, ret } = global_scope.type_of(name).expect("Expected type of function to exist") else {
+                    panic!("Expected function to have a function type")
+                };
+                let mut fn_scope = Scope::empty_scope_with_parent(&global_scope);
+                self.functions_ret_type = Some(*ret.clone());
+                for (param, typ) in parameters.iter().zip(&args) {
+                    fn_scope.add_variable(&param, typ.clone());
+                }
+                let (actual_type, fn_body) = self.typecheck_expr(&mut fn_scope, body);
+                if !global_scope.types_eq(self.tctx, &actual_type, &ret) {
+                    panic!(
+                        "Expected function {} to return type {:?} but got {:?}",
+                        name, ret, actual_type
+                    )
+                }
+                self.typed_ast
+                    .items
+                    .push(ast::typed::TopLevelItem::FunctionDefinition(
+                        ast::typed::FunctionDefinition {
+                            name: name.clone(),
+                            parameters: parameters.clone(),
+                            body: ast::typed::Expr {
+                                typ: actual_type,
+                                inner: fn_body,
+                            },
+                            typ: Type::Function {
+                                args: args.clone(),
+                                ret: ret.clone(),
+                            },
+                        },
+                    ));
+            }
         }
-        let (actual_type, fn_body) = fn_scope.typecheck_expr(body);
-        if !self.scope.types_eq(&actual_type, &ret) {
-            panic!(
-                "Expected function {} to return type {:?} but got {:?}",
-                name, ret, actual_type
-            )
-        }
-        self.typed_ast
-            .items
-            .push(ast::typed::TopLevelItem::FunctionDefinition(
-                ast::typed::FunctionDefinition {
-                    name: name.clone(),
-                    parameters: parameters.clone(),
-                    body: ast::typed::Expr {
-                        typ: actual_type,
-                        inner: fn_body,
-                    },
-                    typ: Type::Function {
-                        args: args.clone(),
-                        ret: ret.clone(),
-                    },
-                },
-            ));
     }
+
 }
 
 #[cfg(test)]
@@ -504,11 +499,11 @@ mod tests {
         let lex = Lexer::new(source);
         let mut parser = Parser::new(lex);
         let res = parser.parse().unwrap();
-        let tctx = typecheck::prepare_for_typechecking(&res);
+        let mut tctx = typecheck::prepare_for_typechecking(&res);
         let res =
             ast_passes::func_to_struct_literal::PromoteCallToStructLiteral::new(&tctx).run(res);
         println!("Final ast {res:#?}");
-        let mut type_check = TypeChecker::new(tctx);
+        let mut type_check = TypeChecker::new(&mut tctx);
         type_check.visit(&res);
     }
 

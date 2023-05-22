@@ -29,4 +29,5 @@ pub enum Type {
     /// Used for expressions that diverge the execution flow, like "return".
     /// Equal to any type.
     Divergent,
+    ToInfere,
 }
