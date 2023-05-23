@@ -113,14 +113,21 @@ pub struct TypeChecker<'ctx> {
     tctx: &'ctx mut TypCtx,
     functions_ret_type: Option<Type>,
     typed_ast: ast::typed::Program,
+    type_names: HashMap<TypeId, String>,
 }
 
 impl<'ctx> TypeChecker<'ctx> {
     pub fn new(type_ctx: &'ctx mut TypCtx) -> Self {
+        let type_names = type_ctx
+            .types
+            .iter()
+            .map(|(name, id)| (*id, name.clone()))
+            .collect();
         Self {
             tctx: type_ctx,
             functions_ret_type: None,
             typed_ast: ast::typed::Program::default(),
+            type_names,
         }
     }
 
@@ -313,11 +320,28 @@ impl<'ctx> TypeChecker<'ctx> {
                     let expr = values.get(field).expect("Expected field to exist");
                     let (expr_t, expr_typed) = self.typecheck_expr(scope.clone(), expr);
                     if let Type::ToInfere = field_t {
+                        let expr_t = expr_t.clone();
+                        let inferred_type = match expr_t {
+                            // TODO :
+                            // Def id gives us a struct name, from which we can get the type id
+                            Type::Struct { def, .. } => {
+                                let type_name = match self.tctx.nodes.get(&def).unwrap() {
+                                    ast::TopLevelItem::TypeDefinition(ast::TypeDefinition {
+                                        name,
+                                        ..
+                                    }) => name,
+                                    _ => panic!("Expected type definition"),
+                                };
+                                let type_id = self.tctx.types.get(type_name).unwrap();
+                                Type::Alias(*type_id)
+                            }
+                            _ => expr_t,
+                        };
                         self.update_struct_field_type(
                             &mut scope.borrow_mut(),
                             name,
                             field,
-                            expr_t.clone(),
+                            inferred_type,
                         );
                     } else if !scope.borrow().types_eq(self.tctx, &field_t, &expr_t) {
                         panic!("Expected type {:?} but got {:?}", field_t, expr_t)

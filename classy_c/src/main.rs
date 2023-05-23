@@ -59,14 +59,22 @@ const SOURCE: &'static str = r#"
     call: (() -> Int) -> Int
     call f = f()
 
+    type MyFoo {
+        a: MyString
+    }
+
     main: () -> ()
     main { 
         let a = get_string
         let b = get_int()
-        let d = type { a=a; b=b }
+        let d = type { 
+            a=a
+            b=b
+            c=MyFoo(a=get_string())
+        }
         let c = if (false) { "Hello world" } else { get_string() }
         call get_int
-        print((a.a)())
+        print((d.a)())
     }
 "#;
 
@@ -78,6 +86,7 @@ fn main() {
     let res = run_before_typechecking_passes(&tctx, res);
     let mut type_check = typecheck::typechecker::TypeChecker::new(&mut tctx);
     type_check.visit(&res);
+    println!("{}", tctx.debug_string());
 }
 
 pub fn parse_source(source: &str) -> ast::Program {
