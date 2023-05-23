@@ -113,21 +113,14 @@ pub struct TypeChecker<'ctx> {
     tctx: &'ctx mut TypCtx,
     functions_ret_type: Option<Type>,
     typed_ast: ast::typed::Program,
-    type_names: HashMap<TypeId, String>,
 }
 
 impl<'ctx> TypeChecker<'ctx> {
     pub fn new(type_ctx: &'ctx mut TypCtx) -> Self {
-        let type_names = type_ctx
-            .types
-            .iter()
-            .map(|(name, id)| (*id, name.clone()))
-            .collect();
         Self {
             tctx: type_ctx,
             functions_ret_type: None,
             typed_ast: ast::typed::Program::default(),
-            type_names,
         }
     }
 
