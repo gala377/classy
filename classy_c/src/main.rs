@@ -45,11 +45,6 @@ const SOURCE: &'static str = r#"
     type Z4 = (Int) -> A2
     type Z5 = (Int) -> ()
 
-    print: (String) -> ()
-    print s = ()
-
-    type MyString = String
-
     get_string: () -> MyString
     get_string = "Hello world"
 
@@ -65,28 +60,46 @@ const SOURCE: &'static str = r#"
 
     main: () -> ()
     main { 
-        let a = get_string
-        let b = get_int()
-        let d = type { 
-            a=a
-            b=b
-            c=MyFoo(a=get_string())
-        }
-        let c = if (false) { "Hello world" } else { get_string() }
-        call get_int
-        print((d.a)())
+        let a = MyFoo(a = "Hello")
+        print a.a
     }
 "#;
 
 fn main() {
-    let res = parse_source(SOURCE);
+    let package = make_package();
+    let tctx = compile(SOURCE, &[package]);
+    println!("{}", tctx.debug_string());
+    // let package = classy_c::package::Package::new("main", &tctx);
+    // let out = std::fs::File::create("out.json").unwrap();
+    // serde_json::to_writer_pretty(out, &package).unwrap();
+}
+
+fn compile(source: &str, packages: &[classy_c::package::Package]) -> TypCtx {
+    let res = parse_source(source);
     let res = run_befor_type_context_passes(res);
-    let mut tctx = prepare_type_ctx(&res);
+    let mut tctx = TypCtx::new();
+    for package in packages {
+        package.read_package(&mut tctx);
+    }
+    let mut tctx = prepare_type_ctx(tctx, &res);
     println!("{}", tctx.debug_string());
     let res = run_before_typechecking_passes(&tctx, res);
     let mut type_check = typecheck::typechecker::TypeChecker::new(&mut tctx);
     type_check.visit(&res);
-    println!("{}", tctx.debug_string());
+    tctx
+}
+
+pub fn make_package() -> classy_c::package::Package {
+    let source = r#"
+        type MyString = String
+
+        print: (MyString) -> ()
+        print s = ()
+    "#;
+    let tctx = compile(source, &[]);
+    let pckg = classy_c::package::Package::new("test", &tctx);
+    println!("Compiler package {:?}", pckg);
+    pckg
 }
 
 pub fn parse_source(source: &str) -> ast::Program {
@@ -103,8 +116,7 @@ pub fn parse_source(source: &str) -> ast::Program {
     res
 }
 
-pub fn prepare_type_ctx(ast: &ast::Program) -> TypCtx {
-    let mut tctx = TypCtx::new();
+pub fn prepare_type_ctx(mut tctx: TypCtx, ast: &ast::Program) -> TypCtx {
     let mut add_types = AddTypes::with_primitive_types(&mut tctx);
     add_types.visit(&ast);
     println!("{}", tctx.debug_string());

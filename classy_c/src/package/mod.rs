@@ -28,86 +28,131 @@ pub struct Package {
     pub types: Vec<(String, Type)>,
 }
 
-pub fn make_package(name: &str, tctx: &TypCtx) -> Package {
+impl Package {
+    pub fn new(name: &str, tctx: &TypCtx) -> Self {
+        make_package(name, tctx)
+    }
+
+    pub fn read_package(&self, tctx: &mut TypCtx) {
+        read_package(self, tctx)
+    }
+}
+
+fn make_package(name: &str, tctx: &TypCtx) -> Package {
     let mut package = Package {
         name: name.to_string(),
         functions: Vec::new(),
         types: Vec::new(),
     };
     for (name, _) in &tctx.types {
+        match name.as_str() {
+            // skip basic types
+            "Int" | "UInt" | "Bool" | "String" | "Float" | "Unit" => continue,
+            _ => {}
+        }
         let serialized = serialize_type(tctx, &tctx.get_type(name).unwrap(), true);
         package.types.push((name.clone(), serialized));
+    }
+    for (name, typ) in &tctx.variables {
+        let typ = tctx.definitions.get(typ).unwrap();
+        let typ = serialize_type(tctx, typ, true);
+        match typ {
+            Type::Function { args, ret } => {
+                package.functions.push(Function {
+                    name: name.clone(),
+                    args,
+                    ret,
+                });
+            }
+            _ => panic!("The function types is not a function"),
+        }
     }
     package
 }
 
-// pub fn read_package(pkg: &Package, tctx: &mut TypCtx) -> TypCtx {
-//     for (name, typ) in &pkg.types {
-//         let node = ast::TypeDefinition {
-//             name: name.clone(),
-//             type_variables: Vec::new(),
-//             definition: match typ {
-//                 Type::Name(name) => ast::DefinedType::Alias(ast::Alias {
-//                     for_type: ast::Typ::Name(name.clone()),
-//                 }),
-//                 Type::Struct { fields } => {
-//                     let fields = fields
-//                         .iter()
-//                         .map(|(name, typ)| (name.clone(), ast::Typ::Name(typ.to_string())))
-//                         .collect();
-//                     ast::DefinedType::Record(fields)
-//                 }
-//                 Type::Function { args, ret } => {
-//                     let args = args.iter().map(|t| ast::Typ::Name(t.to_string())).collect();
-//                     let ret = ast::Typ::Name(ret.to_string());
-//                     ast::DefinedType::Function(args, ret)
-//                 }
-//                 Type::Tuple(vals) => {
-//                     let vals = vals.iter().map(|t| ast::Typ::Name(t.to_string())).collect();
-//                     ast::DefinedType::Tuple(vals)
-//                 }
-//                 Type::Unit => ast::DefinedType::Alias(ast::Alias {
-//                     for_type: ast::Typ::Unit,
-//                 }),
-//             },
-//             span: 0..0,
-//         };
-//         let _id = tctx.add_type_node(node);
-//         let type_id = tctx.reserve_id();
-//         self.ctx.add_type_name(node.name.clone(), type_id);
-//     }
-//     tctx
-// }
+fn read_package(pkg: &Package, tctx: &mut TypCtx) {
+    for (name, typ) in &pkg.types {
+        let definition = match typ {
+            Type::Struct { fields } => {
+                let fields = fields
+                    .iter()
+                    .map(|(name, typ)| (name.clone(), deserialize_type(typ)))
+                    .map(|(name, typ)| ast::TypedName { name, typ })
+                    .collect();
+                ast::DefinedType::Record(ast::Record { fields })
+            }
+            Type::Function { args, ret } => {
+                let args = args.iter().map(|t| deserialize_type(t)).collect();
+                let ret = deserialize_type(ret);
+                ast::DefinedType::Alias(ast::Alias {
+                    for_type: ast::Typ::Function {
+                        args,
+                        ret: Box::new(ret),
+                    },
+                })
+            }
+            Type::Tuple(types) => {
+                let types = types.iter().map(|t| deserialize_type(t)).collect();
+                ast::DefinedType::Alias(ast::Alias {
+                    for_type: ast::Typ::Tuple(types),
+                })
+            }
+            Type::Name(name) => ast::DefinedType::Alias(ast::Alias {
+                for_type: ast::Typ::Name(name.clone()),
+            }),
+            Type::Unit => ast::DefinedType::Alias(ast::Alias {
+                for_type: ast::Typ::Unit,
+            }),
+        };
+        let node = ast::TypeDefinition {
+            name: name.clone(),
+            type_variables: Vec::new(),
+            definition,
+            span: 0..0,
+        };
+        let _id = tctx.add_type_node(&node);
+        let type_id = tctx.reserve_id();
+        tctx.add_type_name(node.name.clone(), type_id);
+    }
+    for Function { name, args, ret } in &pkg.functions {
+        let args: Vec<ast::Typ> = args.iter().map(|t| deserialize_type(t)).collect();
+        let ret = deserialize_type(ret);
+        let pars = std::iter::repeat("unknown".to_owned()).take(args.len());
+        let node = ast::FunctionDefinition {
+            name: name.clone(),
+            // TODO: should be undefined
+            body: ast::Expr::Unit,
+            typ: ast::Typ::Function {
+                args,
+                ret: Box::new(ret),
+            },
+            parameters: pars.collect(),
+        };
+        let _id = tctx.add_fn_node(&node);
+        let type_id = tctx.reserve_id();
+        tctx.add_variable(&node.name, type_id);
+    }
+}
 
-// fn deserialize_type(typ: &Type) -> ast::Typ {
-//     match typ {
-//         Type::Name(name) => ast::Typ::Name(name.clone()),
-//         Type::Struct { fields } => {
-//             let fields = fields
-//                 .iter()
-//                 .map(|(name, typ)| (name.clone(), deserialize_type(typ)))
-//                 .map(|(name, typ)| ast::TypedName {
-//                     name,
-//                     typ,
-//                 })
-//                 .collect();
-//             ast::Typ::
-//             ast::DefinedType::Record(ast::Record { fields })
-//         }
-//         Type::Function { args, ret } => {
-//             let args = args.iter().map(|t| deserialize_type(t)).collect();
-//             let ret = deserialize_type(ret);
-//             ast::DefinedType::Function(args, ret)
-//         }
-//         Type::Tuple(vals) => {
-//             let vals = vals.iter().map(|t| deserialize_type(t)).collect();
-//             ast::DefinedType::Tuple(vals)
-//         }
-//         Type::Unit => ast::DefinedType::Alias(ast::Alias {
-//             for_type: ast::Typ::Unit,
-//         }),
-//     }
-// }
+fn deserialize_type(typ: &Type) -> ast::Typ {
+    match typ {
+        Type::Name(name) => ast::Typ::Name(name.clone()),
+        Type::Struct { .. } => panic!("There should be no nested struct types"),
+        Type::Function { args, ret } => {
+            let args = args.iter().map(|t| deserialize_type(t)).collect();
+            let ret = deserialize_type(ret);
+            ast::Typ::Function {
+                args,
+                ret: Box::new(ret),
+            }
+        }
+        Type::Tuple(vals) => {
+            let vals = vals.iter().map(|t| deserialize_type(t)).collect();
+            ast::Typ::Tuple(vals)
+        }
+        Type::Unit => ast::Typ::Unit,
+    }
+}
 
 fn serialize_type(tctx: &TypCtx, typ: &typecheck::r#type::Type, top_level: bool) -> Type {
     match typ {
@@ -157,6 +202,11 @@ fn serialize_type(tctx: &TypCtx, typ: &typecheck::r#type::Type, top_level: bool)
             .iter()
             .find(|(_, tid)| **tid == *id)
             .map(|(name, _)| Type::Name(name.clone()))
+            .or_else(|| {
+                tctx.definitions
+                    .get(id)
+                    .map(|typ| serialize_type(tctx, typ, top_level))
+            })
             .unwrap(),
         typecheck::r#type::Type::Divergent => panic!("Cannot serialize divergent type"),
         typecheck::r#type::Type::ToInfere => panic!("Cannot serialize to infere type"),
