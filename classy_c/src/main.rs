@@ -79,7 +79,7 @@ fn compile(source: &str, packages: &[classy_c::package::Package]) -> TypCtx {
     let res = run_befor_type_context_passes(res);
     let mut tctx = TypCtx::new();
     for package in packages {
-        package.read_package(&mut tctx);
+        package.read_headers(&mut tctx);
     }
     let mut tctx = prepare_type_ctx(tctx, &res);
     println!("{}", tctx.debug_string());

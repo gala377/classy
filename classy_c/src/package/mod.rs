@@ -33,7 +33,7 @@ impl Package {
         make_package(name, tctx)
     }
 
-    pub fn read_package(&self, tctx: &mut TypCtx) {
+    pub fn read_headers(&self, tctx: &mut TypCtx) {
         read_package(self, tctx)
     }
 }
