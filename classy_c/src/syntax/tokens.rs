@@ -40,6 +40,8 @@ pub enum TokenType {
     Return,
     #[token("let")]
     Let,
+    #[token("forall")]
+    Forall,
 
     // Literals
     #[regex(r"[_a-zA-Z][_a-zA-Z0-9]*", |lex| lex.slice().to_owned())]

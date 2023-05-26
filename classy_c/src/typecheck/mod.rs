@@ -61,7 +61,7 @@ pub fn resolve_type_names(mut ctx: TypCtx) -> TypCtx {
 
 fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String) {
     match typ {
-        ast::Typ::Function { args, ret } => {
+        ast::Typ::Function { args, ret, generics: _generics } => {
             let resolved_args: Vec<_> = args
                 .iter()
                 .map(|t| {
@@ -168,7 +168,7 @@ fn resolve_type(
             definitions.insert(id, Type::Tuple(resolved));
             id
         }
-        ast::Typ::Function { args, ret } => {
+        ast::Typ::Function { args, ret, generics: _generics } => {
             let resolved_args = args
                 .iter()
                 .map(|t| resolve_type(names, definitions, next_id, unit_id, to_infere_id, t))

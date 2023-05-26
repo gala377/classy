@@ -241,15 +241,39 @@ impl<'source> Parser<'source> {
     }
 
     fn parse_type(&mut self) -> ParseRes<ast::Typ> {
+        let generics = match self.match_token(TokenType::Forall) {
+            Ok(_) => {
+                let mut items = Vec::new();
+                while let Ok(id) = self.parse_identifier() {
+                    items.push(id);
+                }
+                let _ = self.expect_token(TokenType::FatArrow);
+                items
+            },
+            _ => Vec::new(),
+        };
         let typ = self.parse_atomic_type()?;
         if let Err(_) = self.match_token(TokenType::LParen) {
-            return Ok(typ);
+            return match typ {
+                ast::Typ::Function { args, ret, .. } => Ok(ast::Typ::Function {
+                    args,
+                    ret: ret,
+                    generics,
+                }),
+                t => {
+                    if !generics.is_empty() {
+                        panic!("Generics are only allowed in this type signature: {:#?}", t);
+                    }
+                    Ok(t)
+                }
+            };
         }
         // type aplication
         let args = self.parse_delimited(Self::parse_type, TokenType::Comma);
         let _ = self.expect_token(TokenType::RParen);
         Ok(ast::Typ::Application {
             callee: Box::new(typ),
+            generics,
             args,
         })
     }
@@ -292,6 +316,7 @@ impl<'source> Parser<'source> {
                             ast::Typ::Unit => Vec::new(),
                             other => vec![other],
                         },
+                        generics: Vec::new(),
                         ret: Box::new(ret),
                     });
                 }
@@ -1065,6 +1090,7 @@ mod tests {
         ast::Builder::new()
             .func_def(
                 "foo",
+                Vec::new(),
                 |a| a.name("a", "b").name("c", "d"),
                 ast::Typ::Unit,
                 |b| b.integer(10),

@@ -482,7 +482,7 @@ impl<'ctx> TypeChecker<'ctx> {
                 let t = Box::new(self.ast_type_to_type(scope, t));
                 Type::Array(t)
             }
-            ast::Typ::Function { args, ret } => {
+            ast::Typ::Function { args, ret, generics: _generics } => {
                 let args = args
                     .iter()
                     .map(|typ| self.ast_type_to_type(scope, typ))

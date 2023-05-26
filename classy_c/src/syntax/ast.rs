@@ -88,9 +88,9 @@ pub struct FunctionDefinition {
 pub enum Typ {
     Unit,
     Name(String),
-    Application { callee: Box<Typ>, args: Vec<Typ> },
+    Application { callee: Box<Typ>, generics: Vec<String>, args: Vec<Typ> },
     Array(Box<Typ>),
-    Function { args: Vec<Typ>, ret: Box<Typ> },
+    Function { generics: Vec<String>, args: Vec<Typ>, ret: Box<Typ> },
     Tuple(Vec<Typ>),
     ToInfere,
 }
@@ -242,12 +242,13 @@ impl Builder {
         name: impl Into<String>,
         body: impl FnOnce(ExprBuilder) -> ExprBuilder,
     ) -> Self {
-        self.func_def(name, |args| args, Typ::Unit, body)
+        self.func_def(name, Vec::new(), |args| args, Typ::Unit, body)
     }
 
     pub fn func_def(
         mut self,
         name: impl Into<String>,
+        generics: Vec<String>,
         parameters: impl FnOnce(TypedNameListBuilder) -> TypedNameListBuilder,
         ret: Typ,
         body: impl FnOnce(ExprBuilder) -> ExprBuilder,
@@ -267,6 +268,7 @@ impl Builder {
                 parameters: arg_names,
                 typ: Typ::Function {
                     args: arg_types,
+                    generics,
                     ret: Box::new(ret),
                 },
                 body,
