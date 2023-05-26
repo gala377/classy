@@ -51,7 +51,9 @@ impl AliasResolver {
                 | Type::Int
                 | Type::String
                 | Type::Unit
-                | Type::UInt => Type::Alias(*for_type),
+                | Type::UInt
+                | Type::Generic(_)
+                | Type::Scheme { .. } => Type::Alias(*for_type),
                 Type::Alias(..) => {
                     unreachable!("no alias should point to another alias at this point")
                 }
@@ -156,13 +158,15 @@ impl AliasResolver {
                     | Type::Float
                     | Type::String
                     | Type::Unit
-                    | Type::ToInfere) => t.clone(),
+                    | Type::ToInfere
+                    | Type::Generic(_)) => t.clone(),
                     // Do not resolve this types as they migh create reference cycles.
                     Type::Struct { .. } => Type::Alias(*for_type),
                     Type::Function { .. } => Type::Alias(*for_type),
                     Type::Tuple { .. } => Type::Alias(*for_type),
                     Type::ADT { .. } => Type::Alias(*for_type),
                     Type::Array { .. } => Type::Alias(*for_type),
+                    Type::Scheme { .. } => Type::Alias(*for_type),
                     _ => unreachable!("other types should not be visible here"),
                 }
             }
@@ -184,13 +188,20 @@ impl AliasResolver {
                     ret: Box::new(resolved_ret),
                 }
             }
+            Type::Scheme { prefex, typ } => {
+                Type::Scheme {
+                    prefex: prefex.clone(),
+                    typ: Box::new(self.resolve_shallow_aliases_in_type(ctx, typ)),
+                }
+            }
             t @ (Type::UInt
             | Type::Int
             | Type::Bool
             | Type::Float
             | Type::String
             | Type::Unit
-            | Type::ToInfere) => t.clone(),
+            | Type::ToInfere
+            | Type::Generic(_)) => t.clone(),
             _ => unimplemented!(),
         }
     }

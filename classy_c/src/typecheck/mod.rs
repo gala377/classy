@@ -61,7 +61,11 @@ pub fn resolve_type_names(mut ctx: TypCtx) -> TypCtx {
 
 fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String) {
     match typ {
-        ast::Typ::Function { args, ret, generics: _generics } => {
+        ast::Typ::Function {
+            args,
+            ret,
+            generics,
+        } => {
             let resolved_args: Vec<_> = args
                 .iter()
                 .map(|t| {
@@ -71,10 +75,10 @@ fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String) {
                         &mut ctx.next_id,
                         ctx.unit_id,
                         ctx.to_infere_id,
+                        generics,
                         t,
                     )
                 })
-                .map(Type::Alias)
                 .collect();
             let resolved_ret = resolve_type(
                 &ctx.types,
@@ -82,9 +86,10 @@ fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String) {
                 &mut ctx.next_id,
                 ctx.unit_id,
                 ctx.to_infere_id,
+                generics,
                 ret,
             );
-            let function_t = ctx.mk_function(&resolved_args, Type::Alias(resolved_ret));
+            let function_t = ctx.mk_function_scheme(generics.clone(), &resolved_args, resolved_ret);
             assert!(
                 ctx.variables.insert(name.clone(), function_t).is_some(),
                 "updating type definition for funtion that does not exist {}",
@@ -108,28 +113,32 @@ fn resolve_top_level_type(
     let type_id = ctx.types.get(name).expect(&exp_msg);
     let resolved_type = match definition {
         ast::DefinedType::Alias(ast::Alias { for_type: inner }) => {
-            let resolved_id = resolve_type(
+            let resolved = resolve_type(
                 &ctx.types,
                 &mut ctx.definitions,
                 &mut ctx.next_id,
                 ctx.unit_id,
                 ctx.to_infere_id,
+                &Vec::new(),
                 inner,
             );
-            Type::Alias(resolved_id)
+            // invariant: because the prefex is empty this will always be an alias
+            resolved
         }
         ast::DefinedType::Record(ast::Record { fields }) => {
             let mut resolved_fields = Vec::with_capacity(fields.len());
+            // invariant: because the prefex is empty this will always be an alias
             for ast::TypedName { name, typ } in fields {
-                let resolved_id = resolve_type(
+                let resolved = resolve_type(
                     &ctx.types,
                     &mut ctx.definitions,
                     &mut ctx.next_id,
                     ctx.unit_id,
                     ctx.to_infere_id,
+                    &Vec::new(),
                     typ,
                 );
-                resolved_fields.push((name.clone(), Type::Alias(resolved_id)));
+                resolved_fields.push((name.clone(), resolved));
             }
             Type::Struct {
                 def: *def_id,
@@ -153,35 +162,65 @@ fn resolve_type(
     next_id: &mut TypeId,
     unit_id: TypeId,
     to_infere_id: TypeId,
+    prefex: &Vec<String>,
     typ: &ast::Typ,
-) -> TypeId {
+) -> Type {
     match typ {
-        ast::Typ::Name(n) => names.get(n).expect(&format!("type not found, {n}")).clone(),
+        ast::Typ::Name(n) if prefex.contains(n) => {
+            let pos = prefex.iter().position(|x| x == n).unwrap();
+            Type::Generic(pos)
+        }
+        ast::Typ::Name(n) => {
+            Type::Alias(names.get(n).expect(&format!("type not found, {n}")).clone())
+        }
         ast::Typ::Tuple(types) => {
             let resolved = types
                 .iter()
-                .map(|t| resolve_type(names, definitions, next_id, unit_id, to_infere_id, t))
-                .map(Type::Alias)
+                .map(|t| {
+                    resolve_type(
+                        names,
+                        definitions,
+                        next_id,
+                        unit_id,
+                        to_infere_id,
+                        prefex,
+                        t,
+                    )
+                })
                 .collect();
             let id = *next_id;
             *next_id += 1;
             definitions.insert(id, Type::Tuple(resolved));
-            id
+            Type::Alias(id)
         }
-        ast::Typ::Function { args, ret, generics: _generics } => {
+        ast::Typ::Function {
+            args,
+            ret,
+            generics: _generics,
+        } => {
             let resolved_args = args
                 .iter()
-                .map(|t| resolve_type(names, definitions, next_id, unit_id, to_infere_id, t))
-                .map(Type::Alias)
+                .map(|t| {
+                    resolve_type(
+                        names,
+                        definitions,
+                        next_id,
+                        unit_id,
+                        to_infere_id,
+                        prefex,
+                        t,
+                    )
+                })
                 .collect();
-            let resolved_ret = Type::Alias(resolve_type(
+            let resolved_ret = resolve_type(
                 names,
                 definitions,
                 next_id,
                 unit_id,
                 to_infere_id,
+                prefex,
                 ret,
-            ));
+            );
             let id = *next_id;
             *next_id += 1;
             definitions.insert(
@@ -191,10 +230,10 @@ fn resolve_type(
                     ret: Box::new(resolved_ret),
                 },
             );
-            id
+            Type::Alias(id)
         }
-        ast::Typ::Unit => unit_id,
-        ast::Typ::ToInfere => to_infere_id,
+        ast::Typ::Unit => Type::Alias(unit_id),
+        ast::Typ::ToInfere => Type::Alias(to_infere_id),
         // todo: for other types like a function or an array, we actually
         // need to create them first.
         _ => unimplemented!(),
@@ -262,6 +301,10 @@ fn types_eq(ctx: &TypCtx, t1: &Type, t2: &Type) -> bool {
                     .iter()
                     .zip(args2)
                     .all(|(t1, t2)| types_eq(ctx, t1, t2))
+        }
+        (Type::Generic(n1), Type::Generic(n2)) => n1 == n2,
+        (Type::Scheme { prefex: prefex_1, typ: typ_1 }, Type::Scheme { prefex: prefex_2, typ: typ_2 }) => {
+            prefex_1.len() == prefex_2.len() && types_eq(ctx, typ_1, typ_2)
         }
         _ => false,
     }
@@ -356,6 +399,11 @@ fn replace_aliases_with_map(typ: &Type, map: &HashMap<TypeId, TypeId>) -> Type {
                 ret: Box::new(ret),
             }
         }
+        g @ Type::Generic(_) => g.clone(),
+        Type::Scheme { prefex, typ } => Type::Scheme {
+            prefex: prefex.clone(),
+            typ: Box::new(replace_aliases_with_map(typ, map)),
+        },
         _ => unimplemented!(),
     }
 }
@@ -510,6 +558,10 @@ mod tests {
             }
             (Type::Divergent, _) => true,
             (_, Type::Divergent) => true,
+            (Type::Generic(n1), Type::Generic(n2)) => n1 == n2,
+            (Type::Scheme { typ: t1, prefex: p1 }, Type::Scheme { typ: t2, prefex: p2 }) => {
+                p1.len() == p2.len() && test_types_eq(ctx, t1, t2)
+            }
             _ => false,
         }
     }

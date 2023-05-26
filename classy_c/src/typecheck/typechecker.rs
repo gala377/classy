@@ -735,4 +735,22 @@ mod tests {
         "#;
         run_typechecker(source)
     }
+
+
+    #[test]
+    fn generic_functions() {
+        let source = r#"
+            is_string: (String) -> ()
+            is_string s = ()
+
+            id: forall a => (a) -> a
+            id a = a
+
+            main: () -> ()
+            main {
+                is_string(id "hello")
+            }
+        "#;
+        run_typechecker(source)
+    }
 }

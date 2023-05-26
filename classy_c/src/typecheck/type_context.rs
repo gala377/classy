@@ -51,6 +51,20 @@ impl TypCtx {
         self.add_type(typ)
     }
 
+    pub fn mk_function_scheme(&mut self, prefex: Vec<String>, args: &[Type], ret: Type) -> TypeId {
+        let mut typ = Type::Function {
+            args: args.into(),
+            ret: Box::new(ret),
+        };
+        if !prefex.is_empty() {
+            typ = Type::Scheme {
+                prefex,
+                typ: Box::new(typ),
+            };
+        }
+        self.add_type(typ)
+    }
+
     pub fn mk_struct(&mut self, def_id: DefId, fields: &[(Name, Type)]) -> TypeId {
         assert!(self.nodes.contains_key(&def_id));
         let typ = Type::Struct {
