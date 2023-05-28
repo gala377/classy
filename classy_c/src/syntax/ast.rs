@@ -88,9 +88,17 @@ pub struct FunctionDefinition {
 pub enum Typ {
     Unit,
     Name(String),
-    Application { callee: Box<Typ>, generics: Vec<String>, args: Vec<Typ> },
+    Application {
+        callee: Box<Typ>,
+        generics: Vec<String>,
+        args: Vec<Typ>,
+    },
     Array(Box<Typ>),
-    Function { generics: Vec<String>, args: Vec<Typ>, ret: Box<Typ> },
+    Function {
+        generics: Vec<String>,
+        args: Vec<Typ>,
+        ret: Box<Typ>,
+    },
     Tuple(Vec<Typ>),
     ToInfere,
 }
@@ -104,7 +112,14 @@ pub struct TypeVariable {
 
 #[derive(Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq))]
-pub enum Expr {
+pub struct Expr {
+    pub id: usize,
+    pub kind: ExprKind,
+}
+
+#[derive(Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq))]
+pub enum ExprKind {
     Unit,
     Sequence(Vec<Expr>),
     Assignment {
@@ -165,9 +180,9 @@ pub struct Path(pub Vec<String>);
 impl Path {
     pub fn try_from_expr(expr: Expr) -> Option<Self> {
         fn match_segment(expr: Expr) -> Option<Vec<String>> {
-            match expr {
-                Expr::Name(val) => Some(vec![val]),
-                Expr::Access { val, field } => {
+            match expr.kind {
+                ExprKind::Name(val) => Some(vec![val]),
+                ExprKind::Access { val, field } => {
                     let mut path = match_segment(*val)?;
                     path.push(field);
                     Some(path)
@@ -399,6 +414,10 @@ impl TypedNameListBuilder {
     }
 }
 
+fn fake_expr(kind: ExprKind) -> Expr {
+    Expr { id: 0, kind }
+}
+
 #[derive(Default)]
 pub struct ExprBuilder {
     res: Option<Expr>,
@@ -407,19 +426,19 @@ pub struct ExprBuilder {
 impl ExprBuilder {
     pub fn integer(mut self, val: isize) -> Self {
         assert!(self.res.is_none());
-        self.res = Some(Expr::IntConst(val));
+        self.res = Some(fake_expr(ExprKind::IntConst(val)));
         self
     }
 
     pub fn float(mut self, val: f64) -> Self {
         assert!(self.res.is_none());
-        self.res = Some(Expr::FloatConst(val));
+        self.res = Some(fake_expr(ExprKind::FloatConst(val)));
         self
     }
 
     pub fn name(mut self, s: impl Into<String>) -> Self {
         assert!(self.res.is_none());
-        self.res = Some(Expr::Name(s.into()));
+        self.res = Some(fake_expr(ExprKind::Name(s.into())));
         self
     }
 
@@ -433,11 +452,11 @@ impl ExprBuilder {
         let func = callee(default()).build();
         let args = args(default()).build();
         let kwargs = kwargs(default()).build();
-        self.res = Some(Expr::FunctionCall {
+        self.res = Some(fake_expr(ExprKind::FunctionCall {
             func: Box::new(func),
             args,
             kwargs,
-        });
+        }));
         self
     }
 
@@ -448,28 +467,28 @@ impl ExprBuilder {
     ) -> Self {
         assert!(self.res.is_none());
         let expr = lhs(default()).build();
-        self.res = Some(Expr::Access {
+        self.res = Some(fake_expr(ExprKind::Access {
             val: Box::new(expr),
             field: field.into(),
-        });
+        }));
         self
     }
 
     pub fn tuple(mut self, vals: impl FnOnce(ExprListBuilder) -> ExprListBuilder) -> Self {
         assert!(self.res.is_none());
-        self.res = Some(Expr::Tuple(vals(default()).build()));
+        self.res = Some(fake_expr(ExprKind::Tuple(vals(default()).build())));
         self
     }
 
     pub fn unit(mut self) -> Self {
         assert!(self.res.is_none());
-        self.res = Some(Expr::Unit);
+        self.res = Some(fake_expr(ExprKind::Unit));
         self
     }
 
     pub fn sequence(mut self, exprs: impl FnOnce(ExprListBuilder) -> ExprListBuilder) -> Self {
         assert!(self.res.is_none());
-        self.res = Some(Expr::Sequence(exprs(default()).build()));
+        self.res = Some(fake_expr(ExprKind::Sequence(exprs(default()).build())));
         self
     }
 
@@ -481,10 +500,10 @@ impl ExprBuilder {
         assert!(self.res.is_none());
         let lhs = lhs(default()).build();
         let rhs = rhs(default()).build();
-        self.res = Some(Expr::Assignment {
+        self.res = Some(fake_expr(ExprKind::Assignment {
             lval: Box::new(lhs),
             rval: Box::new(rhs),
-        });
+        }));
         self
     }
 
@@ -495,7 +514,7 @@ impl ExprBuilder {
     ) -> Self {
         assert!(self.res.is_none());
         let body = body(default()).build();
-        self.res = Some(Expr::Lambda {
+        self.res = Some(fake_expr(ExprKind::Lambda {
             parameters: parameters
                 .iter()
                 .cloned()
@@ -505,7 +524,7 @@ impl ExprBuilder {
                 })
                 .collect(),
             body: Box::new(body),
-        });
+        }));
         self
     }
 
@@ -516,10 +535,10 @@ impl ExprBuilder {
     ) -> Self {
         assert!(self.res.is_none());
         let body = body(default()).build();
-        self.res = Some(Expr::Lambda {
+        self.res = Some(fake_expr(ExprKind::Lambda {
             parameters: parameters(default()).build(),
             body: Box::new(body),
-        });
+        }));
         self
     }
 
@@ -530,17 +549,17 @@ impl ExprBuilder {
     ) -> Self {
         assert!(self.res.is_none());
         let expr = expr(default()).build();
-        self.res = Some(Expr::TypedExpr {
+        self.res = Some(fake_expr(ExprKind::TypedExpr {
             expr: Box::new(expr),
             typ: Typ::Name(typ.into()),
-        });
+        }));
         self
     }
 
     pub fn r#return(mut self, expr: impl FnOnce(ExprBuilder) -> ExprBuilder) -> Self {
         assert!(self.res.is_none());
         let expr = expr(default()).build();
-        self.res = Some(Expr::Return(Box::new(expr)));
+        self.res = Some(fake_expr(ExprKind::Return(Box::new(expr))));
         self
     }
 
@@ -550,11 +569,11 @@ impl ExprBuilder {
         body: impl FnOnce(ExprListBuilder) -> ExprListBuilder,
     ) -> Self {
         let cond = cond(default()).build();
-        let body = Expr::Sequence(body(default()).build());
-        self.res = Some(Expr::While {
+        let body = fake_expr(ExprKind::Sequence(body(default()).build()));
+        self.res = Some(fake_expr(ExprKind::While {
             cond: Box::new(cond),
             body: Box::new(body),
-        });
+        }));
         self
     }
 
@@ -565,18 +584,18 @@ impl ExprBuilder {
         r#else: impl FnOnce(ExprListBuilder) -> ExprListBuilder,
     ) -> Self {
         let cond = cond(default()).build();
-        let body = Expr::Sequence(body(default()).build());
+        let body = fake_expr(ExprKind::Sequence(body(default()).build()));
         let r#else = r#else(default()).build();
         let r#else = if r#else.is_empty() {
             None
         } else {
-            Some(Box::new(Expr::Sequence(r#else)))
+            Some(Box::new(fake_expr(ExprKind::Sequence(r#else))))
         };
-        self.res = Some(Expr::If {
+        self.res = Some(fake_expr(ExprKind::If {
             cond: Box::new(cond),
             body: Box::new(body),
             else_body: r#else,
-        });
+        }));
         self
     }
 
@@ -587,14 +606,14 @@ impl ExprBuilder {
         r#else: impl FnOnce(ExprBuilder) -> ExprBuilder,
     ) -> Self {
         let cond = cond(default()).build();
-        let body = Expr::Sequence(body(default()).build());
+        let body = fake_expr(ExprKind::Sequence(body(default()).build()));
         let r#else = r#else(default()).build();
         let r#else = Box::new(r#else);
-        self.res = Some(Expr::If {
+        self.res = Some(fake_expr(ExprKind::If {
             cond: Box::new(cond),
             body: Box::new(body),
             else_body: Some(r#else),
-        });
+        }));
         self
     }
 
@@ -608,11 +627,11 @@ impl ExprBuilder {
         init: impl FnOnce(ExprBuilder) -> ExprBuilder,
     ) -> Self {
         let init = init(default()).build();
-        self.res = Some(Expr::Let {
+        self.res = Some(fake_expr(ExprKind::Let {
             name: name.into(),
             typ: Typ::ToInfere,
             init: Box::new(init),
-        });
+        }));
         self
     }
 
@@ -622,10 +641,10 @@ impl ExprBuilder {
         values: impl FnOnce(KwArgsBuilder) -> KwArgsBuilder,
     ) -> Self {
         let values = values(default()).build();
-        self.res = Some(Expr::StructLiteral {
+        self.res = Some(fake_expr(ExprKind::StructLiteral {
             strct: Path(vec![strct.into()]),
             values,
-        });
+        }));
         self
     }
 

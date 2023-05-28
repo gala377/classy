@@ -122,7 +122,7 @@ fn read_package(pkg: &Package, tctx: &mut TypCtx) {
         let node = ast::FunctionDefinition {
             name: name.clone(),
             // TODO: should be undefined
-            body: ast::Expr::Unit,
+            body: ast::Expr { id: 0, kind: ast::ExprKind::Unit },
             typ: ast::Typ::Function {
                 args,
                 ret: Box::new(ret),

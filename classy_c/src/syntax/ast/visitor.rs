@@ -21,6 +21,10 @@ pub trait Visitor<'ast>: Sized {
         walk_expr(self, node)
     }
 
+    fn visit_expr_kind(&mut self, node: &'ast ast::ExprKind) {
+        walk_expr_kind(self, node)
+    }
+
     fn visit_sequence(&mut self, seq: &'ast [ast::Expr]) {
         walk_seq_expr(self, seq)
     }
@@ -111,52 +115,56 @@ pub fn walk_top_level_item<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::T
 }
 
 pub fn walk_expr<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::Expr) {
+    v.visit_expr_kind(&node.kind)
+}
+
+pub fn walk_expr_kind<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::ExprKind) {
     match node {
-        ast::Expr::Unit => {
+        ast::ExprKind::Unit => {
             v.visit_unit();
         }
-        ast::Expr::Sequence(seq) => {
+        ast::ExprKind::Sequence(seq) => {
             v.visit_sequence(seq);
         }
-        ast::Expr::Assignment { lval, rval } => {
+        ast::ExprKind::Assignment { lval, rval } => {
             v.visit_expr(lval);
             v.visit_expr(rval);
         }
-        ast::Expr::IntConst(val) => {
+        ast::ExprKind::IntConst(val) => {
             v.visit_int_const(*val);
         }
-        ast::Expr::StringConst(val) => {
+        ast::ExprKind::StringConst(val) => {
             v.visit_string_const(val);
         }
-        ast::Expr::FloatConst(val) => {
+        ast::ExprKind::FloatConst(val) => {
             v.visit_float_const(*val);
         }
-        ast::Expr::Name(name) => v.visit_name(name),
-        ast::Expr::FunctionCall { func, args, kwargs } => {
+        ast::ExprKind::Name(name) => v.visit_name(name),
+        ast::ExprKind::FunctionCall { func, args, kwargs } => {
             v.visit_function_call(func, args, kwargs);
         }
-        ast::Expr::Access { val, field } => {
+        ast::ExprKind::Access { val, field } => {
             v.visit_access(val, field);
         }
-        ast::Expr::Tuple(val) => {
+        ast::ExprKind::Tuple(val) => {
             v.visit_tuple(val);
         }
-        ast::Expr::Lambda { parameters, body } => {
+        ast::ExprKind::Lambda { parameters, body } => {
             v.visit_lambda(parameters, body);
         }
-        ast::Expr::TypedExpr { expr, typ } => {
+        ast::ExprKind::TypedExpr { expr, typ } => {
             v.visit_typed_expr(expr, typ);
         }
-        ast::Expr::StructLiteral { strct, values } => {
+        ast::ExprKind::StructLiteral { strct, values } => {
             v.visit_struct_literal(strct, values);
         }
-        ast::Expr::While { cond, body } => {
+        ast::ExprKind::While { cond, body } => {
             v.visit_while(cond, body);
         }
-        ast::Expr::Return(val) => {
+        ast::ExprKind::Return(val) => {
             v.visit_return(val);
         }
-        ast::Expr::If {
+        ast::ExprKind::If {
             cond,
             body,
             else_body,
@@ -164,11 +172,11 @@ pub fn walk_expr<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::Expr) {
             let else_body = else_body.as_ref().map(|e| e.as_ref());
             v.visit_if(cond, body, else_body);
         }
-        ast::Expr::Let { name, typ, init } => {
+        ast::ExprKind::Let { name, typ, init } => {
             v.visit_let(name, typ, init);
         }
-        ast::Expr::BoolConst(val) => v.visit_bool_const(*val),
-        ast::Expr::AnonType { fields } => v.visit_anon_type(fields),
+        ast::ExprKind::BoolConst(val) => v.visit_bool_const(*val),
+        ast::ExprKind::AnonType { fields } => v.visit_anon_type(fields),
     }
 }
 

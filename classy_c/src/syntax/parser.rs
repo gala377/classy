@@ -6,6 +6,8 @@ use super::ast::{self, TypedName};
 use super::lexer::Lexer;
 use super::tokens::{Token, TokenType};
 
+const DUMMY_AST_ID: usize = 0;
+
 #[derive(Error, Debug, Clone)]
 #[error("Syntax error [{span:?}] {msg}")]
 pub struct SyntaxError {
@@ -359,10 +361,10 @@ impl<'source> Parser<'source> {
             return Ok(lhs);
         }
         let rhs = self.parse_typed_expression()?;
-        Ok(ast::Expr::Assignment {
+        Ok(mk_expr(ast::ExprKind::Assignment {
             lval: Box::new(lhs),
             rval: Box::new(rhs),
-        })
+        }))
     }
 
     fn parse_typed_expression(&mut self) -> ParseRes<ast::Expr> {
@@ -374,16 +376,16 @@ impl<'source> Parser<'source> {
         let typ = self
             .parse_type()
             .error(self, beg, "expected a type for a typed expression")?;
-        Ok(ast::Expr::TypedExpr {
+        Ok(mk_expr(ast::ExprKind::TypedExpr {
             expr: Box::new(expr),
             typ,
-        })
+        }))
     }
 
     fn parse_fn_call(&mut self) -> ParseRes<ast::Expr> {
         let beg = self.curr_pos();
         let func = self.parse_access()?;
-        let args = if let Ok(_) = self.match_token(TokenType::LParen) {
+        let args: Vec<ast::Expr> = if let Ok(_) = self.match_token(TokenType::LParen) {
             // this is a function call with arguments passed in parentheses
             // or a function call in a special form:
             // func (a, b) => { lambda body }
@@ -398,10 +400,10 @@ impl<'source> Parser<'source> {
                 // which is a function call with trailing lambda with arguments
                 let parameters = args
                     .into_iter()
-                    .map(|arg| match arg {
-                        ast::Expr::Name(v) => Ok((v, ast::Typ::ToInfere)),
-                        ast::Expr::TypedExpr { expr, typ } => match *expr {
-                            ast::Expr::Name(name) => Ok((name, typ)),
+                    .map(|arg| match arg.kind {
+                        ast::ExprKind::Name(v) => Ok((v, ast::Typ::ToInfere)),
+                        ast::ExprKind::TypedExpr { expr, typ } => match expr.kind {
+                            ast::ExprKind::Name(name) => Ok((name, typ)),
                             _ => Err(ParseErr::Err(SyntaxError {
                                 msg: "Expected a lambda's arguments list".into(),
                                 span: beg..self.curr_pos(),
@@ -416,14 +418,14 @@ impl<'source> Parser<'source> {
                 let body =
                     self.parse_expr()
                         .error(self, beg, "Expected a trailing lambda's body")?;
-                let lambda = ast::Expr::Lambda {
+                let lambda = ast::ExprKind::Lambda {
                     parameters: parameters
                         .into_iter()
                         .map(|(name, typ)| ast::TypedName { name, typ })
                         .collect(),
                     body: Box::new(body),
                 };
-                vec![lambda]
+                vec![mk_expr(lambda)]
             } else {
                 // todo:
                 // form of func(args) this => { lambda body }
@@ -438,14 +440,14 @@ impl<'source> Parser<'source> {
                             beg,
                             "expected trailing lambda's body",
                         )?;
-                        let lambda = ast::Expr::Lambda {
+                        let lambda = ast::ExprKind::Lambda {
                             parameters: vec![ast::TypedName {
                                 name,
                                 typ: ast::Typ::ToInfere,
                             }],
                             body: Box::new(body),
                         };
-                        args.push(lambda);
+                        args.push(mk_expr(lambda));
                         args
                     }
                     TokenType::LParen => {
@@ -466,11 +468,11 @@ impl<'source> Parser<'source> {
                             beg,
                             "expected trailing lambda's body",
                         )?;
-                        let lambda = ast::Expr::Lambda {
+                        let lambda = ast::ExprKind::Lambda {
                             parameters,
                             body: Box::new(body),
                         };
-                        args.push(lambda);
+                        args.push(mk_expr(lambda));
                         args
                     }
                     TokenType::LBrace => {
@@ -480,11 +482,11 @@ impl<'source> Parser<'source> {
                             beg,
                             "expected trailing lambda's body",
                         )?;
-                        let lambda = ast::Expr::Lambda {
+                        let lambda = ast::ExprKind::Lambda {
                             parameters: Vec::new(),
                             body: Box::new(body),
                         };
-                        args.push(lambda);
+                        args.push(mk_expr(lambda));
                         args
                     }
                     _ => args,
@@ -496,11 +498,11 @@ impl<'source> Parser<'source> {
             // form of func arg
             // if there is no name, rbrace following then its just a normal expression
             let mut check_for_trailing_lambda = false;
-            let mut args = match self.parse_access() {
+            let mut args = match self.parse_access().map(|e| e.kind) {
                 // no name or brace following, just a normal expression
                 Err(ParseErr::WrongRule) => return Ok(func),
-                e @ Err(_) => return e,
-                Ok(ast::Expr::Name(name)) => {
+                Err(e) => return Err(e),
+                Ok(ast::ExprKind::Name(name)) => {
                     if let Ok(_) = self.match_token(TokenType::FatArrow) {
                         // func name => { lambda body }
                         let body = self.parse_expr().error(
@@ -508,7 +510,7 @@ impl<'source> Parser<'source> {
                             beg,
                             "Expected trailing lambda's body",
                         )?;
-                        let lambda = ast::Expr::Lambda {
+                        let lambda = ast::ExprKind::Lambda {
                             parameters: vec![ast::TypedName {
                                 name,
                                 typ: ast::Typ::ToInfere,
@@ -519,14 +521,14 @@ impl<'source> Parser<'source> {
                     } else {
                         // func name
                         check_for_trailing_lambda = true;
-                        vec![ast::Expr::Name(name)]
+                        vec![ast::ExprKind::Name(name)]
                     }
                 }
-                Ok(body @ ast::Expr::Sequence(_)) => {
+                Ok(body @ ast::ExprKind::Sequence(_)) => {
                     // func { lambda body }
-                    let lambda = ast::Expr::Lambda {
+                    let lambda = ast::ExprKind::Lambda {
                         parameters: Vec::new(),
-                        body: Box::new(body),
+                        body: Box::new(mk_expr(body)),
                     };
                     vec![lambda]
                 }
@@ -549,7 +551,7 @@ impl<'source> Parser<'source> {
                         let body =
                             self.parse_expr()
                                 .error(self, beg, "expected trailing lambdas body")?;
-                        args.push(ast::Expr::Lambda {
+                        args.push(ast::ExprKind::Lambda {
                             parameters,
                             body: Box::new(body),
                         });
@@ -566,7 +568,7 @@ impl<'source> Parser<'source> {
                             beg,
                             "Expected trailing lambdas body",
                         )?;
-                        args.push(ast::Expr::Lambda {
+                        args.push(ast::ExprKind::Lambda {
                             parameters,
                             body: Box::new(body),
                         })
@@ -579,7 +581,7 @@ impl<'source> Parser<'source> {
                             beg,
                             "Expected trailing lambdas body",
                         )?;
-                        args.push(ast::Expr::Lambda {
+                        args.push(ast::ExprKind::Lambda {
                             parameters: Vec::new(),
                             body: Box::new(body),
                         });
@@ -587,14 +589,14 @@ impl<'source> Parser<'source> {
                     _ => {}
                 }
             }
-            args
+            args.into_iter().map(mk_expr).collect()
         };
 
         let kwargs = args
             .iter()
-            .filter_map(|expr| match expr {
-                ast::Expr::Assignment { lval, rval } => {
-                    if let ast::Expr::Name(name) = lval.as_ref() {
+            .filter_map(|expr| match &expr.kind {
+                ast::ExprKind::Assignment { lval, rval } => {
+                    if let ast::ExprKind::Name(name) = &lval.as_ref().kind {
                         Some((name.clone(), rval.as_ref().clone()))
                     } else {
                         panic!("Invalid assignment in a function call");
@@ -605,18 +607,18 @@ impl<'source> Parser<'source> {
             .collect();
         let args = args
             .iter()
-            .filter(|expr| match expr {
-                ast::Expr::Assignment { .. } => false,
+            .filter(|expr| match expr.kind {
+                ast::ExprKind::Assignment { .. } => false,
                 _ => true,
             })
             .cloned()
             .collect();
         // todo split args into kwargs and args
-        Ok(ast::Expr::FunctionCall {
+        Ok(mk_expr(ast::ExprKind::FunctionCall {
             func: Box::new(func),
             args,
             kwargs,
-        })
+        }))
     }
 
     fn parse_access(&mut self) -> ParseRes<ast::Expr> {
@@ -626,10 +628,10 @@ impl<'source> Parser<'source> {
             let field =
                 self.parse_identifier()
                     .error(self, beg, "A field has to be an indentifier")?;
-            lhs = ast::Expr::Access {
+            lhs = mk_expr(ast::ExprKind::Access {
                 val: Box::new(lhs),
                 field,
-            };
+            });
         }
         Ok(lhs)
     }
@@ -640,19 +642,19 @@ impl<'source> Parser<'source> {
         match tok {
             TokenType::Integer(val) => {
                 self.lexer.advance();
-                Ok(ast::Expr::IntConst(val))
+                Ok(mk_expr(ast::ExprKind::IntConst(val)))
             }
             TokenType::Float(val) => {
                 self.lexer.advance();
-                Ok(ast::Expr::FloatConst(val))
+                Ok(mk_expr(ast::ExprKind::FloatConst(val)))
             }
             TokenType::True => {
                 self.lexer.advance();
-                Ok(ast::Expr::BoolConst(true))
+                Ok(mk_expr(ast::ExprKind::BoolConst(true)))
             }
             TokenType::False => {
                 self.lexer.advance();
-                Ok(ast::Expr::BoolConst(false))
+                Ok(mk_expr(ast::ExprKind::BoolConst(false)))
             }
             TokenType::Identifier(name) => {
                 self.lexer.advance();
@@ -662,20 +664,20 @@ impl<'source> Parser<'source> {
                     let body = self
                         .parse_expr()
                         .error(self, beg, "expected lambdas body")?;
-                    return Ok(ast::Expr::Lambda {
+                    return Ok(mk_expr(ast::ExprKind::Lambda {
                         parameters: vec![ast::TypedName {
                             name,
                             typ: ast::Typ::ToInfere,
                         }],
                         body: Box::new(body),
-                    });
+                    }));
                 }
-                Ok(ast::Expr::Name(name))
+                Ok(mk_expr(ast::ExprKind::Name(name)))
             }
             TokenType::LParen => {
                 self.lexer.advance();
                 if let Ok(_) = self.match_token(TokenType::RParen) {
-                    return Ok(ast::Expr::Unit);
+                    return Ok(mk_expr(ast::ExprKind::Unit));
                 }
                 let inner = self.parse_expr()?;
                 if let Err(_) = self.match_token(TokenType::Comma) {
@@ -687,26 +689,26 @@ impl<'source> Parser<'source> {
                     if let Ok(_) = self.match_token(TokenType::FatArrow) {
                         // this is a lambda literal in form
                         // (a) => expr
-                        return match inner {
-                            ast::Expr::Name(name) => {
+                        return match inner.kind {
+                            ast::ExprKind::Name(name) => {
                                 // (name) => expr
                                 let body = self.parse_expr()?;
-                                Ok(ast::Expr::Lambda {
+                                Ok(mk_expr(ast::ExprKind::Lambda {
                                     parameters: vec![ast::TypedName {
                                         name,
                                         typ: ast::Typ::ToInfere,
                                     }],
                                     body: Box::new(body),
-                                })
+                                }))
                             }
-                            ast::Expr::TypedExpr { expr, typ } => match *expr {
-                                ast::Expr::Name(name) => {
+                            ast::ExprKind::TypedExpr { expr, typ } => match expr.kind {
+                                ast::ExprKind::Name(name) => {
                                     // (name: type) => expr
                                     let body = self.parse_expr()?;
-                                    Ok(ast::Expr::Lambda {
+                                    Ok(mk_expr(ast::ExprKind::Lambda {
                                         parameters: vec![ast::TypedName { name, typ }],
                                         body: Box::new(body),
-                                    })
+                                    }))
                                 }
                                 _ => Err(ParseErr::Err(SyntaxError {
                                     span: beg..self.curr_pos(),
@@ -734,10 +736,10 @@ impl<'source> Parser<'source> {
                     // (a, b, c) => expr
                     let parameters = tuple
                         .into_iter()
-                        .map(|arg| match arg {
-                            ast::Expr::Name(v) => Ok((v, ast::Typ::ToInfere)),
-                            ast::Expr::TypedExpr { expr, typ } => match *expr {
-                                ast::Expr::Name(name) => Ok((name, typ)),
+                        .map(|arg| match arg.kind {
+                            ast::ExprKind::Name(v) => Ok((v, ast::Typ::ToInfere)),
+                            ast::ExprKind::TypedExpr { expr, typ } => match expr.kind {
+                                ast::ExprKind::Name(name) => Ok((name, typ)),
                                 _ => Err(ParseErr::Err(SyntaxError {
                                     msg: "Expected a lambda's arguments list".into(),
                                     span: beg..self.curr_pos(),
@@ -750,20 +752,20 @@ impl<'source> Parser<'source> {
                         })
                         .collect::<Result<Vec<_>, _>>()?;
                     let body = self.parse_expr().error(self, beg, "missing lambdas body")?;
-                    return Ok(ast::Expr::Lambda {
+                    return Ok(mk_expr(ast::ExprKind::Lambda {
                         parameters: parameters
                             .into_iter()
                             .map(|(name, typ)| ast::TypedName { name, typ })
                             .collect(),
                         body: Box::new(body),
-                    });
+                    }));
                 }
-                Ok(ast::Expr::Tuple(tuple))
+                Ok(mk_expr(ast::ExprKind::Tuple(tuple)))
             }
             TokenType::LBrace => self.parse_expr_sequence(),
             TokenType::String(s) => {
                 self.lexer.advance();
-                Ok(ast::Expr::StringConst(s))
+                Ok(mk_expr(ast::ExprKind::StringConst(s)))
             }
             _ => wrong_rule(),
         }
@@ -781,7 +783,7 @@ impl<'source> Parser<'source> {
             beg,
             "Missing closing brace for the expression block",
         );
-        Ok(ast::Expr::Sequence(body))
+        Ok(mk_expr(ast::ExprKind::Sequence(body)))
     }
 
     fn parse_possibly_typed_name(&mut self) -> ParseRes<ast::TypedName> {
@@ -801,7 +803,7 @@ impl<'source> Parser<'source> {
         let _ = self.expect_token(TokenType::LBrace);
         let fields = self.parse_delimited(Self::parse_anon_field_def, TokenType::Semicolon);
         let _ = self.expect_token(TokenType::RBrace);
-        Ok(ast::Expr::AnonType { fields })
+        Ok(mk_expr(ast::ExprKind::AnonType { fields }))
     }
 
     fn parse_anon_field_def(&mut self) -> ParseRes<(String, ast::Expr)> {
@@ -834,11 +836,11 @@ impl<'source> Parser<'source> {
             beg,
             "init expression is required in the let expression",
         )?;
-        Ok(ast::Expr::Let {
+        Ok(mk_expr(ast::ExprKind::Let {
             name,
             typ,
             init: Box::new(init),
-        })
+        }))
     }
 
     fn parse_while(&mut self) -> ParseRes<ast::Expr> {
@@ -847,16 +849,16 @@ impl<'source> Parser<'source> {
         let cond = self.parse_expr()?;
         let _ = self.expect_token(TokenType::RParen);
         let body = self.parse_expr_sequence()?;
-        Ok(ast::Expr::While {
+        Ok(mk_expr(ast::ExprKind::While {
             cond: Box::new(cond),
             body: Box::new(body),
-        })
+        }))
     }
 
     fn parse_return(&mut self) -> ParseRes<ast::Expr> {
         self.match_token(TokenType::Return)?;
         let expr = self.parse_expr()?;
-        Ok(ast::Expr::Return(Box::new(expr)))
+        Ok(mk_expr(ast::ExprKind::Return(Box::new(expr))))
     }
 
     fn parse_if(&mut self) -> ParseRes<ast::Expr> {
@@ -879,11 +881,11 @@ impl<'source> Parser<'source> {
             })
             .transpose()?
             .map(Box::new);
-        Ok(ast::Expr::If {
+        Ok(mk_expr(ast::ExprKind::If {
             cond: Box::new(cond),
             body: Box::new(body),
             else_body,
-        })
+        }))
     }
 }
 
@@ -959,6 +961,13 @@ impl<'source> Parser<'source> {
         } else {
             wrong_rule()
         }
+    }
+}
+
+fn mk_expr(kind: ast::ExprKind) -> ast::Expr {
+    ast::Expr {
+        kind,
+        id: DUMMY_AST_ID,
     }
 }
 

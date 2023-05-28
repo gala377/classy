@@ -55,7 +55,7 @@ impl Folder for PromoteAnonTypes {
         def
     }
 
-    fn fold_anon_type(&mut self, fields: Vec<(String, ast::Expr)>) -> ast::Expr {
+    fn fold_anon_type(&mut self, fields: Vec<(String, ast::Expr)>) -> ast::ExprKind {
         let id = self.next_id();
         let name = format!("{}@anon_{}", self.current_function, id);
         let record_fields = fields

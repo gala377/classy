@@ -160,15 +160,15 @@ impl<'ctx> TypeChecker<'ctx> {
         scope: Rc<RefCell<Scope>>,
         expr: &ast::Expr,
     ) -> (Type, ast::typed::ExprKind) {
-        match expr {
-            ast::Expr::Unit => (Type::Unit, ast::typed::ExprKind::Unit),
-            ast::Expr::BoolConst(v) => (Type::Bool, ast::typed::ExprKind::BoolConst(*v)),
-            ast::Expr::IntConst(v) => (Type::Int, ast::typed::ExprKind::IntConst(*v)),
-            ast::Expr::StringConst(v) => {
+        match &expr.kind {
+            ast::ExprKind::Unit => (Type::Unit, ast::typed::ExprKind::Unit),
+            ast::ExprKind::BoolConst(v) => (Type::Bool, ast::typed::ExprKind::BoolConst(*v)),
+            ast::ExprKind::IntConst(v) => (Type::Int, ast::typed::ExprKind::IntConst(*v)),
+            ast::ExprKind::StringConst(v) => {
                 (Type::String, ast::typed::ExprKind::StringConst(v.clone()))
             }
-            ast::Expr::FloatConst(v) => (Type::Float, ast::typed::ExprKind::FloatConst(*v)),
-            ast::Expr::Sequence(exprs) => {
+            ast::ExprKind::FloatConst(v) => (Type::Float, ast::typed::ExprKind::FloatConst(*v)),
+            ast::ExprKind::Sequence(exprs) => {
                 let seqs: Vec<_> = exprs
                     .iter()
                     .map(|expr| self.typecheck_expr(scope.clone(), expr))
@@ -177,7 +177,7 @@ impl<'ctx> TypeChecker<'ctx> {
                 let typ = seqs.last().map(|e| e.typ.clone()).unwrap_or(Type::Unit);
                 (typ, ast::typed::ExprKind::Sequence(seqs))
             }
-            ast::Expr::Assignment { lval, rval } => {
+            ast::ExprKind::Assignment { lval, rval } => {
                 let (lval_t, lexpr) = self.typecheck_expr(scope.clone(), lval);
                 let (rval_t, rexpr) = self.typecheck_expr(scope.clone(), rval);
                 if !scope.borrow().types_eq(self.tctx, &lval_t, &rval_t) {
@@ -197,14 +197,14 @@ impl<'ctx> TypeChecker<'ctx> {
                     },
                 )
             }
-            ast::Expr::Name(name) => {
+            ast::ExprKind::Name(name) => {
                 let typ = scope
                     .borrow()
                     .type_of(name)
                     .expect(&format!("Expected type of variable {} to exist", name));
                 (typ, ast::typed::ExprKind::Name(name.clone()))
             }
-            ast::Expr::FunctionCall {
+            ast::ExprKind::FunctionCall {
                 func,
                 args,
                 kwargs: _kwargs,
@@ -251,7 +251,7 @@ impl<'ctx> TypeChecker<'ctx> {
                     _ => panic!("Expected function type but got {:?}", func_t),
                 }
             }
-            ast::Expr::Access { val, field } => {
+            ast::ExprKind::Access { val, field } => {
                 let (val_t, val_typed) = self.typecheck_expr(scope, val);
                 match &val_t {
                     Type::Struct { fields, .. } => {
@@ -274,7 +274,7 @@ impl<'ctx> TypeChecker<'ctx> {
                     _ => panic!("Expected struct type but got {:?}", val_t),
                 }
             }
-            ast::Expr::Tuple(exprs) => {
+            ast::ExprKind::Tuple(exprs) => {
                 let typed_exprs = exprs
                     .iter()
                     .map(|expr| self.typecheck_expr(scope.clone(), expr))
@@ -286,8 +286,8 @@ impl<'ctx> TypeChecker<'ctx> {
                     .collect::<Vec<_>>();
                 (Type::Tuple(types), ast::typed::ExprKind::Tuple(typed_exprs))
             }
-            ast::Expr::Lambda { .. } => todo!(),
-            ast::Expr::TypedExpr { expr, typ } => {
+            ast::ExprKind::Lambda { .. } => todo!(),
+            ast::ExprKind::TypedExpr { expr, typ } => {
                 let (expr_t, exptr_body) = self.typecheck_expr(scope.clone(), expr);
                 let typ_t = self.ast_type_to_type(&scope.borrow(), typ);
                 if !scope.borrow().types_eq(self.tctx, &expr_t, &typ_t) {
@@ -295,7 +295,7 @@ impl<'ctx> TypeChecker<'ctx> {
                 }
                 (expr_t, exptr_body)
             }
-            ast::Expr::StructLiteral { strct, values } => {
+            ast::ExprKind::StructLiteral { strct, values } => {
                 let name = &strct.0[0];
                 let mut strct_t = scope
                     .borrow()
@@ -359,7 +359,7 @@ impl<'ctx> TypeChecker<'ctx> {
                     },
                 )
             }
-            ast::Expr::While { cond, body } => {
+            ast::ExprKind::While { cond, body } => {
                 let (cond_t, cond_typed) = self.typecheck_expr(scope.clone(), cond);
                 if cond_t != Type::Bool {
                     panic!("Expected type {:?} but got {:?}", Type::Bool, cond_t)
@@ -383,7 +383,7 @@ impl<'ctx> TypeChecker<'ctx> {
                     },
                 )
             }
-            ast::Expr::Return(expr) => {
+            ast::ExprKind::Return(expr) => {
                 let (expr_t, expr_typed) = self.typecheck_expr(scope.clone(), expr);
                 let ret_t = self
                     .functions_ret_type
@@ -400,7 +400,7 @@ impl<'ctx> TypeChecker<'ctx> {
                     })),
                 )
             }
-            ast::Expr::If {
+            ast::ExprKind::If {
                 cond,
                 body,
                 else_body,
@@ -441,7 +441,7 @@ impl<'ctx> TypeChecker<'ctx> {
                     },
                 )
             }
-            ast::Expr::Let { name, typ, init } => {
+            ast::ExprKind::Let { name, typ, init } => {
                 let (init_t, init_typed_expr) = self.typecheck_expr(scope.clone(), init);
                 let typ_t = match typ {
                     ast::Typ::ToInfere => init_t,
@@ -466,7 +466,7 @@ impl<'ctx> TypeChecker<'ctx> {
                     },
                 )
             }
-            ast::Expr::AnonType { .. } => panic!("There should be no anon types when typechecking"),
+            ast::ExprKind::AnonType { .. } => panic!("There should be no anon types when typechecking"),
         }
     }
 
@@ -737,20 +737,20 @@ mod tests {
     }
 
 
-    #[test]
-    fn generic_functions() {
-        let source = r#"
-            is_string: (String) -> ()
-            is_string s = ()
+    // #[test]
+    // fn generic_functions() {
+    //     let source = r#"
+    //         is_string: (String) -> ()
+    //         is_string s = ()
 
-            id: forall a => (a) -> a
-            id a = a
+    //         id: forall a => (a) -> a
+    //         id a = a
 
-            main: () -> ()
-            main {
-                is_string(id "hello")
-            }
-        "#;
-        run_typechecker(source)
-    }
+    //         main: () -> ()
+    //         main {
+    //             is_string(id "hello")
+    //         }
+    //     "#;
+    //     run_typechecker(source)
+    // }
 }

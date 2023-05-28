@@ -31,25 +31,25 @@ impl AstEmmiter {
     }
 
     fn emit_expr(&self, code: &mut Code, expr: &ast::Expr) {
-        match expr {
-            ast::Expr::Unit => todo!(),
-            ast::Expr::Sequence(seq) => {
+        match &expr.kind {
+            ast::ExprKind::Unit => todo!(),
+            ast::ExprKind::Sequence(seq) => {
                 for expr in seq {
                     self.emit_expr(code, expr);
                     self.emit_instr(code, OpCode::Pop);
                 }
             }
-            ast::Expr::Assignment { .. } => todo!(),
-            ast::Expr::IntConst(_) => todo!(),
-            ast::Expr::StringConst(val) => {
+            ast::ExprKind::Assignment { .. } => todo!(),
+            ast::ExprKind::IntConst(_) => todo!(),
+            ast::ExprKind::StringConst(val) => {
                 let id = code
                     .constant_pool
                     .add_entry(constant_pool::TypedEntry::String(val.clone()));
                 self.emit_instr(code, OpCode::ConstLoadString);
                 self.emit_word(code, id as u64);
             }
-            ast::Expr::FloatConst(_) => todo!(),
-            ast::Expr::Name(name) => {
+            ast::ExprKind::FloatConst(_) => todo!(),
+            ast::ExprKind::Name(name) => {
                 // todo: this is just plain wrong but we want something working
                 // Actually this might be okay if we just somehow intern the strings?
                 // we need better symbol names.
@@ -59,7 +59,7 @@ impl AstEmmiter {
                 self.emit_instr(code, OpCode::LookUpGlobal);
                 self.emit_word(code, id as u64);
             }
-            ast::Expr::FunctionCall {
+            ast::ExprKind::FunctionCall {
                 func,
                 args,
                 kwargs: _kwargs,
@@ -71,20 +71,20 @@ impl AstEmmiter {
                 self.emit_expr(code, &args[0]);
                 self.emit_instr(code, OpCode::Call1);
             }
-            ast::Expr::Access { .. } => todo!(),
-            ast::Expr::Tuple(_) => todo!(),
-            ast::Expr::Lambda { .. } => todo!(),
-            ast::Expr::TypedExpr { .. } => todo!(),
-            ast::Expr::StructLiteral { .. } => todo!(),
-            ast::Expr::While { .. } => todo!(),
-            ast::Expr::Return(expr) => {
+            ast::ExprKind::Access { .. } => todo!(),
+            ast::ExprKind::Tuple(_) => todo!(),
+            ast::ExprKind::Lambda { .. } => todo!(),
+            ast::ExprKind::TypedExpr { .. } => todo!(),
+            ast::ExprKind::StructLiteral { .. } => todo!(),
+            ast::ExprKind::While { .. } => todo!(),
+            ast::ExprKind::Return(expr) => {
                 self.emit_expr(code, expr);
                 self.emit_instr(code, OpCode::Return);
             }
-            ast::Expr::If { .. } => todo!(),
-            ast::Expr::Let { .. } => todo!(),
-            ast::Expr::BoolConst(_) => todo!(),
-            ast::Expr::AnonType { .. } => todo!(),
+            ast::ExprKind::If { .. } => todo!(),
+            ast::ExprKind::Let { .. } => todo!(),
+            ast::ExprKind::BoolConst(_) => todo!(),
+            ast::ExprKind::AnonType { .. } => todo!(),
         }
     }
 

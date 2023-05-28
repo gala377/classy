@@ -4,7 +4,7 @@ use crate::syntax::ast::{
     Expr, FunctionDefinition, Path, Program, TopLevelItem, Typ, TypeDefinition, TypedName,
 };
 
-use super::{DefinedType, TypeVariable};
+use super::{DefinedType, TypeVariable, ExprKind};
 
 /// TODO: Not all travelsal methods are implemented yet.
 pub trait Folder: Sized {
@@ -63,47 +63,47 @@ pub trait Folder: Sized {
         func: Expr,
         args: Vec<Expr>,
         kwargs: HashMap<String, Expr>,
-    ) -> Expr {
+    ) -> ExprKind {
         fold_function_call(self, func, args, kwargs)
     }
 
-    fn fold_access(&mut self, val: Expr, field: String) -> Expr {
+    fn fold_access(&mut self, val: Expr, field: String) -> ExprKind {
         fold_access(self, val, field)
     }
 
-    fn fold_tuple(&mut self, fields: Vec<Expr>) -> Expr {
+    fn fold_tuple(&mut self, fields: Vec<Expr>) -> ExprKind {
         fold_tuple(self, fields)
     }
 
-    fn fold_lambda(&mut self, params: Vec<TypedName>, body: Expr) -> Expr {
+    fn fold_lambda(&mut self, params: Vec<TypedName>, body: Expr) -> ExprKind {
         fold_lambda(self, params, body)
     }
 
-    fn fold_while(&mut self, cond: Expr, body: Expr) -> Expr {
+    fn fold_while(&mut self, cond: Expr, body: Expr) -> ExprKind {
         fold_while(self, cond, body)
     }
 
-    fn fold_return(&mut self, expr: Expr) -> Expr {
+    fn fold_return(&mut self, expr: Expr) -> ExprKind {
         fold_return(self, expr)
     }
 
-    fn fold_if(&mut self, cond: Expr, body: Expr, else_body: Option<Expr>) -> Expr {
+    fn fold_if(&mut self, cond: Expr, body: Expr, else_body: Option<Expr>) -> ExprKind {
         fold_if(self, cond, body, else_body)
     }
 
-    fn fold_let(&mut self, name: String, typ: Typ, init: Expr) -> Expr {
+    fn fold_let(&mut self, name: String, typ: Typ, init: Expr) -> ExprKind {
         fold_let(self, name, typ, init)
     }
 
-    fn fold_assignment(&mut self, lval: Expr, rval: Expr) -> Expr {
+    fn fold_assignment(&mut self, lval: Expr, rval: Expr) -> ExprKind {
         fold_assignment(self, lval, rval)
     }
 
-    fn fold_typed_expr(&mut self, expr: Expr, typ: Typ) -> Expr {
+    fn fold_typed_expr(&mut self, expr: Expr, typ: Typ) -> ExprKind {
         fold_typed_expression(self, expr, typ)
     }
 
-    fn fold_struct_literal(&mut self, strct: Path, values: HashMap<String, Expr>) -> Expr {
+    fn fold_struct_literal(&mut self, strct: Path, values: HashMap<String, Expr>) -> ExprKind {
         fold_struct_literal(self, strct, values)
     }
 
@@ -131,7 +131,7 @@ pub trait Folder: Sized {
         fold_function_args(self, args)
     }
 
-    fn fold_anon_type(&mut self, fields: Vec<(String, Expr)>) -> Expr {
+    fn fold_anon_type(&mut self, fields: Vec<(String, Expr)>) -> ExprKind {
         fold_anon_type(self, fields)
     }
 }
@@ -177,33 +177,40 @@ pub fn fold_type_definition<F: Folder>(folder: &mut F, def: TypeDefinition) -> T
 }
 
 pub fn fold_expr(folder: &mut impl Folder, expr: Expr) -> Expr {
+    Expr {
+        kind: fold_expr_kind(folder, expr.kind),
+        id: expr.id,
+    }
+}
+
+pub fn fold_expr_kind(folder: &mut impl Folder, expr: ExprKind) -> ExprKind {
     match expr {
-        Expr::Unit => {
+        ExprKind::Unit => {
             folder.fold_unit();
-            Expr::Unit
+            ExprKind::Unit
         }
-        Expr::IntConst(val) => Expr::IntConst(folder.fold_int_const(val)),
-        Expr::StringConst(val) => Expr::StringConst(folder.fold_string_const(val)),
-        Expr::FloatConst(val) => Expr::FloatConst(folder.fold_float_const(val)),
-        Expr::Name(name) => Expr::Name(folder.fold_name(name)),
-        Expr::Sequence(seq) => Expr::Sequence(folder.fold_sequence(seq)),
-        Expr::FunctionCall { func, args, kwargs } => folder.fold_function_call(*func, args, kwargs),
-        Expr::Access { val, field } => folder.fold_access(*val, field),
-        Expr::Tuple(fields) => folder.fold_tuple(fields),
-        Expr::Lambda { parameters, body } => folder.fold_lambda(parameters, *body),
-        Expr::While { cond, body } => folder.fold_while(*cond, *body),
-        Expr::Return(expr) => folder.fold_return(*expr),
-        Expr::If {
+        ExprKind::IntConst(val) => ExprKind::IntConst(folder.fold_int_const(val)),
+        ExprKind::StringConst(val) => ExprKind::StringConst(folder.fold_string_const(val)),
+        ExprKind::FloatConst(val) => ExprKind::FloatConst(folder.fold_float_const(val)),
+        ExprKind::Name(name) => ExprKind::Name(folder.fold_name(name)),
+        ExprKind::Sequence(seq) => ExprKind::Sequence(folder.fold_sequence(seq)),
+        ExprKind::FunctionCall { func, args, kwargs } => folder.fold_function_call(*func, args, kwargs),
+        ExprKind::Access { val, field } => folder.fold_access(*val, field),
+        ExprKind::Tuple(fields) => folder.fold_tuple(fields),
+        ExprKind::Lambda { parameters, body } => folder.fold_lambda(parameters, *body),
+        ExprKind::While { cond, body } => folder.fold_while(*cond, *body),
+        ExprKind::Return(expr) => folder.fold_return(*expr),
+        ExprKind::If {
             cond,
             body,
             else_body,
         } => folder.fold_if(*cond, *body, else_body.map(|e| *e)),
-        Expr::Let { name, typ, init } => folder.fold_let(name, typ, *init),
-        Expr::Assignment { lval, rval } => folder.fold_assignment(*lval, *rval),
-        Expr::TypedExpr { expr, typ } => folder.fold_typed_expr(*expr, typ),
-        Expr::StructLiteral { strct, values } => folder.fold_struct_literal(strct, values),
-        Expr::BoolConst(val) => Expr::BoolConst(folder.fold_bool_const(val)),
-        Expr::AnonType { fields } => folder.fold_anon_type(fields),
+        ExprKind::Let { name, typ, init } => folder.fold_let(name, typ, *init),
+        ExprKind::Assignment { lval, rval } => folder.fold_assignment(*lval, *rval),
+        ExprKind::TypedExpr { expr, typ } => folder.fold_typed_expr(*expr, typ),
+        ExprKind::StructLiteral { strct, values } => folder.fold_struct_literal(strct, values),
+        ExprKind::BoolConst(val) => ExprKind::BoolConst(folder.fold_bool_const(val)),
+        ExprKind::AnonType { fields } => folder.fold_anon_type(fields),
     }
 }
 
@@ -215,30 +222,30 @@ pub fn fold_sequence(folder: &mut impl Folder, seq: Vec<Expr>) -> Vec<Expr> {
     new_seq
 }
 
-pub fn fold_if(folder: &mut impl Folder, cond: Expr, body: Expr, else_body: Option<Expr>) -> Expr {
-    Expr::If {
+pub fn fold_if(folder: &mut impl Folder, cond: Expr, body: Expr, else_body: Option<Expr>) -> ExprKind {
+    ExprKind::If {
         cond: Box::new(folder.fold_expr(cond)),
         body: Box::new(folder.fold_expr(body)),
         else_body: else_body.map(|e| Box::new(folder.fold_expr(e))),
     }
 }
 
-pub fn fold_while(folder: &mut impl Folder, cond: Expr, body: Expr) -> Expr {
-    Expr::While {
+pub fn fold_while(folder: &mut impl Folder, cond: Expr, body: Expr) -> ExprKind {
+    ExprKind::While {
         cond: Box::new(folder.fold_expr(cond)),
         body: Box::new(folder.fold_expr(body)),
     }
 }
 
-pub fn fold_assignment(folder: &mut impl Folder, lval: Expr, rval: Expr) -> Expr {
-    Expr::Assignment {
+pub fn fold_assignment(folder: &mut impl Folder, lval: Expr, rval: Expr) -> ExprKind {
+    ExprKind::Assignment {
         lval: Box::new(folder.fold_expr(lval)),
         rval: Box::new(folder.fold_expr(rval)),
     }
 }
 
-pub fn fold_access(folder: &mut impl Folder, val: Expr, field: String) -> Expr {
-    Expr::Access {
+pub fn fold_access(folder: &mut impl Folder, val: Expr, field: String) -> ExprKind {
+    ExprKind::Access {
         val: Box::new(folder.fold_expr(val)),
         field,
     }
@@ -249,8 +256,8 @@ pub fn fold_function_call(
     func: Expr,
     args: Vec<Expr>,
     kwargs: HashMap<String, Expr>,
-) -> Expr {
-    Expr::FunctionCall {
+) -> ExprKind {
+    ExprKind::FunctionCall {
         func: Box::new(folder.fold_expr(func)),
         args: folder.fold_function_args(args),
         kwargs: kwargs
@@ -260,35 +267,35 @@ pub fn fold_function_call(
     }
 }
 
-pub fn fold_tuple(folder: &mut impl Folder, fields: Vec<Expr>) -> Expr {
+pub fn fold_tuple(folder: &mut impl Folder, fields: Vec<Expr>) -> ExprKind {
     let mut new_vals = Vec::new();
     for val in fields {
         new_vals.push(folder.fold_expr(val));
     }
-    Expr::Tuple(new_vals)
+    ExprKind::Tuple(new_vals)
 }
 
-pub fn fold_lambda(folder: &mut impl Folder, params: Vec<TypedName>, body: Expr) -> Expr {
-    Expr::Lambda {
+pub fn fold_lambda(folder: &mut impl Folder, params: Vec<TypedName>, body: Expr) -> ExprKind {
+    ExprKind::Lambda {
         parameters: params,
         body: Box::new(folder.fold_expr(body)),
     }
 }
 
-pub fn fold_return(folder: &mut impl Folder, expr: Expr) -> Expr {
-    Expr::Return(Box::new(folder.fold_expr(expr)))
+pub fn fold_return(folder: &mut impl Folder, expr: Expr) -> ExprKind {
+    ExprKind::Return(Box::new(folder.fold_expr(expr)))
 }
 
-pub fn fold_let(folder: &mut impl Folder, name: String, typ: Typ, init: Expr) -> Expr {
-    Expr::Let {
+pub fn fold_let(folder: &mut impl Folder, name: String, typ: Typ, init: Expr) -> ExprKind {
+    ExprKind::Let {
         name,
         typ: folder.fold_typ(typ),
         init: Box::new(folder.fold_expr(init)),
     }
 }
 
-pub fn fold_typed_expression(folder: &mut impl Folder, expr: Expr, typ: Typ) -> Expr {
-    Expr::TypedExpr {
+pub fn fold_typed_expression(folder: &mut impl Folder, expr: Expr, typ: Typ) -> ExprKind {
+    ExprKind::TypedExpr {
         expr: Box::new(folder.fold_expr(expr)),
         typ: folder.fold_typ(typ),
     }
@@ -298,8 +305,8 @@ pub fn fold_struct_literal(
     folder: &mut impl Folder,
     strct: Path,
     values: HashMap<String, Expr>,
-) -> Expr {
-    Expr::StructLiteral {
+) -> ExprKind {
+    ExprKind::StructLiteral {
         strct,
         values: values
             .into_iter()
@@ -316,10 +323,10 @@ pub fn fold_function_args(folder: &mut impl Folder, args: Vec<Expr>) -> Vec<Expr
     new_args
 }
 
-pub fn fold_anon_type(folder: &mut impl Folder, fields: Vec<(String, Expr)>) -> Expr {
+pub fn fold_anon_type(folder: &mut impl Folder, fields: Vec<(String, Expr)>) -> ExprKind {
     let mut new_fields = Vec::new();
     for (name, val) in fields {
         new_fields.push((name, folder.fold_expr(val)));
     }
-    Expr::AnonType { fields: new_fields }
+    ExprKind::AnonType { fields: new_fields }
 }
