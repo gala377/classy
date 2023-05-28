@@ -43,11 +43,14 @@ impl<'ctx> ast::fold::Folder for PromoteCallToStructLiteral<'ctx> {
         }
         let Type::Struct { fields, .. } = typ else {
             println!("Function call is not a struct, so no struct");
-            return ast::ExprKind::FunctionCall { func: Box::new(
-                ast::Expr { 
+            return ast::ExprKind::FunctionCall {
+                func: Box::new(ast::Expr {
                     id: func.id,
                     kind: ast::ExprKind::Name(name.clone()),
-                }), args, kwargs };
+                }),
+                args,
+                kwargs,
+            };
         };
         if fields.len() != kwargs.len() {
             panic!("Not all fields on a struct literal were filled in")

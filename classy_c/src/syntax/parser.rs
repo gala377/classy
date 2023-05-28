@@ -251,7 +251,7 @@ impl<'source> Parser<'source> {
                 }
                 let _ = self.expect_token(TokenType::FatArrow);
                 items
-            },
+            }
             _ => Vec::new(),
         };
         let typ = self.parse_atomic_type()?;

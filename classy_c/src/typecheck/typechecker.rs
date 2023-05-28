@@ -466,7 +466,9 @@ impl<'ctx> TypeChecker<'ctx> {
                     },
                 )
             }
-            ast::ExprKind::AnonType { .. } => panic!("There should be no anon types when typechecking"),
+            ast::ExprKind::AnonType { .. } => {
+                panic!("There should be no anon types when typechecking")
+            }
         }
     }
 
@@ -482,7 +484,11 @@ impl<'ctx> TypeChecker<'ctx> {
                 let t = Box::new(self.ast_type_to_type(scope, t));
                 Type::Array(t)
             }
-            ast::Typ::Function { args, ret, generics: _generics } => {
+            ast::Typ::Function {
+                args,
+                ret,
+                generics: _generics,
+            } => {
                 let args = args
                     .iter()
                     .map(|typ| self.ast_type_to_type(scope, typ))
@@ -735,7 +741,6 @@ mod tests {
         "#;
         run_typechecker(source)
     }
-
 
     // #[test]
     // fn generic_functions() {

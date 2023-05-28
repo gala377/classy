@@ -31,7 +31,10 @@ pub enum Type {
     Divergent,
     ToInfere,
     /// A type schema, generics combines with the type they apply to
-    Scheme { prefex: Vec<Name>, typ: Box<Type> },
+    Scheme {
+        prefex: Vec<Name>,
+        typ: Box<Type>,
+    },
     /// Reference to the generic type under index `isize` in the closests enclosing schema.
     Generic(usize),
 }

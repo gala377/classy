@@ -1,8 +1,6 @@
-use crate::syntax::ast::{Folder, self};
+use crate::syntax::ast::{self, Folder};
 
 use super::AstPass;
-
-
 
 pub struct AssignExprId {
     id: usize,

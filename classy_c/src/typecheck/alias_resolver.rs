@@ -188,12 +188,10 @@ impl AliasResolver {
                     ret: Box::new(resolved_ret),
                 }
             }
-            Type::Scheme { prefex, typ } => {
-                Type::Scheme {
-                    prefex: prefex.clone(),
-                    typ: Box::new(self.resolve_shallow_aliases_in_type(ctx, typ)),
-                }
-            }
+            Type::Scheme { prefex, typ } => Type::Scheme {
+                prefex: prefex.clone(),
+                typ: Box::new(self.resolve_shallow_aliases_in_type(ctx, typ)),
+            },
             t @ (Type::UInt
             | Type::Int
             | Type::Bool

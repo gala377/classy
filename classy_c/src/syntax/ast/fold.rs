@@ -4,7 +4,7 @@ use crate::syntax::ast::{
     Expr, FunctionDefinition, Path, Program, TopLevelItem, Typ, TypeDefinition, TypedName,
 };
 
-use super::{DefinedType, TypeVariable, ExprKind};
+use super::{DefinedType, ExprKind, TypeVariable};
 
 /// TODO: Not all travelsal methods are implemented yet.
 pub trait Folder: Sized {
@@ -194,7 +194,9 @@ pub fn fold_expr_kind(folder: &mut impl Folder, expr: ExprKind) -> ExprKind {
         ExprKind::FloatConst(val) => ExprKind::FloatConst(folder.fold_float_const(val)),
         ExprKind::Name(name) => ExprKind::Name(folder.fold_name(name)),
         ExprKind::Sequence(seq) => ExprKind::Sequence(folder.fold_sequence(seq)),
-        ExprKind::FunctionCall { func, args, kwargs } => folder.fold_function_call(*func, args, kwargs),
+        ExprKind::FunctionCall { func, args, kwargs } => {
+            folder.fold_function_call(*func, args, kwargs)
+        }
         ExprKind::Access { val, field } => folder.fold_access(*val, field),
         ExprKind::Tuple(fields) => folder.fold_tuple(fields),
         ExprKind::Lambda { parameters, body } => folder.fold_lambda(parameters, *body),
@@ -222,7 +224,12 @@ pub fn fold_sequence(folder: &mut impl Folder, seq: Vec<Expr>) -> Vec<Expr> {
     new_seq
 }
 
-pub fn fold_if(folder: &mut impl Folder, cond: Expr, body: Expr, else_body: Option<Expr>) -> ExprKind {
+pub fn fold_if(
+    folder: &mut impl Folder,
+    cond: Expr,
+    body: Expr,
+    else_body: Option<Expr>,
+) -> ExprKind {
     ExprKind::If {
         cond: Box::new(folder.fold_expr(cond)),
         body: Box::new(folder.fold_expr(body)),

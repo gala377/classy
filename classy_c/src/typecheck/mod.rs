@@ -303,9 +303,16 @@ fn types_eq(ctx: &TypCtx, t1: &Type, t2: &Type) -> bool {
                     .all(|(t1, t2)| types_eq(ctx, t1, t2))
         }
         (Type::Generic(n1), Type::Generic(n2)) => n1 == n2,
-        (Type::Scheme { prefex: prefex_1, typ: typ_1 }, Type::Scheme { prefex: prefex_2, typ: typ_2 }) => {
-            prefex_1.len() == prefex_2.len() && types_eq(ctx, typ_1, typ_2)
-        }
+        (
+            Type::Scheme {
+                prefex: prefex_1,
+                typ: typ_1,
+            },
+            Type::Scheme {
+                prefex: prefex_2,
+                typ: typ_2,
+            },
+        ) => prefex_1.len() == prefex_2.len() && types_eq(ctx, typ_1, typ_2),
         _ => false,
     }
 }
@@ -559,9 +566,16 @@ mod tests {
             (Type::Divergent, _) => true,
             (_, Type::Divergent) => true,
             (Type::Generic(n1), Type::Generic(n2)) => n1 == n2,
-            (Type::Scheme { typ: t1, prefex: p1 }, Type::Scheme { typ: t2, prefex: p2 }) => {
-                p1.len() == p2.len() && test_types_eq(ctx, t1, t2)
-            }
+            (
+                Type::Scheme {
+                    typ: t1,
+                    prefex: p1,
+                },
+                Type::Scheme {
+                    typ: t2,
+                    prefex: p2,
+                },
+            ) => p1.len() == p2.len() && test_types_eq(ctx, t1, t2),
             _ => false,
         }
     }
