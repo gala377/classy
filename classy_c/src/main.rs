@@ -10,10 +10,15 @@ const SOURCE: &'static str = r#"
         a: String
     }
 
+    is_int: (Int) -> ()
+    is_int i = ()
+
     main: () -> ()
     main { 
         let a = MyFoo(a = "Hello")
+        let b = type { b = a }
         print a.a
+        print b.b.a
     }
 "#;
 

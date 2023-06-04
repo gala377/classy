@@ -4,6 +4,7 @@ pub mod r#type;
 pub mod type_context;
 pub mod inference;
 pub mod typechecker;
+pub mod constrait_solver;
 
 use std::collections::HashMap;
 

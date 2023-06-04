@@ -4,11 +4,11 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use super::{
     r#type::{Type, TypeFolder},
     type_context::TypCtx,
-    typechecker::Scope,
+    typechecker::Scope, constrait_solver::ConstraintSolver,
 };
 
 #[derive(Debug)]
-enum Constraint {
+pub (super) enum Constraint {
     /// Defines that type t1 should be equal to t2
     Eq(Type, Type),
     /// Defines that a t.field should exist and be of type 'of_type'
@@ -20,7 +20,12 @@ enum Constraint {
 }
 
 pub fn run(tctx: &mut TypCtx, ast: &ast::Program) {
-    Inference::generate_constraints(tctx, ast)
+    let cons = Inference::generate_constraints(tctx, ast);
+    
+    println!("{}", tctx.debug_string());
+    let mut solver = ConstraintSolver::new();
+    solver.solve(cons.constraints);
+    println!("{}", tctx.debug_string());
 }
 
 pub(super) struct Inference {
@@ -65,7 +70,7 @@ impl Inference {
         ret
     }
 
-    pub fn generate_constraints(tctx: &mut TypCtx, ast: &ast::Program) {
+    pub fn generate_constraints(tctx: &mut TypCtx, ast: &ast::Program) -> Self {
         let replace_to_infere = &mut ReplaceInferTypes::default();
         tctx.fold_types(replace_to_infere);
         let next_id = replace_to_infere.next_id;
@@ -97,9 +102,10 @@ impl Inference {
             }
         }
         println!("CONSTRAINTS: \n");
-        for constraint in inferer.constraints {
+        for constraint in &inferer.constraints {
             println!("{constraint:?}");
         }
+        inferer
 
     }
 
