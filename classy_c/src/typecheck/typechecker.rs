@@ -8,7 +8,7 @@ use super::{
     types_eq,
 };
 
-struct Scope {
+pub(super) struct Scope {
     resolved_types: HashMap<String, Type>,
     resolved_vars: HashMap<String, Type>,
     parent: Option<Rc<RefCell<Scope>>>,

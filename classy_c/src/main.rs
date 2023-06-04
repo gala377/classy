@@ -1,3 +1,4 @@
+
 use classy_c::{
     ast_passes::{run_befor_type_context_passes, run_before_typechecking_passes},
     syntax::{ast, ast::Visitor, lexer::Lexer, parser::Parser},
@@ -5,57 +6,8 @@ use classy_c::{
 };
 
 const SOURCE: &'static str = r#"
-    type A = Int
-    type B = UInt
-    type D = C
-    type C = B
-    type E = Bool
-    type G = F
-    type F {
-        a: C
-        b: F
-    }
-    type H {
-        a: F 
-        b: G
-    }
-    type I = (I, G, C, A)
-    type J = I
-    type Z {
-        a: I
-        b: (Int, Int)
-        c: (U1) -> Z
-    }
-
-    type U = (Int, Int)
-    type U1 = A1
-    type A1 = (Int, (Int, (Int, Int)))
-    type B1 = (Int, (Int, Int))
-    type D1 = (Int, Int)
-
-    type A2 = (Int, (Int, (Int, Int)), ())
-    type B2 = (Int, (Int, Int))
-    type D2 = (Int, Int)
-
-    type Z1 { a: A1 }
-    type Z2 { a: A2 }
-
-    type Z3 { z: Z6 }
-    type Z6 = Z4
-    type Z4 = (Int) -> A2
-    type Z5 = (Int) -> ()
-
-    get_string: () -> MyString
-    get_string = "Hello world"
-
-    get_int: () -> A
-    get_int = 1
-
-    call: (() -> Int) -> Int
-    call f = f()
-
     type MyFoo {
-        a: MyString
+        a: String
     }
 
     main: () -> ()
@@ -67,8 +19,8 @@ const SOURCE: &'static str = r#"
 
 fn main() {
     let package = make_package();
-    let tctx = compile(SOURCE, &[package]);
-    println!("{}", tctx.debug_string());
+    compile(SOURCE, &[package]);
+    //println!("{}", tctx.debug_string());
     // let package = classy_c::package::Package::new("main", &tctx);
     // let out = std::fs::File::create("out.json").unwrap();
     // serde_json::to_writer_pretty(out, &package).unwrap();
@@ -84,8 +36,10 @@ fn compile(source: &str, packages: &[classy_c::package::Package]) -> TypCtx {
     let mut tctx = prepare_type_ctx(tctx, &res);
     println!("{}", tctx.debug_string());
     let res = run_before_typechecking_passes(&tctx, res);
-    let mut type_check = typecheck::typechecker::TypeChecker::new(&mut tctx);
-    type_check.visit(&res);
+    typecheck::inference::run(&mut tctx, &res);
+
+    // let mut type_check = typecheck::typechecker::TypeChecker::new(&mut tctx);
+    // type_check.visit(&res);
     tctx
 }
 

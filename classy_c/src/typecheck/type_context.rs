@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use crate::{syntax::ast, typecheck::r#type::Type};
 
+use super::r#type::TypeFolder;
+
 pub type TypeId = usize;
 pub type DefId = usize;
 pub type Name = String;
@@ -34,6 +36,15 @@ impl TypCtx {
             nodes: HashMap::new(),
             variables: HashMap::new(),
         }
+    }
+
+    pub fn fold_types(&mut self, folder: &mut impl TypeFolder) {
+        let new_types = self
+            .definitions
+            .iter()
+            .map(|(id, t)| (*id, folder.fold_type(t.clone())))
+            .collect();
+        self.definitions = new_types;
     }
 }
 

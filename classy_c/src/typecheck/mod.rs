@@ -2,6 +2,7 @@ pub mod add_types;
 pub mod alias_resolver;
 pub mod r#type;
 pub mod type_context;
+pub mod inference;
 pub mod typechecker;
 
 use std::collections::HashMap;
