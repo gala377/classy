@@ -1,15 +1,14 @@
-use crate::syntax::ast::{self};
+use crate::syntax::ast;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use super::{
-    constrait_solver::ConstraintSolver,
     r#type::{Type, TypeFolder},
     type_context::TypCtx,
-    typechecker::Scope,
+    typechecker::Scope, constrait_solver::ConstraintSolver,
 };
 
 #[derive(Debug)]
-pub(super) enum Constraint {
+pub (super) enum Constraint {
     /// Defines that type t1 should be equal to t2
     Eq(Type, Type),
     /// Defines that a t.field should exist and be of type 'of_type'
@@ -22,7 +21,7 @@ pub(super) enum Constraint {
 
 pub fn run(tctx: &mut TypCtx, ast: &ast::Program) {
     let cons = Inference::generate_constraints(tctx, ast);
-
+    
     println!("{}", tctx.debug_string());
     let mut solver = ConstraintSolver::new();
     solver.solve(cons.constraints);
@@ -99,9 +98,7 @@ impl Inference {
                         scope.infer_in_expr(body)
                     })
                 };
-                inferer
-                    .constraints
-                    .push(Constraint::Eq(fn_actual_type, *ret));
+                inferer.constraints.push(Constraint::Eq(fn_actual_type, *ret));
             }
         }
         println!("CONSTRAINTS: \n");
@@ -109,6 +106,7 @@ impl Inference {
             println!("{constraint:?}");
         }
         inferer
+
     }
 
     pub fn merge(&mut self, other: Self) {
@@ -127,14 +125,11 @@ impl Inference {
             ast::ExprKind::Sequence(exprs) => {
                 let ret_t = self.fresh_type();
                 self.env.insert(id, ret_t.clone());
-                let exprs = exprs
-                    .iter()
-                    .map(|expr| self.infer_in_expr(expr))
-                    .collect::<Vec<_>>();
+                let exprs = exprs.iter().map(|expr| self.infer_in_expr(expr)).collect::<Vec<_>>();
                 let last_t = exprs.last().unwrap().clone();
                 self.constraints.push(Constraint::Eq(ret_t.clone(), last_t));
-                ret_t
-            }
+                ret_t 
+            },
             ast::ExprKind::Assignment { lval, rval } => {
                 let l_t = self.infer_in_expr(lval);
                 let r_t = self.infer_in_expr(rval);
