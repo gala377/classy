@@ -54,8 +54,9 @@ impl ConstraintSolver {
             | Constraint::Eq(Type::Unit, Type::Unit)
             | Constraint::Eq(Type::Divergent, Type::Divergent) => {}
             Constraint::Eq(Type::Fresh(id1), Type::Fresh(id2)) if id1 == id2 => {}
-            Constraint::Eq(Type::Struct { def: def_1, .. }, Type::Struct { def: def_2, .. }) if def_1 == def_2 => {}
-            Constraint::Eq(Type::Alias(id1),Type::Alias(id2)) if id1 == id2 => {}
+            Constraint::Eq(Type::Struct { def: def_1, .. }, Type::Struct { def: def_2, .. })
+                if def_1 == def_2 => {}
+            Constraint::Eq(Type::Alias(id1), Type::Alias(id2)) if id1 == id2 => {}
             Constraint::Eq(Type::Tuple(t_1), Type::Tuple(t_2)) => {
                 for (t1, t2) in t_1.iter().zip(t_2.iter()) {
                     constraints.push(Constraint::Eq(t1.clone(), t2.clone()));
@@ -69,20 +70,30 @@ impl ConstraintSolver {
                 self.substitutions.push((id1, other.clone()));
                 replace_in_constraints(id1, other, constraints)
             }
-            Constraint::Eq(Type::Function { args: args_1, ret: ret_1 }, Type::Function { args: args_2, ret: ret_2 }) => {
+            Constraint::Eq(
+                Type::Function {
+                    args: args_1,
+                    ret: ret_1,
+                },
+                Type::Function {
+                    args: args_2,
+                    ret: ret_2,
+                },
+            ) => {
                 constraints.push(Constraint::Eq(*ret_1, *ret_2));
                 for (a1, a2) in args_1.iter().zip(args_2.iter()) {
                     constraints.push(Constraint::Eq(a1.clone(), a2.clone()));
                 }
             }
-            Constraint::HasField { t, field, of_type } => {
-                match t {
-                    Type::Struct {  fields, .. } => {
-                        let f = fields.iter().find(|(f, _)| f == &field).expect("this field does not exists, constraint not met");
-                        constraints.push(Constraint::Eq(f.1.clone(), of_type));
-                    }
-                    _ => panic!("Expected a struct type got {t:?}")
+            Constraint::HasField { t, field, of_type } => match t {
+                Type::Struct { fields, .. } => {
+                    let f = fields
+                        .iter()
+                        .find(|(f, _)| f == &field)
+                        .expect("this field does not exists, constraint not met");
+                    constraints.push(Constraint::Eq(f.1.clone(), of_type));
                 }
+                _ => panic!("Expected a struct type got {t:?}"),
             },
             c => panic!("Cannot unify constraint {c:?}"),
         }
