@@ -2,9 +2,11 @@ use std::ops::Range;
 
 use thiserror::Error;
 
-use super::ast::{self, TypedName};
-use super::lexer::Lexer;
-use super::tokens::{Token, TokenType};
+use crate::syntax::{
+    ast::{self, TypedName},
+    lexer::Lexer,
+    tokens::{Token, TokenType},
+};
 
 const DUMMY_AST_ID: usize = 0;
 

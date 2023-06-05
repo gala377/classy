@@ -1,4 +1,4 @@
-use super::{
+use crate::typecheck::{
     inference::Constraint,
     r#type::{Type, TypeFolder},
 };

@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 
 use crate::syntax::ast::{
-    Expr, FunctionDefinition, Path, Program, TopLevelItem, Typ, TypeDefinition, TypedName,
+    DefinedType, Expr, ExprKind, FunctionDefinition, Path, Program, TopLevelItem, Typ,
+    TypeDefinition, TypeVariable, TypedName,
 };
-
-use super::{DefinedType, ExprKind, TypeVariable};
 
 /// TODO: Not all travelsal methods are implemented yet.
 pub trait Folder: Sized {

@@ -13,10 +13,10 @@ use crate::syntax::{
     ast::{self, Visitor},
 };
 
+use add_types::AddTypes;
+use alias_resolver::AliasResolver;
 use r#type::*;
 use type_context::*;
-
-use self::{add_types::AddTypes, alias_resolver::AliasResolver};
 
 /// Create a top level type context containing all types and functions with their
 /// respective types in the simplest form possible.

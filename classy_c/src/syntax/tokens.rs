@@ -1,5 +1,5 @@
-use std::collections::HashSet;
 use std::{
+    collections::HashSet,
     mem::{discriminant, Discriminant},
     ops::Range,
 };

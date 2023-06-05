@@ -1,6 +1,6 @@
 use crate::syntax::ast;
 
-use super::{r#type::Type, type_context::TypCtx};
+use crate::typecheck::{r#type::Type, type_context::TypCtx};
 
 pub struct AddTypes<'ctx> {
     ctx: &'ctx mut TypCtx,

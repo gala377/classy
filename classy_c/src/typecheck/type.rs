@@ -109,7 +109,10 @@ pub fn fold_type(folder: &mut impl TypeFolder, typ: Type) -> Type {
         Type::Float => folder.fold_float(),
         Type::Unit => folder.fold_unit(),
         Type::Struct { def, fields } => folder.fold_struct(def, fields),
-        Type::ADT { def: _, constructors: _ } => todo!(),
+        Type::ADT {
+            def: _,
+            constructors: _,
+        } => todo!(),
         Type::Function { args, ret } => folder.fold_function(args, *ret),
         Type::Tuple(types) => folder.fold_tuple(types),
         Type::Array(_) => todo!(),

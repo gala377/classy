@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use super::{
+use crate::typecheck::{
     r#type::Type,
     type_context::{TypCtx, TypeId},
 };

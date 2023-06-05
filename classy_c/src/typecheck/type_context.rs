@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
-use crate::{syntax::ast, typecheck::r#type::Type};
-
-use super::r#type::TypeFolder;
+use crate::{
+    syntax::ast,
+    typecheck::r#type::{Type, TypeFolder},
+};
 
 pub type TypeId = usize;
 pub type DefId = usize;
 pub type Name = String;
-
 pub struct TypCtx {
     /// Associates type ids with their types. Useful for resolving aliases.
     pub definitions: HashMap<TypeId, Type>,
