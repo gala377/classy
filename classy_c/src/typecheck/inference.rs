@@ -4,6 +4,7 @@ use crate::{
     syntax::ast,
     typecheck::{
         constrait_solver::ConstraintSolver,
+        fix_fresh,
         r#type::{Type, TypeFolder},
         type_context::TypCtx,
         typechecker::Scope,
@@ -28,6 +29,12 @@ pub fn run(tctx: &mut TypCtx, ast: &ast::Program) {
     println!("{}", tctx.debug_string());
     let mut solver = ConstraintSolver::new();
     solver.solve(cons.constraints);
+    let mut substs = solver.substitutions.iter().cloned().collect();
+    fix_fresh::fix_types_after_inference(&mut substs, tctx);
+    println!("SUBSTITUTIONS");
+    for (id, typ) in substs.iter() {
+        println!("{} -> {:?}", id, typ);
+    }
     println!("{}", tctx.debug_string());
 }
 
@@ -74,6 +81,7 @@ impl Inference {
     }
 
     pub fn generate_constraints(tctx: &mut TypCtx, ast: &ast::Program) -> Self {
+        // create fresh variables for anonymous types
         let replace_to_infere = &mut ReplaceInferTypes::default();
         tctx.fold_types(replace_to_infere);
         let next_id = replace_to_infere.next_id;

@@ -15,9 +15,16 @@ const SOURCE: &'static str = r#"
     main: () -> ()
     main { 
         let a = MyFoo(a = "Hello")
-        let b = type { b = a }
+        let b = type { 
+            b = type {
+                a = type { 
+                    a = type { 
+                        hello = 1
+                    } 
+                } 
+            }
+        }
         print a.a
-        print b.b.a
     }
 "#;
 
@@ -40,6 +47,7 @@ fn compile(source: &str, packages: &[classy_c::package::Package]) -> TypCtx {
     let mut tctx = prepare_type_ctx(tctx, &res);
     println!("{}", tctx.debug_string());
     let res = run_before_typechecking_passes(&tctx, res);
+    tctx.remove_to_infere_type();
     typecheck::inference::run(&mut tctx, &res);
 
     // let mut type_check = typecheck::typechecker::TypeChecker::new(&mut tctx);

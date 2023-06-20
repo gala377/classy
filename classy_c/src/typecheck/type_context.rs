@@ -238,4 +238,21 @@ impl TypCtx {
         }
         s
     }
+
+    pub fn def_id_to_typ_id(&self, id: DefId) -> TypeId {
+        match self.nodes.get(&id) {
+            Some(ast::TopLevelItem::TypeDefinition(node)) => {
+                let name = &node.name;
+                self.types.get(name).unwrap().clone()
+            }
+            _ => panic!("expected type definition"),
+        }
+    }
+
+    pub fn remove_to_infere_type(&mut self) {
+        self.definitions.remove(&self.to_infere_id);
+        for (_, id) in self.variables.iter() {
+            assert!(*id != self.to_infere_id);
+        }
+    }
 }

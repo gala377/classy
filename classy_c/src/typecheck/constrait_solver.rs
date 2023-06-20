@@ -3,9 +3,9 @@ use crate::typecheck::{
     r#type::{Type, TypeFolder},
 };
 
-struct TypeReplacer {
-    fresh_type_id: usize,
-    for_type: Type,
+pub(super) struct TypeReplacer {
+    pub fresh_type_id: usize,
+    pub for_type: Type,
 }
 
 impl TypeFolder for TypeReplacer {
@@ -19,7 +19,7 @@ impl TypeFolder for TypeReplacer {
 }
 
 pub(super) struct ConstraintSolver {
-    substitutions: Vec<(usize, Type)>,
+    pub substitutions: Vec<(usize, Type)>,
 }
 
 impl ConstraintSolver {
@@ -33,10 +33,6 @@ impl ConstraintSolver {
         constraints.reverse();
         while let Some(con) = constraints.pop() {
             self.solve_constraint(con, &mut constraints);
-        }
-        println!("SUBSTUITIONS");
-        for (id, typ) in self.substitutions.iter() {
-            println!("{} -> {:?}", id, typ);
         }
         println!("CONSTRAINS LEFT {}", constraints.len());
         for c in constraints {
