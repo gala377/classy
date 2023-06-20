@@ -30,16 +30,21 @@ pub fn run(tctx: &mut TypCtx, ast: &ast::Program) {
     let mut solver = ConstraintSolver::new();
     solver.solve(cons.constraints);
     let mut substs = solver.substitutions.iter().cloned().collect();
-    fix_fresh::fix_types_after_inference(&mut substs, tctx);
+    let mut env = cons.env;
+    fix_fresh::fix_types_after_inference(&mut substs, tctx, &mut env);
     println!("SUBSTITUTIONS");
     for (id, typ) in substs.iter() {
         println!("{} -> {:?}", id, typ);
     }
     println!("{}", tctx.debug_string());
+    println!("ENV IS:");
+    for (id, typ) in env.iter() {
+        println!("{} -> {:?}", id, typ);
+    }
 }
 
 pub(super) struct Inference {
-    // the scope, mathes names with types
+    // the scope, maps names to types
     scope: Rc<RefCell<Scope>>,
     // allows matching expression ids with types
     env: HashMap<usize, Type>,
