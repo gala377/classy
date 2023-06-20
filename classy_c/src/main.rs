@@ -11,26 +11,28 @@ const SOURCE: &'static str = r#"
 
     is_int: (Int) -> ()
     is_int i = ()
+    
 
     main: () -> ()
     main { 
-        let a = MyFoo(a = "Hello")
-        let b = type { 
-            b = type {
-                a = type { 
-                    a = type { 
-                        hello = 1
-                    } 
-                } 
-            }
+        let b = if (true) {
+            let a = 1
+            a
+        } else {
+            let a = 2
+            a
         }
-        print a.a
+        while (true) {
+            print "Hello world"
+        }
+        print "Hello world"
     }
 "#;
 
 fn main() {
     let package = make_package();
     compile(SOURCE, &[package]);
+ //   compile(SOURCE, &[]);
     //println!("{}", tctx.debug_string());
     // let package = classy_c::package::Package::new("main", &tctx);
     // let out = std::fs::File::create("out.json").unwrap();
@@ -47,7 +49,17 @@ fn compile(source: &str, packages: &[classy_c::package::Package]) -> TypCtx {
     let mut tctx = prepare_type_ctx(tctx, &res);
     println!("{}", tctx.debug_string());
     let res = run_before_typechecking_passes(&tctx, res);
-    typecheck::run(&mut tctx, &res);
+    let tenv = typecheck::run(&mut tctx, &res);
+    for def in &res.items {
+        if let ast::TopLevelItem::FunctionDefinition(fdef) = def {
+            println!("\n\n\nFunction definition {:#?}", fdef.name);
+            let emmiter = classy_c::ir::instr::FunctionEmitter::new(&tctx, &tenv);
+            let block = emmiter.emit_fn(fdef);
+            for (i, instr) in block.iter().enumerate() {
+                println!("{i:03}| {:?}", instr);
+            }
+        }
+    }
     tctx
 }
 

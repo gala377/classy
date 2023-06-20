@@ -23,7 +23,10 @@ pub(super) enum Constraint {
     },
 }
 
-pub fn run(tctx: &mut TypCtx, ast: &ast::Program) {
+/// Maps unique node id in the ast with its type.
+pub type TypeEnv = HashMap<usize, Type>;
+
+pub fn run(tctx: &mut TypCtx, ast: &ast::Program) -> TypeEnv {
     tctx.remove_to_infere_type();
     let cons = Inference::generate_constraints(tctx, ast);
 
@@ -42,6 +45,7 @@ pub fn run(tctx: &mut TypCtx, ast: &ast::Program) {
     for (id, typ) in env.iter() {
         println!("{} -> {:?}", id, typ);
     }
+    env
 }
 
 pub(super) struct Inference {
