@@ -6,7 +6,11 @@ use super::{
     type_context::TypCtx,
 };
 
-pub fn fix_types_after_inference(substitutions: &mut HashMap<usize, Type>, tctx: &mut TypCtx, env: &mut HashMap<usize, Type>) {
+pub fn fix_types_after_inference(
+    substitutions: &mut HashMap<usize, Type>,
+    tctx: &mut TypCtx,
+    env: &mut HashMap<usize, Type>,
+) {
     fix_fresh_vars_in_substitutions(substitutions, tctx);
     fix_nested_types(substitutions, tctx);
     fix_types_in_env(substitutions, env);
