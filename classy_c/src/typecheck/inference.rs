@@ -7,7 +7,7 @@ use crate::{
         fix_fresh,
         r#type::{Type, TypeFolder},
         type_context::TypCtx,
-        typechecker::Scope,
+        scope::Scope,
     },
 };
 
@@ -24,6 +24,7 @@ pub(super) enum Constraint {
 }
 
 pub fn run(tctx: &mut TypCtx, ast: &ast::Program) {
+    tctx.remove_to_infere_type();
     let cons = Inference::generate_constraints(tctx, ast);
 
     println!("{}", tctx.debug_string());
@@ -396,4 +397,221 @@ impl TypeFolder for ReplaceInferTypes {
         self.next_id += 1;
         Type::Fresh(id)
     }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        ast_passes::{self},
+        syntax::{lexer::Lexer, parser::Parser},
+        typecheck,
+    };
+
+
+    fn run_typechecker(source: &str) {
+        let lex = Lexer::new(source);
+        let mut parser = Parser::new(lex);
+        let res = parser.parse().unwrap();
+        let res = ast_passes::run_befor_type_context_passes(res);
+        let mut tctx = typecheck::prepare_for_typechecking(&res);
+        let res = ast_passes::run_before_typechecking_passes(&tctx, res);
+        tctx.remove_to_infere_type();
+        typecheck::inference::run(&mut tctx, &res);
+        println!("Final ast {res:#?}");
+    }
+
+    #[test]
+    fn function_returning_literal_typechecks() {
+        let source = r#"
+            main: () -> Int
+            main = 1
+        "#;
+        run_typechecker(source);
+    }
+
+    #[test]
+    #[should_panic]
+    fn function_returning_wrong_type_panics() {
+        let source = r#"
+            main: () -> Int
+            main = "Hello world"
+        "#;
+        run_typechecker(source);
+    }
+
+    #[test]
+    fn variable_defined_in_if_does_not_propagate_type() {
+        let source = r#"
+            is_string: (String) -> ()
+            is_string s = ()
+            
+            is_int: (Int) -> ()
+            is_int i = ()
+
+            main: () -> ()
+            main {
+                let a = 1
+                if (true) {
+                    let a = "Hello world"
+                    is_string a
+                }
+                is_int a
+            }
+        "#;
+        run_typechecker(source);
+    }
+
+    #[test]
+    fn return_in_if_diverges_and_typechecks() {
+        let source = r#"
+            is_string: (String) -> ()
+            is_string s = ()
+            
+            main: () -> ()
+            main {
+                let a = if (true) {
+                    return ()
+                } else {
+                    "Hello"
+                }
+                is_string a
+            }
+            "#;
+        run_typechecker(source);
+    }
+
+    #[test]
+    fn return_type_of_if_is_based_on_both_branches() {
+        let source = r#"
+            is_string: (String) -> ()
+            is_string s = ()
+            
+            main: () -> ()
+            main {
+                let a = if (true) {
+                    "Hello"
+                } else {
+                    "World"
+                }
+                is_string a
+            }
+            "#;
+        run_typechecker(source);
+    }
+
+    #[test]
+    #[should_panic]
+    fn return_type_of_if_is_based_on_both_branches_error() {
+        let source = r#"
+            is_string: (String) -> ()
+            is_string s = ()
+            
+            main: () -> ()
+            main {
+                let a = if (true) {
+                    "Hello"
+                } else {
+                    1
+                }
+                is_string a
+            }
+            "#;
+        run_typechecker(source);
+    }
+
+    #[test]
+    fn assigning_functions_typecheck() {
+        let source = r#"
+            is_function: (() -> ()) -> ()
+            is_function f = ()
+
+            main: () -> ()
+            main {
+                let a = main
+                is_function main
+                is_function a
+            }
+            "#;
+        run_typechecker(source);
+    }
+
+    #[test]
+    fn struct_literals_typecheck() {
+        let source = r#"
+            type Foo {
+                a: Int
+                b: String
+            }
+
+            is_foo: (Foo) -> ()
+            is_foo f = ()
+
+            main: () -> ()
+            main {
+                let a = Foo(a = 1, b = "Hello")
+                is_foo a
+            }
+        "#;
+        run_typechecker(source);
+    }
+
+    #[test]
+    fn anon_types_typecheck() {
+        let source = r#"
+            type Foo {
+                a: Int
+                b: String
+            }
+
+            is_string: (String) -> ()
+            is_string s = ()
+
+            is_foo: (Foo) -> ()
+            is_foo f = ()
+
+            main: () -> ()
+            main {
+                let a = Foo(a = 1, b = "Hello")
+                let anon = type { foo = a; bar = "World" }
+                is_foo anon.foo
+                is_string anon.bar
+            }
+        "#;
+        run_typechecker(source)
+    }
+
+
+
+    #[test]
+    fn nested_anon_types_typecheck() {
+        let source = r#"
+            is_string: (String) -> ()
+            is_string s = ()
+
+            main: () -> ()
+            main {
+                let anon = type { a = type { b = type { c = "Hello" } } }
+                is_string anon.a.b.c
+            }
+        "#;
+        run_typechecker(source)
+    }
+
+    // #[test]
+    // fn generic_functions() {
+    //     let source = r#"
+    //         is_string: (String) -> ()
+    //         is_string s = ()
+
+    //         id: forall a => (a) -> a
+    //         id a = a
+
+    //         main: () -> ()
+    //         main {
+    //             is_string(id "hello")
+    //         }
+    //     "#;
+    //     run_typechecker(source)
+    // }
 }

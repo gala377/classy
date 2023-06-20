@@ -47,11 +47,7 @@ fn compile(source: &str, packages: &[classy_c::package::Package]) -> TypCtx {
     let mut tctx = prepare_type_ctx(tctx, &res);
     println!("{}", tctx.debug_string());
     let res = run_before_typechecking_passes(&tctx, res);
-    tctx.remove_to_infere_type();
-    typecheck::inference::run(&mut tctx, &res);
-
-    // let mut type_check = typecheck::typechecker::TypeChecker::new(&mut tctx);
-    // type_check.visit(&res);
+    typecheck::run(&mut tctx, &res);
     tctx
 }
 

@@ -5,7 +5,7 @@ pub mod fix_fresh;
 pub mod inference;
 pub mod r#type;
 pub mod type_context;
-pub mod typechecker;
+pub mod scope;
 
 use std::collections::HashMap;
 
@@ -18,6 +18,8 @@ use add_types::AddTypes;
 use alias_resolver::AliasResolver;
 use r#type::*;
 use type_context::*;
+
+pub use inference::run;
 
 /// Create a top level type context containing all types and functions with their
 /// respective types in the simplest form possible.
