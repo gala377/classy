@@ -54,7 +54,7 @@ fn compile(source: &str, packages: &[classy_c::package::Package]) -> TypCtx {
     for def in &res.items {
         if let ast::TopLevelItem::FunctionDefinition(fdef) = def {
             println!("\n\n\nFunction definition {:#?}", fdef.name);
-            let emmiter = classy_c::ir::instr::FunctionEmitter::new(&tctx, &tenv);
+            let emmiter = classy_c::ir::Emitter::new(&tctx, &tenv);
             let block = emmiter.emit_fn(fdef);
             for (i, instr) in block.iter().enumerate() {
                 println!("{i:03}| {:?}", instr);
