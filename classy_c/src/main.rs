@@ -26,6 +26,7 @@ const SOURCE: &'static str = r#"
             print "Hello world"
         }
         print "Hello world"
+        let c = type { a = "Hello"; b = 10 }
     }
 "#;
 

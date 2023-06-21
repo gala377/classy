@@ -23,7 +23,6 @@ pub enum Address {
     ConstantUnit,
     // Function parameter at index
     Parameter(usize),
-    NoAddress,
 }
 
 impl Debug for Address {
@@ -31,13 +30,12 @@ impl Debug for Address {
         match self {
             Self::Temporary(arg0) => write!(f, "t_{}", arg0),
             Self::Name(arg0) => write!(f, "{}", arg0),
-            Self::ConstantInt(arg0) => write!(f, "@{}", arg0),
-            Self::ConstantFloat(arg0) => write!(f, "@{}", arg0),
-            Self::ConstantBool(arg0) => write!(f, "@{}", arg0),
+            Self::ConstantInt(arg0) => write!(f, "{}", arg0),
+            Self::ConstantFloat(arg0) => write!(f, "{}", arg0),
+            Self::ConstantBool(arg0) => write!(f, "{}", arg0),
             Self::ConstantString(arg0) => write!(f, "\"{}\"", arg0),
             Self::ConstantUnit => write!(f, "()"),
             Self::Parameter(arg0) => write!(f, "arg {}", arg0),
-            Self::NoAddress => write!(f, "--"),
         }
     }
 }
@@ -77,7 +75,7 @@ pub struct Code {
 
 pub type Block = Vec<Instruction>;
 
-#[derive(Clone )]
+#[derive(Clone)]
 pub enum Instruction {
     // Assignments
     BinOpAssign(Address, Address, Op, Address),
@@ -134,22 +132,53 @@ pub enum Instruction {
 impl Debug for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::BinOpAssign(arg0, arg1, arg2, arg3) => f.debug_tuple("BinOpAssign").field(arg0).field(arg1).field(arg2).field(arg3).finish(),
-            Self::UnOpAssing(arg0, arg1, arg2) => f.debug_tuple("UnOpAssing").field(arg0).field(arg1).field(arg2).finish(),
-            Self::CopyAssign(arg0, arg1) => write!(f, "{:?} = {:?}", arg0, arg1),
-            Self::IndexCopy { res, base, offset } => f.debug_struct("IndexCopy").field("res", res).field("base", base).field("offset", offset).finish(),
-            Self::IndexSet { base, offset, value } => f.debug_struct("IndexSet").field("base", base).field("offset", offset).field("value", value).finish(),
-            Self::GoTo(arg0) => write!(f, "goto {:?}", arg0),
-            Self::If { cond, goto } => write!(f, "if {:?} goto {:?}", cond, goto),
-            Self::IfFalse { cond, goto } => write!(f, "ifFalse {:?} goto {:?}", cond, goto),
-            Self::Param(arg0) => write!(f, "param {:?}", arg0),
+            Self::BinOpAssign(arg0, arg1, arg2, arg3) => f
+                .debug_tuple("BinOpAssign")
+                .field(arg0)
+                .field(arg1)
+                .field(arg2)
+                .field(arg3)
+                .finish(),
+            Self::UnOpAssing(arg0, arg1, arg2) => f
+                .debug_tuple("UnOpAssing")
+                .field(arg0)
+                .field(arg1)
+                .field(arg2)
+                .finish(),
+            Self::CopyAssign(arg0, arg1) => write!(f, "{arg0:?} = {arg1:?}"),
+            Self::IndexCopy { res, base, offset } => f
+                .debug_struct("IndexCopy")
+                .field("res", res)
+                .field("base", base)
+                .field("offset", offset)
+                .finish(),
+            Self::IndexSet {
+                base,
+                offset,
+                value,
+            } => write!(f, "{base:?}[{offset:?}] = {value:?}"),
+            Self::GoTo(arg0) => write!(f, "goto {arg0:?}"),
+            Self::If { cond, goto } => write!(f, "if {cond:?} goto {goto:?}"),
+            Self::IfFalse { cond, goto } => write!(f, "ifFalse {cond:?} goto {goto:?}"),
+            Self::Param(arg0) => write!(f, "param {arg0:?}"),
             Self::Call { res, func, argc } => {
-                write!(f, "{:?} = call {:?} {}", res, func, argc)
-            },
-            Self::Label(arg0) => write!(f, "label {}", arg0),
-            Self::Alloc { res, size, typ } => f.debug_struct("Alloc").field("res", res).field("size", size).field("typ", typ).finish(),
-            Self::AllocArray { res, elem_size, count, typ } => f.debug_struct("AllocArray").field("res", res).field("elem_size", elem_size).field("count", count).field("typ", typ).finish(),
-            Self::Return(arg0) => write!(f, "return {:?}", arg0),
+                write!(f, "{res:?} = call {func:?} {argc}")
+            }
+            Self::Label(arg0) => write!(f, "label {arg0}"),
+            Self::Alloc { res, size, typ } => write!(f, "{res:?} = alloc[{size}] of type {typ}"),
+            Self::AllocArray {
+                res,
+                elem_size,
+                count,
+                typ,
+            } => f
+                .debug_struct("AllocArray")
+                .field("res", res)
+                .field("elem_size", elem_size)
+                .field("count", count)
+                .field("typ", typ)
+                .finish(),
+            Self::Return(arg0) => write!(f, "return {arg0:?}"),
         }
     }
 }
@@ -182,7 +211,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
     pub fn emit_fn(mut self, func: &ast::FunctionDefinition) -> Block {
         self.args = func.parameters.clone();
         self.new_scope();
- 
+
         let res = self.emit_expr(&func.body);
         self.current_block.push(Instruction::Return(res));
 
@@ -262,12 +291,33 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 // do it and this might create a struct when we dont want to because we reassigned
                 // the name of the type to something else
                 let name = strct.0.last().unwrap().clone();
-                let Type::Struct { fields, .. } = self.env.get(id).unwrap() else {
-                    panic!("Should be a struct");
+                let Type::Struct { def, fields } = self.tctx.get_type(&name).unwrap() else {
+                    panic!("should be a struct")
                 };
-                todo!()
-                // this one is complicated as heck, we need to alloc and then init every field with proper offset
-            },
+                let tid = self.tctx.def_id_to_typ_id(def);
+                let struct_address = self.new_temporary();
+                self.current_block.push(Instruction::Alloc {
+                    res: struct_address.clone(),
+                    size: fields.len(),
+                    typ: tid,
+                });
+                let offset_and_value = fields
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (name, _))| {
+                        let expr = values.get(name).unwrap().clone();
+                        (i, expr)
+                    });
+                for (offset, expr) in offset_and_value {
+                    let expr_addr = self.emit_expr(&expr);
+                    self.current_block.push(Instruction::IndexSet {
+                        base: struct_address.clone(),
+                        offset: Address::ConstantInt(offset as isize),
+                        value: expr_addr,
+                    })
+                }
+                struct_address
+            }
             ast::ExprKind::While { cond, body } => {
                 let cond_label = self.new_label();
                 let exit_label = self.new_label();
@@ -282,12 +332,12 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 self.current_block.push(Instruction::GoTo(cond_label));
                 self.close_scope();
                 self.current_block.push(Instruction::Label(exit_label.0));
-                Address::NoAddress
+                Address::ConstantUnit
             }
             ast::ExprKind::Return(e) => {
                 let res = self.emit_expr(e);
                 self.current_block.push(Instruction::Return(res));
-                Address::NoAddress
+                Address::ConstantUnit
             }
             ast::ExprKind::If {
                 cond,
