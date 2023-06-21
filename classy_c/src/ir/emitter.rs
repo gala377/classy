@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
-use crate::{typecheck::{type_context::TypCtx, inference::TypeEnv, r#type::Type}, syntax::ast};
+use crate::{
+    syntax::ast,
+    typecheck::{inference::TypeEnv, r#type::Type, type_context::TypCtx},
+};
 
-use super::instr::{Address, Block, Instruction, Label};
-
-
+use super::instr::{Address, Block, Instruction, IsRef, Label};
 
 type Scope = HashMap<String, Address>;
 
@@ -15,7 +16,7 @@ pub struct FunctionEmitter<'ctx, 'env> {
     tctx: &'ctx TypCtx,
     env: &'env TypeEnv,
     scopes: Vec<Scope>,
-    args: Vec<String>,
+    args: Vec<(String, IsRef)>,
 }
 
 impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
@@ -32,7 +33,28 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
     }
 
     pub fn emit_fn(mut self, func: &ast::FunctionDefinition) -> Block {
-        self.args = func.parameters.clone();
+        // get, from the definition a type of a function and then get the type of the arguments
+        // to check if they are references or not
+
+        let func_name = func.name.clone();
+        let func_t_id = self.tctx.variables.get(&func_name).unwrap();
+        let Type::Function { args, .. } = self.tctx.definitions.get(func_t_id).unwrap() else {
+            panic!("Should be a function type");
+        };
+        let this_args = func
+            .parameters
+            .iter()
+            .zip(args.iter())
+            .map(|(param, arg_t)| {
+                let is_ref = match arg_t.is_ref() {
+                    None => panic!("Should not be any of these types"),
+                    Some(true) => IsRef::Ref,
+                    Some(false) => IsRef::NoRef,
+                };
+                (param.clone(), is_ref)
+            })
+            .collect::<Vec<_>>();
+        self.args = this_args;
         self.new_scope();
 
         let res = self.emit_expr(&func.body);
@@ -45,13 +67,17 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
         match expr {
             ast::ExprKind::Unit => Address::ConstantUnit,
             ast::ExprKind::Sequence(exprs) => {
-                let res = self.new_temporary();
-                for expr in exprs {
+                let mut res = None;
+                for (i, expr) in exprs.iter().enumerate() {
                     let e_res = self.emit_expr(expr);
-                    self.current_block
-                        .push(Instruction::CopyAssign(res.clone(), e_res));
+                    if i == exprs.len() - 1 {
+                        let res_addr = self.new_temporary(self.is_ref(&e_res));
+                        self.current_block
+                            .push(Instruction::CopyAssign(res_addr.clone(), e_res));
+                        res = Some(res_addr);
+                    }
                 }
-                res
+                res.unwrap()
             }
             ast::ExprKind::Assignment { lval, rval } => {
                 let lval = self.emit_expr(lval);
@@ -68,7 +94,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 if let Some(addr) = self.find_in_scopes(n) {
                     return addr;
                 }
-                if let Some(pos) = self.args.iter().position(|arg| arg == n) {
+                if let Some(pos) = self.args.iter().position(|(arg, _)| arg == n) {
                     return Address::Parameter(pos);
                 }
                 Address::Name(n.clone())
@@ -83,7 +109,12 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 for arg in &args {
                     self.current_block.push(Instruction::Param(arg.clone()));
                 }
-                let res = self.new_temporary();
+                let res_t = self.env.get(id).unwrap();
+                let res = self.new_temporary(match res_t.is_ref() {
+                    None => panic!(),
+                    Some(true) => IsRef::Ref,
+                    Some(false) => IsRef::NoRef,
+                });
                 self.current_block.push(Instruction::Call {
                     res: res.clone(),
                     func,
@@ -92,12 +123,22 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 res
             }
             ast::ExprKind::Access { val, field } => {
+                let lhs_id = val.id;
                 let val = self.emit_expr(val);
-                let Type::Struct { fields, .. } = self.env.get(id).unwrap() else {
+                let Type::Struct { fields, .. } = self.env.get(&lhs_id).unwrap() else {
                     panic!("Should be a struct");
                 };
-                let offset = fields.iter().position(|(name, _)| name == field).unwrap();
-                let res = self.new_temporary();
+                let (offset, field_t) = fields
+                    .iter()
+                    .enumerate()
+                    .find(|(_, (name, _))| name == field)
+                    .map(|(i, (_, t))| (i, t))
+                    .unwrap();
+                let res = self.new_temporary(match field_t.is_ref() {
+                    None => panic!(),
+                    Some(true) => IsRef::Ref,
+                    Some(false) => IsRef::NoRef,
+                });
                 self.current_block.push(Instruction::IndexCopy {
                     res: res.clone(),
                     base: val,
@@ -118,19 +159,16 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                     panic!("should be a struct")
                 };
                 let tid = self.tctx.def_id_to_typ_id(def);
-                let struct_address = self.new_temporary();
+                let struct_address = self.new_temporary(IsRef::Ref);
                 self.current_block.push(Instruction::Alloc {
                     res: struct_address.clone(),
                     size: fields.len(),
                     typ: tid,
                 });
-                let offset_and_value = fields
-                    .iter()
-                    .enumerate()
-                    .map(|(i, (name, _))| {
-                        let expr = values.get(name).unwrap().clone();
-                        (i, expr)
-                    });
+                let offset_and_value = fields.iter().enumerate().map(|(i, (name, _))| {
+                    let expr = values.get(name).unwrap().clone();
+                    (i, expr)
+                });
                 for (offset, expr) in offset_and_value {
                     let expr_addr = self.emit_expr(&expr);
                     self.current_block.push(Instruction::IndexSet {
@@ -167,7 +205,12 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 body,
                 else_body,
             } => {
-                let res = self.new_temporary();
+                let res_t = self.env.get(id).unwrap();
+                let res = self.new_temporary(match res_t.is_ref() {
+                    None => panic!(),
+                    Some(true) => IsRef::Ref,
+                    Some(false) => IsRef::NoRef,
+                });
                 let else_label = self.new_label();
                 let exit_label = self.new_label();
                 let cond = self.emit_expr(cond);
@@ -200,8 +243,14 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 res
             }
             ast::ExprKind::Let { name, init, .. } => {
+                let init_t = self.env.get(&init.id).unwrap();
+                let is_ref = match init_t.is_ref() {
+                    None => panic!("unexpeced type that cannot be told if its ref"),
+                    Some(true) => IsRef::Ref,
+                    Some(false) => IsRef::NoRef,
+                };
                 let init = self.emit_expr(init);
-                let res = self.new_temporary();
+                let res = self.new_temporary(is_ref);
                 self.current_block
                     .push(Instruction::CopyAssign(res.clone(), init));
                 self.add_to_scope(name, res.clone());
@@ -219,8 +268,8 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
         label
     }
 
-    fn new_temporary(&mut self) -> Address {
-        let temp = Address::Temporary(self.next_temporary);
+    fn new_temporary(&mut self, is_ref: IsRef) -> Address {
+        let temp = Address::Temporary(self.next_temporary, is_ref);
         self.next_temporary += 1;
         temp
     }
@@ -247,5 +296,27 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
             }
         }
         None
+    }
+
+    fn is_ref(&self, addr: &Address) -> IsRef {
+        match addr {
+            Address::Temporary(_, is_ref) => is_ref.clone(),
+            Address::Name(_) => {
+                // TODO:
+                // Probably not every name is a ref, like, they have to be a global
+                // name so by that we could assume they have to be refs but that is
+                // probably a wrong assumption and the best way to check this
+                // would be to lookup a name.
+                // We should have a one scope structure that we can somehow trawerse
+                // and add values to.
+                IsRef::Ref
+            }
+            Address::ConstantInt(_) => IsRef::NoRef,
+            Address::ConstantFloat(_) => IsRef::NoRef,
+            Address::ConstantBool(_) => IsRef::NoRef,
+            Address::ConstantString(_) => IsRef::Ref,
+            Address::ConstantUnit => IsRef::NoRef,
+            Address::Parameter(i) => self.args[*i].1.clone(),
+        }
     }
 }

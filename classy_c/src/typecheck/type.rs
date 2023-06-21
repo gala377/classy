@@ -41,6 +41,26 @@ pub enum Type {
     Fresh(usize),
 }
 
+impl Type {
+    pub fn is_ref(&self) -> Option<bool> {
+        match self {
+            Type::Int | Type::UInt | Type::Bool | Type::Float | Type::Divergent | Type::Unit => {
+                Some(false)
+            }
+
+            Type::String
+            | Type::Struct { .. }
+            | Type::ADT { .. }
+            | Type::Function { .. }
+            | Type::Tuple(_)
+            | Type::Array(_)
+            | Type::Scheme { .. }
+            | Type::Generic(_) => Some(true),
+            Type::Fresh(_) | Type::Alias(_) | Type::ToInfere => None,
+        }
+    }
+}
+
 pub trait TypeFolder: Sized {
     fn fold_type(&mut self, typ: Type) -> Type {
         fold_type(self, typ)

@@ -1,3 +1,5 @@
+use colored::*;
+
 use classy_c::{
     ast_passes::{run_befor_type_context_passes, run_before_typechecking_passes},
     syntax::{ast, ast::Visitor, lexer::Lexer, parser::Parser},
@@ -27,6 +29,7 @@ const SOURCE: &'static str = r#"
         }
         print "Hello world"
         let c = type { a = "Hello"; b = 10 }
+        let d = c.b;
     }
 "#;
 
@@ -57,7 +60,7 @@ fn compile(source: &str, packages: &[classy_c::package::Package]) -> TypCtx {
             let emmiter = classy_c::ir::Emitter::new(&tctx, &tenv);
             let block = emmiter.emit_fn(fdef);
             for (i, instr) in block.iter().enumerate() {
-                println!("{i:03}| {:?}", instr);
+                println!("{} {:?}", format!("{i:03}|").dimmed(), instr);
             }
         }
     }

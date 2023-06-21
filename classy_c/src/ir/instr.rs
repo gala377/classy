@@ -1,13 +1,27 @@
 use std::fmt::Debug;
 
+use colored::*;
+
 use crate::typecheck::type_context::TypeId;
 
 #[derive(Clone, Debug)]
+pub enum IsRef {
+    Ref,
+    NoRef,
+}
+
+#[derive(Clone)]
 pub struct Label(pub usize);
+
+impl Debug for Label {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.to_string().bold().purple())
+    }
+}
 
 #[derive(Clone)]
 pub enum Address {
-    Temporary(usize),
+    Temporary(usize, IsRef),
     Name(String),
     ConstantInt(isize),
     ConstantFloat(f64),
@@ -21,14 +35,21 @@ pub enum Address {
 impl Debug for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Temporary(arg0) => write!(f, "t_{}", arg0),
-            Self::Name(arg0) => write!(f, "{}", arg0),
-            Self::ConstantInt(arg0) => write!(f, "{}", arg0),
-            Self::ConstantFloat(arg0) => write!(f, "{}", arg0),
-            Self::ConstantBool(arg0) => write!(f, "{}", arg0),
-            Self::ConstantString(arg0) => write!(f, "\"{}\"", arg0),
-            Self::ConstantUnit => write!(f, "()"),
-            Self::Parameter(arg0) => write!(f, "arg {}", arg0),
+            Self::Temporary(arg0, is_ref) => write!(f, "{}", {
+                let s = format!("t_{arg0}");
+                if let IsRef::Ref = is_ref {
+                    s.blue()
+                } else {
+                    s.normal()
+                }
+            }),
+            Self::Name(arg0) => write!(f, "{arg0}"),
+            Self::ConstantInt(arg0) => write!(f, "{}", arg0.to_string().red()),
+            Self::ConstantFloat(arg0) => write!(f, "{}", arg0.to_string().red()),
+            Self::ConstantBool(arg0) => write!(f, "{}", arg0.to_string().red()),
+            Self::ConstantString(arg0) => write!(f, "{}", format!("\"{arg0}\"").red()),
+            Self::ConstantUnit => write!(f, "{}", "()".red()),
+            Self::Parameter(arg0) => write!(f, "{} {}", "arg".bold().green(), arg0),
         }
     }
 }
@@ -139,26 +160,42 @@ impl Debug for Instruction {
                 .field(arg2)
                 .finish(),
             Self::CopyAssign(arg0, arg1) => write!(f, "{arg0:?} = {arg1:?}"),
-            Self::IndexCopy { res, base, offset } => f
-                .debug_struct("IndexCopy")
-                .field("res", res)
-                .field("base", base)
-                .field("offset", offset)
-                .finish(),
+            Self::IndexCopy { res, base, offset } => write!(f, "{res:?} = {base:?}[{offset:?}]"),
+
             Self::IndexSet {
                 base,
                 offset,
                 value,
             } => write!(f, "{base:?}[{offset:?}] = {value:?}"),
-            Self::GoTo(arg0) => write!(f, "goto {arg0:?}"),
-            Self::If { cond, goto } => write!(f, "if {cond:?} goto {goto:?}"),
-            Self::IfFalse { cond, goto } => write!(f, "ifFalse {cond:?} goto {goto:?}"),
-            Self::Param(arg0) => write!(f, "param {arg0:?}"),
+            Self::GoTo(arg0) => write!(f, "{} {arg0:?}", "goto".bold().green()),
+            Self::If { cond, goto } => write!(
+                f,
+                "{} {cond:?} {} {goto:?}",
+                "if".bold().green(),
+                "goto".bold().green()
+            ),
+            Self::IfFalse { cond, goto } => write!(
+                f,
+                "{} {cond:?} {} {goto:?}",
+                "if".bold().green(),
+                "goto".bold().green()
+            ),
+            Self::Param(arg0) => write!(f, "{} {arg0:?}", "param".bold().green()),
             Self::Call { res, func, argc } => {
-                write!(f, "{res:?} = call {func:?} {argc}")
+                write!(f, "{res:?} = {} {func:?} {argc}", "call".bold().green())
             }
-            Self::Label(arg0) => write!(f, "label {arg0}"),
-            Self::Alloc { res, size, typ } => write!(f, "{res:?} = alloc[{size}] of type {typ}"),
+            Self::Label(arg0) => write!(
+                f,
+                "{} {}",
+                "label".bold().green(),
+                arg0.to_string().bold().purple()
+            ),
+            Self::Alloc { res, size, typ } => write!(
+                f,
+                "{res:?} = {}[{size}] {} {typ}",
+                "alloc".bold().green(),
+                "type".bold().green()
+            ),
             Self::AllocArray {
                 res,
                 elem_size,
@@ -171,7 +208,7 @@ impl Debug for Instruction {
                 .field("count", count)
                 .field("typ", typ)
                 .finish(),
-            Self::Return(arg0) => write!(f, "return {arg0:?}"),
+            Self::Return(arg0) => write!(f, "{} {arg0:?}", "return".bold().green()),
         }
     }
 }
