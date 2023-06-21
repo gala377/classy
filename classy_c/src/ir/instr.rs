@@ -177,7 +177,7 @@ impl Debug for Instruction {
             Self::IfFalse { cond, goto } => write!(
                 f,
                 "{} {cond:?} {} {goto:?}",
-                "if".bold().green(),
+                "ifFalse".bold().green(),
                 "goto".bold().green()
             ),
             Self::Param(arg0) => write!(f, "{} {arg0:?}", "param".bold().green()),
