@@ -31,7 +31,7 @@ pub fn run(tctx: &mut TypCtx, ast: &ast::Program) -> TypeEnv {
     let cons = Inference::generate_constraints(tctx, ast);
 
     println!("{}", tctx.debug_string());
-    let mut solver = ConstraintSolver::new();
+    let mut solver = ConstraintSolver::new(tctx);
     solver.solve(cons.constraints);
     let mut substs = solver.substitutions.iter().cloned().collect();
     let mut env = cons.env;

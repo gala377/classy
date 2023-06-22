@@ -3,6 +3,8 @@ use crate::typecheck::{
     r#type::{Type, TypeFolder},
 };
 
+use super::type_context::TypCtx;
+
 pub(super) struct TypeReplacer {
     pub fresh_type_id: usize,
     pub for_type: Type,
@@ -18,14 +20,16 @@ impl TypeFolder for TypeReplacer {
     }
 }
 
-pub(super) struct ConstraintSolver {
+pub(super) struct ConstraintSolver<'ctx> {
     pub substitutions: Vec<(usize, Type)>,
+    pub tctx: &'ctx TypCtx,
 }
 
-impl ConstraintSolver {
-    pub fn new() -> Self {
+impl<'ctx> ConstraintSolver<'ctx> {
+    pub fn new(tctx: &'ctx TypCtx) -> Self {
         Self {
             substitutions: Vec::new(),
+            tctx,
         }
     }
 
@@ -49,10 +53,20 @@ impl ConstraintSolver {
             | Constraint::Eq(Type::String, Type::String)
             | Constraint::Eq(Type::Unit, Type::Unit)
             | Constraint::Eq(Type::Divergent, Type::Divergent) => {}
+            Constraint::Eq(Type::Divergent, _) => {}
+            Constraint::Eq(_, Type::Divergent) => {}
+            Constraint::Eq(Type::Alias(id1), Type::Alias(id2)) if id1 == id2 => {}
+            Constraint::Eq(Type::Alias(id), t) => {
+                let resolved = self.tctx.resolve_alias(id);
+                constraints.push(Constraint::Eq(resolved, t));
+            }
+            Constraint::Eq(t, Type::Alias(id)) => {
+                let resolved = self.tctx.resolve_alias(id);
+                constraints.push(Constraint::Eq(t, resolved));
+            } 
             Constraint::Eq(Type::Fresh(id1), Type::Fresh(id2)) if id1 == id2 => {}
             Constraint::Eq(Type::Struct { def: def_1, .. }, Type::Struct { def: def_2, .. })
                 if def_1 == def_2 => {}
-            Constraint::Eq(Type::Alias(id1), Type::Alias(id2)) if id1 == id2 => {}
             Constraint::Eq(Type::Tuple(t_1), Type::Tuple(t_2)) => {
                 for (t1, t2) in t_1.iter().zip(t_2.iter()) {
                     constraints.push(Constraint::Eq(t1.clone(), t2.clone()));
