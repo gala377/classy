@@ -21,7 +21,7 @@ pub struct Linker<'vm, 'pool> {
 
 impl<'vm, 'pool> Linker<'vm, 'pool> {
 
-    pub fn new(&mut self, vm: &'vm mut Vm, constant_pool: &'pool ConstantPool) -> Self {
+    pub fn new(vm: &'vm mut Vm, constant_pool: &'pool ConstantPool) -> Self {
         Self {
             vm,
             constant_pool,

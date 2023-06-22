@@ -4,13 +4,15 @@ use std::{
     thread::ThreadId,
 };
 
+use classy_c::{typecheck::type_context::TypCtx, code::constant_pool::ConstantPool};
+
 use crate::{
     mem::{
         allocator::Allocator,
         heap::{self, SemiSpaceKind},
         permament_heap,
     },
-    runtime::{self, thread_manager::ThreadManager, Runtime, UserClasses},
+    runtime::{self, thread_manager::ThreadManager, Runtime, UserClasses, linker::Linker},
 };
 
 #[derive(Clone)]
@@ -78,8 +80,10 @@ impl Vm {
     /// thread is created for.
     pub fn create_evaluation_thread(
         &mut self,
-        code: classy_c::code::Code,
+        mut code: classy_c::code::Code,
+        constant_pool: &ConstantPool,
     ) -> runtime::thread::Thread {
+        Linker::new(self, constant_pool).link_code(&mut code);
         while self.thread_manager.should_stop_thread_for_gc() {
             self.thread_manager.stop_for_gc().unwrap();
         }
@@ -107,6 +111,10 @@ impl Vm {
 
     pub fn runtime(&self) -> Runtime {
         self.runtime.clone()
+    }
+
+    pub fn load_types(&mut self, type_ctx: &TypCtx, constant_pool: &ConstantPool) {
+        Linker::new(self, constant_pool).link_types(type_ctx);
     }
 }
 
@@ -142,6 +150,8 @@ fn setup_semispaces(page_size: usize, page_align: usize, allocated_limit: usize)
 mod tests {
     use std::mem::{align_of, size_of};
 
+    use classy_c::code::constant_pool::ConstantPool;
+
     use crate::{
         mem::{
             page::Page,
@@ -163,7 +173,7 @@ mod tests {
     #[test]
     fn gc_changes_the_handles_address_but_preserves_the_value() {
         let mut vm = setup_vm(4 * size_of::<usize>(), 1);
-        let mut t = vm.create_evaluation_thread(classy_c::code::Code::new());
+        let mut t = vm.create_evaluation_thread(classy_c::code::Code::new(), &ConstantPool::new());
         unsafe {
             let ptr: Ptr<isize> = t.allocate_instance(vm.runtime.classes.int);
             assert!(!ptr.is_null());
@@ -183,7 +193,7 @@ mod tests {
     #[test]
     fn revoking_a_handle_allows_gc_to_collect_garbage() {
         let mut vm = setup_vm(4 * size_of::<usize>(), 1);
-        let mut t = vm.create_evaluation_thread(classy_c::code::Code::new());
+        let mut t = vm.create_evaluation_thread(classy_c::code::Code::new(), &ConstantPool::new());
         unsafe {
             let ptr: Ptr<isize> = t.allocate_instance(vm.runtime.classes.int);
             assert!(!ptr.is_null());
