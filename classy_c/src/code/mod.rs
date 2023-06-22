@@ -77,7 +77,7 @@ pub enum OpCode {
     /// 
     /// Args:
     /// - offset: Word
-    JumpBackIfFlse,
+    JumpBackIfFalse,
 
 
     /// Allocate an instance of a class that has a name followed
@@ -160,7 +160,7 @@ impl OpCode {
             OpCode::JumpFront => word,
             OpCode::JumpBack => word,
             OpCode::JumpFrontIfFalse => word,
-            OpCode::JumpBackIfFlse => word,
+            OpCode::JumpBackIfFalse => word,
             OpCode::AllocHeap => word,
             OpCode::StackCopyBottom => word,
             OpCode::StackAlloc => word,

@@ -5,7 +5,7 @@ use crate::{
     ir::{self, emitter::IrFunction, instr::IsRef, Label}, typecheck::type_context::TypCtx,
 };
 
-const LABEL_BACKPATCH_MASK: u64 = 0xFF00000000000000;
+pub const LABEL_BACKPATCH_MASK: u64 = 0xFF00000000000000;
 
 pub struct FunctionEmitter<'ctx> {
     current_line: usize,
@@ -188,7 +188,7 @@ impl<'ctx> FunctionEmitter<'ctx> {
                     match self.label_lines.get(&goto) {
                         Some(line) => {
                             let offset = self.current_line - line;
-                            self.emit_instr(&mut code, OpCode::JumpBackIfFlse);
+                            self.emit_instr(&mut code, OpCode::JumpBackIfFalse);
                             self.emit_word(&mut code, offset as u64);
                         }
                         None => {
