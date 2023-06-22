@@ -90,6 +90,10 @@ impl ConstantPool {
         id
     }
 
+    pub fn get_raw(&self, index: usize) -> usize {
+        self.entries[index].val
+    }
+
     pub unsafe fn get_unchecked<T>(&self, index: usize) -> T {
         assert_eq!(
             std::mem::size_of::<T>(),
@@ -114,9 +118,7 @@ impl ConstantPool {
                 // SAFETY: safe, we checked the entry's type.
                 Ok(unsafe { self.get_unchecked::<T>(index) })
             }
-            EntryType::Bool => {
-                Ok(T::from_usize(self.entries[index].val))
-            }
+            EntryType::Bool => Ok(T::from_usize(self.entries[index].val)),
             EntryType::String => {
                 let string_word = self.entries[index].val;
                 let offset = string_word & STRING_OFFSET_MASK;
@@ -168,7 +170,6 @@ pub enum EntryType {
     /// The value of this tag is a bool extended to u64 but it will
     /// either have 1 or 0
     Bool,
-
 }
 
 /// A type safe wrapped around `EntryType`.
@@ -265,9 +266,9 @@ impl Tagged for bool {
 
     fn from_usize(val: usize) -> Self {
         if val == 0 {
-            return false
+            return false;
         } else if val == 1 {
-            return true
+            return true;
         }
         panic!("Illegal value of bool")
     }

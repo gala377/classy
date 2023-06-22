@@ -1,9 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use super::{
-    r#type::Type,
-    type_context::TypCtx,
-};
+use super::{r#type::Type, type_context::TypCtx};
 
 pub(super) struct Scope {
     resolved_types: HashMap<String, Type>,

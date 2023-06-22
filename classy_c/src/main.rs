@@ -2,6 +2,7 @@ use colored::*;
 
 use classy_c::{
     ast_passes::{run_befor_type_context_passes, run_before_typechecking_passes},
+    code::constant_pool::ConstantPool,
     syntax::{ast, ast::Visitor, lexer::Lexer, parser::Parser},
     typecheck::{self, add_types::AddTypes, type_context::TypCtx},
 };
@@ -14,6 +15,7 @@ const SOURCE: &'static str = r#"
     is_int: (Int) -> ()
     is_int i = ()
     
+    type Alias = () -> Int
 
     main: () -> ()
     main { 
@@ -38,7 +40,7 @@ const SOURCE: &'static str = r#"
 fn main() {
     let package = make_package();
     compile(SOURCE, &[package]);
- //   compile(SOURCE, &[]);
+    //   compile(SOURCE, &[]);
     //println!("{}", tctx.debug_string());
     // let package = classy_c::package::Package::new("main", &tctx);
     // let out = std::fs::File::create("out.json").unwrap();
@@ -56,6 +58,7 @@ fn compile(source: &str, packages: &[classy_c::package::Package]) -> TypCtx {
     println!("{}", tctx.debug_string());
     let res = run_before_typechecking_passes(&tctx, res);
     let tenv = typecheck::run(&mut tctx, &res);
+    let mut constant_pool = ConstantPool::new();
     for def in &res.items {
         if let ast::TopLevelItem::FunctionDefinition(fdef) = def {
             println!("\n\n\nFunction definition {:#?}", fdef.name);
@@ -65,8 +68,9 @@ fn compile(source: &str, packages: &[classy_c::package::Package]) -> TypCtx {
                 println!("{} {:?}", format!("{i:03}|").dimmed(), instr);
             }
             println!("\n\nCompiled:");
-            let compiled = classy_c::emitter::compile_ir_function(&block, &tctx);
-            classy_c::code::debug::debug_print_code(&compiled.instructions, &compiled.constant_pool);
+            let compiled =
+                classy_c::emitter::compile_ir_function(&block, &tctx, &mut constant_pool);
+            classy_c::code::debug::debug_print_code(&compiled.instructions, &constant_pool);
         }
     }
     tctx

@@ -6,8 +6,8 @@ use crate::{
         constrait_solver::ConstraintSolver,
         fix_fresh,
         r#type::{Type, TypeFolder},
-        type_context::TypCtx,
         scope::Scope,
+        type_context::TypCtx,
     },
 };
 
@@ -403,7 +403,6 @@ impl TypeFolder for ReplaceInferTypes {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -412,7 +411,6 @@ mod tests {
         typecheck,
     };
 
-
     fn run_typechecker(source: &str) {
         let lex = Lexer::new(source);
         let mut parser = Parser::new(lex);
@@ -420,7 +418,6 @@ mod tests {
         let res = ast_passes::run_befor_type_context_passes(res);
         let mut tctx = typecheck::prepare_for_typechecking(&res);
         let res = ast_passes::run_before_typechecking_passes(&tctx, res);
-        tctx.remove_to_infere_type();
         typecheck::inference::run(&mut tctx, &res);
         println!("Final ast {res:#?}");
     }
@@ -584,8 +581,6 @@ mod tests {
         "#;
         run_typechecker(source)
     }
-
-
 
     #[test]
     fn nested_anon_types_typecheck() {

@@ -1,14 +1,17 @@
 use std::{collections::HashMap, mem::size_of};
 
 use crate::{
-    code::{constant_pool, Code, OpCode},
+    code::{
+        constant_pool::{self, ConstantPool},
+        Code, OpCode,
+    },
     ir::{self, emitter::IrFunction, instr::IsRef, Label},
     typecheck::type_context::TypCtx,
 };
 
 pub const LABEL_BACKPATCH_MASK: u64 = 0xFF00000000000000;
 
-pub struct FunctionEmitter<'ctx> {
+pub struct FunctionEmitter<'ctx, 'pool> {
     current_line: usize,
     stack_map: Vec<bool>,
 
@@ -23,10 +26,11 @@ pub struct FunctionEmitter<'ctx> {
     label_lines: HashMap<Label, usize>,
 
     type_ctx: &'ctx TypCtx,
+    constant_pool: &'pool mut ConstantPool,
 }
 
-impl<'ctx> FunctionEmitter<'ctx> {
-    pub fn new(type_ctx: &'ctx TypCtx) -> Self {
+impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
+    pub fn new(type_ctx: &'ctx TypCtx, constant_pool: &'pool mut ConstantPool) -> Self {
         Self {
             current_line: 0,
             stack_map: Vec::new(),
@@ -34,6 +38,7 @@ impl<'ctx> FunctionEmitter<'ctx> {
             locals_stack_depth: 0,
             label_lines: HashMap::new(),
             type_ctx,
+            constant_pool,
         }
     }
 
@@ -270,7 +275,7 @@ impl<'ctx> FunctionEmitter<'ctx> {
                 ir::Instruction::Alloc { res, typ, .. } => {
                     self.emit_instr(&mut code, OpCode::AllocHeap);
                     let name = self.type_ctx.get_name(typ).unwrap();
-                    let id = code.constant_pool.add_entry(name.into());
+                    let id = self.constant_pool.add_entry(name.into());
                     self.emit_word(&mut code, id as u64);
                     self.stack_map_add_ref();
                     self.set_address(&mut code, res)
@@ -296,7 +301,7 @@ impl<'ctx> FunctionEmitter<'ctx> {
                 self.stack_map_add(self.stack_map[i + self.args_len]);
             }
             ir::Address::Name(name) => {
-                let id = code
+                let id = self
                     .constant_pool
                     .add_entry(constant_pool::TypedEntry::String(name.clone()));
                 self.emit_instr(code, OpCode::LookUpGlobal);
@@ -310,13 +315,13 @@ impl<'ctx> FunctionEmitter<'ctx> {
                 // This and constant float should use something
                 // like pushfloat and pushint so we can encode
                 // integer directly in the source code.
-                let id = code.constant_pool.add_entry(val.into());
+                let id = self.constant_pool.add_entry(val.into());
                 self.emit_instr(code, OpCode::ConstLoadInteger);
                 self.emit_word(code, id as u64);
                 self.stack_map_add_value();
             }
             ir::Address::ConstantFloat(val) => {
-                let id = code.constant_pool.add_entry(val.into());
+                let id = self.constant_pool.add_entry(val.into());
                 self.emit_instr(code, OpCode::ConstLoadFloat);
                 self.emit_word(code, id as u64);
                 self.stack_map_add_value();
@@ -332,7 +337,7 @@ impl<'ctx> FunctionEmitter<'ctx> {
                 );
             }
             ir::Address::ConstantString(val) => {
-                let id = code
+                let id = self
                     .constant_pool
                     .add_entry(constant_pool::TypedEntry::String(val.clone()));
                 self.emit_instr(code, OpCode::ConstLoadString);

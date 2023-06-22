@@ -1,10 +1,12 @@
 pub mod class;
+pub mod linker;
 pub mod thread;
 pub mod thread_manager;
 pub mod trace;
 
 use std::{
     alloc::Layout,
+    collections::HashMap,
     mem::{align_of, size_of},
     sync::Arc,
 };
@@ -23,12 +25,14 @@ use crate::{
 #[derive(Clone)]
 pub struct Runtime {
     pub classes: Arc<RuntimeClasses>,
+    pub user_classes: Arc<UserClasses>,
 }
 
 impl Runtime {
-    pub fn init<Heap: ObjectAllocator>(heap: &mut Heap) -> Self {
+    pub fn init<Heap: ObjectAllocator>(heap: &mut Heap, user_classes: UserClasses) -> Self {
         Self {
             classes: Arc::new(RuntimeClasses::init_runtime_classes(heap)),
+            user_classes: Arc::new(user_classes),
         }
     }
 }
@@ -180,6 +184,33 @@ fn fill_in_class_names<Heap: ObjectAllocator>(
     }
 }
 
+pub struct UserClasses {
+    // mapping from symbol address to class
+    classes: HashMap<usize, NonNullPtr<Class>>,
+}
+
+// classes are immutable after being initialized
+// it is a pinky promise as we cannot guarantee it
+unsafe impl Sync for UserClasses {}
+unsafe impl Send for UserClasses {}
+
+impl UserClasses {
+    pub fn new() -> Self {
+        Self {
+            classes: HashMap::new(),
+        }
+    }
+
+    pub fn get_class_ptr(&self, ptr: usize) -> NonNullPtr<Class> {
+        self.classes.get(&ptr).cloned().unwrap()
+    }
+
+    pub fn add_class(&mut self, key: usize, ptr: NonNullPtr<Class>) {
+        self.classes.insert(key, ptr);
+    }
+}
+
+// TODO:
 // we need something like
 // impl RuntimeClasses {
 //
@@ -209,12 +240,15 @@ mod tests {
         },
     };
 
+    use super::UserClasses;
+
     #[test]
     fn setup_runtime_in_permament_heap() {
         let mut heap = PermamentHeap::new();
         let classes = RuntimeClasses::init_runtime_classes(&mut heap);
         let _runtime = Runtime {
             classes: Arc::new(classes),
+            user_classes: Arc::new(UserClasses::new()),
         };
     }
 
@@ -223,6 +257,7 @@ mod tests {
         let mut heap = PermamentHeap::new();
         let runtime = Runtime {
             classes: Arc::new(RuntimeClasses::init_runtime_classes(&mut heap)),
+            user_classes: Arc::new(UserClasses::new()),
         };
         let name = heap.allocate_static_string(runtime.classes.string, "TestClass");
         let class = Class {

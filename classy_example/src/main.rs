@@ -47,7 +47,7 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
-    let mut vm = Vm::new_default(vm::Options {
+    let vm = Vm::new_default(vm::Options {
         page_size: args.page_size + size_of::<Page>(),
         page_align: args.page_align,
         young_space_size: (args.page_size + size_of::<Page>()) * args.pages_count,
@@ -76,10 +76,10 @@ fn main() {
             "#;
             let mut parser =
                 classy_c::syntax::parser::Parser::new(classy_c::syntax::lexer::Lexer::new(&source));
-            let ast = parser.parse().unwrap();
-            let code = classy_c::emitter::ast::AstEmmiter::compile(ast);
-            let mut thread = vm.create_evaluation_thread(code);
-            thread.interpert();
+            let _ast = parser.parse().unwrap();
+            // let code = classy_c::emitter::ast::AstEmmiter::compile(ast);
+            // let mut thread = vm.create_evaluation_thread(code);
+            // thread.interpert();
         }
     }
 }

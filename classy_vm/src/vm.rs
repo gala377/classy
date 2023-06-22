@@ -4,27 +4,29 @@ use std::{
     thread::ThreadId,
 };
 
-use classy_c::code;
-
 use crate::{
     mem::{
         allocator::Allocator,
         heap::{self, SemiSpaceKind},
-        permament_heap, ObjectAllocator,
+        permament_heap,
     },
-    runtime::{self, thread_manager::ThreadManager, Runtime},
+    runtime::{self, thread_manager::ThreadManager, Runtime, UserClasses},
 };
 
 #[derive(Clone)]
 pub struct Vm {
     original_thread_id: ThreadId,
-    runtime: Runtime,
-    permament_heap: Arc<Mutex<permament_heap::PermamentHeap>>,
+    pub runtime: Runtime,
+    pub permament_heap: Arc<Mutex<permament_heap::PermamentHeap>>,
     thread_manager: Arc<ThreadManager>,
     options: Options,
     // invalid at the moment threads start an evalu
     semispaces: SemiSpaces,
-    interned_strings: HashMap<u64, u64>,
+    /// Maps index from the code object ot the static string pointer
+    /// TODO: This does not work as we have different code objects for each function.
+    /// And as such we will get colision when allocating strings between the same constant pools.
+    /// Which is a problem. All code objects should then share the same constant pool
+    pub interned_strings: HashMap<String, u64>,
 }
 
 #[derive(Clone)]
@@ -38,7 +40,8 @@ pub struct Options {
 impl Vm {
     pub fn new_default(options: Options) -> Vm {
         let mut permament_heap = permament_heap::PermamentHeap::new();
-        let runtime = Runtime::init(&mut permament_heap);
+        // TODO: Define user classes
+        let runtime = Runtime::init(&mut permament_heap, UserClasses::new());
         let thread_manager = ThreadManager::new();
         thread_manager
             .manually_register_thread(std::thread::current().id())
@@ -75,7 +78,7 @@ impl Vm {
     /// thread is created for.
     pub fn create_evaluation_thread(
         &mut self,
-        mut code: classy_c::code::Code,
+        code: classy_c::code::Code,
     ) -> runtime::thread::Thread {
         while self.thread_manager.should_stop_thread_for_gc() {
             self.thread_manager.stop_for_gc().unwrap();
@@ -84,7 +87,8 @@ impl Vm {
             from_space,
             to_space,
         } = self.clone_semispaces();
-        self.allocate_static_objects(&mut code);
+        // TODO: CODE SHOULD GO THROUGH LINKER BEFORE THIS
+        //self.allocate_static_objects(&mut code);
         runtime::thread::Thread::new(
             self.runtime.clone(),
             self.thread_manager.clone(),
@@ -103,66 +107,6 @@ impl Vm {
 
     pub fn runtime(&self) -> Runtime {
         self.runtime.clone()
-    }
-
-    pub fn allocate_static_objects(&mut self, code: &mut classy_c::code::Code) {
-        let mut instr = 0;
-        let end = code.instructions.len();
-        while instr < end {
-            let opcode = code::OpCode::from(code.instructions[instr]);
-            instr += match opcode {
-                code::OpCode::ConstLoadString | code::OpCode::LookUpGlobal => {
-                    assert!(
-                        code::OpCode::ConstLoadString.argument_size()
-                            == code::OpCode::LookUpGlobal.argument_size()
-                    );
-                    instr += 1;
-                    let index_bytes = &code.instructions[instr..instr + std::mem::size_of::<u64>()];
-                    let mut index_bytes_array: [u8; 8] = [0; 8];
-                    assert!(index_bytes.len() == 8);
-                    for i in 0..8 {
-                        index_bytes_array[i] = index_bytes[i];
-                    }
-                    let index = u64::from_le_bytes(index_bytes_array);
-                    match self.interned_strings.get(&index) {
-                        Some(instance_word) => {
-                            let instance_word_bytes = instance_word.to_le_bytes();
-                            // overwrite the id with static pointer
-                            assert!(instance_word_bytes.len() == std::mem::size_of::<u64>());
-                            for i in 0..std::mem::size_of::<u64>() {
-                                code.instructions[instr + i] = instance_word_bytes[i];
-                            }
-                        }
-                        None => {
-                            // retrieve the string
-                            let str = code
-                                .constant_pool
-                                .get::<String>(index as usize)
-                                .expect("checked by instruction");
-                            // allocate string in the permament heap
-                            let strcls = self.runtime.classes.string.clone();
-                            let instance = self
-                                .permament_heap
-                                .lock()
-                                .unwrap()
-                                .allocate_static_string(strcls, &str);
-                            assert!(!instance.is_null());
-                            let instance_word = instance.unwrap() as u64;
-                            let instance_word_bytes = instance_word.to_le_bytes();
-                            // overwrite the id with static pointer
-                            assert!(instance_word_bytes.len() == std::mem::size_of::<u64>());
-                            for i in 0..std::mem::size_of::<u64>() {
-                                code.instructions[instr + i] = instance_word_bytes[i];
-                            }
-                            // add it as interned
-                            self.interned_strings.insert(index, instance_word);
-                        }
-                    }
-                    code::OpCode::ConstLoadString.argument_size()
-                }
-                instr => 1 + instr.argument_size(),
-            }
-        }
     }
 }
 

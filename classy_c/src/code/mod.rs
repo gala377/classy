@@ -4,8 +4,6 @@ pub mod constant_pool;
 pub mod debug;
 pub mod interner;
 
-use constant_pool::ConstantPool;
-
 /// Type erased value.
 /// For now we require all values to be at least
 /// word sized. Pointers, intergers, floats.
@@ -23,13 +21,13 @@ type Word = usize;
 #[derive(Clone, Copy)]
 #[repr(u8)]
 pub enum OpCode {
-    /// Add two values from the top of the stack 
+    /// Add two values from the top of the stack
     /// and push the result on top of the stack.
     AddInteger,
     AddFloat,
     /// Load constant with the index following this instruction
-    /// as a word. (Meaning push it on top of the stack) 
-    /// 
+    /// as a word. (Meaning push it on top of the stack)
+    ///
     /// Args:
     ///  - index: Word
     ConstLoadInteger,
@@ -37,7 +35,7 @@ pub enum OpCode {
     ConstLoadString,
     /// Lookup value of a global variable with the name
     /// being a symbol pointed by the following word.
-    /// 
+    ///
     /// Args:
     ///  - class_name: Symbol
     LookUpGlobal,
@@ -50,7 +48,7 @@ pub enum OpCode {
     /// Call function on the top of the stack with "N"
     /// arguments where "n" is stored as a word the
     /// instruction. "N" arguments are on the stack.
-    /// 
+    ///
     /// Args:
     /// - number_of_args: Word
     CallN,
@@ -59,51 +57,50 @@ pub enum OpCode {
 
     /// Increase the instruction pointer by the amount given as a word
     /// following this instruction
-    /// 
+    ///
     /// Args:
     /// - offset: Word
     JumpFront,
     /// Decrement the instruction pointer by the amout given as a word
     /// following this instruction
-    /// 
+    ///
     /// Args:
     /// - offset: Word
     JumpBack,
     /// Jump front but only if the top of the stack is false
-    /// 
+    ///
     /// Args:
     /// - offset: Word
     JumpFrontIfFalse,
     /// Jump back but only if the top of the stack is false
-    /// 
+    ///
     /// Args:
     /// - offset: Word
     JumpBackIfFalse,
 
-
     /// Allocate an instance of a class that has a name followed
     /// as an symbol index to a constant pool followed by this instruction
-    /// 
+    ///
     /// Args:
     ///  - class_name: Symbol
-    AllocHeap,  
+    AllocHeap,
 
     /// Copy a value from the bottom of the stack that is indexed by the word
     /// following this instruction and push it to the top of the stack
-    /// 
+    ///
     /// Args:
     ///   - offset: Word  
     StackCopyBottom,
 
     /// Allocate space on a stack for a number of words
     /// that is specified as a word following this instruction.
-    /// 
+    ///
     /// Args:
     /// - num_of_words: Word
     StackAlloc,
-    /// do stack[bottom + offset] = pop 
+    /// do stack[bottom + offset] = pop
     /// where the offset is followed as word after this instruction.
-    /// 
+    ///
     /// Args:
     ///  - offset: Word
     StackAssign,
@@ -117,13 +114,13 @@ pub enum OpCode {
     /// Take the pointer from the top of the stack offset it and derefernce it.
     /// Put this value on top of the stack. The offset is following this instruction
     /// as a word.
-    /// 
-    /// Args: 
+    ///
+    /// Args:
     ///  - offset: Word
     PushOffsetDeref,
     /// Pop value from the top of the stack and also pop an address.
     /// Then store the value at the address shifter by the offset.
-    /// 
+    ///
     /// Args:
     ///  - offset: Word
     SetOffset,
@@ -202,7 +199,6 @@ pub type GcStackMap = Vec<GcStackMapEntry>;
 /// Bytecode to execute by the virtual machine.
 pub struct Code {
     pub instructions: Vec<u8>,
-    pub constant_pool: ConstantPool,
     pub stack_map: GcStackMap,
 }
 
@@ -210,7 +206,6 @@ impl Code {
     pub fn new() -> Code {
         Code {
             instructions: Vec::new(),
-            constant_pool: ConstantPool::new(),
             stack_map: GcStackMap::new(),
         }
     }

@@ -1,11 +1,18 @@
-pub mod ast;
-pub mod ir;
 pub mod backpatch;
+pub mod ir;
 
-use crate::{ir::emitter::IrFunction, code::Code, typecheck::type_context::TypCtx};
+use crate::{
+    code::{constant_pool::ConstantPool, Code},
+    ir::emitter::IrFunction,
+    typecheck::type_context::TypCtx,
+};
 
-pub fn compile_ir_function(func: &IrFunction, typ_ctx: &TypCtx) -> Code {
-    let mut emitter = ir::FunctionEmitter::new(typ_ctx);
+pub fn compile_ir_function(
+    func: &IrFunction,
+    typ_ctx: &TypCtx,
+    constant_pool: &mut ConstantPool,
+) -> Code {
+    let mut emitter = ir::FunctionEmitter::new(typ_ctx, constant_pool);
     let mut code = emitter.emit_fn(func);
     let labels = emitter.labels().clone();
     let mut backpatcher = backpatch::Backpatcher::new(labels);

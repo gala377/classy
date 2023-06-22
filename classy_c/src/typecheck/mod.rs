@@ -3,9 +3,9 @@ pub mod alias_resolver;
 pub mod constrait_solver;
 pub mod fix_fresh;
 pub mod inference;
+pub mod scope;
 pub mod r#type;
 pub mod type_context;
-pub mod scope;
 
 use std::collections::HashMap;
 
