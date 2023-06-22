@@ -144,32 +144,32 @@ impl From<u8> for OpCode {
 
 impl OpCode {
     pub fn argument_size(&self) -> usize {
-        const word: usize = std::mem::size_of::<u64>();
+        const WORD: usize = std::mem::size_of::<u64>();
         match self {
             OpCode::AddInteger => 0,
             OpCode::AddFloat => 0,
-            OpCode::ConstLoadInteger => word,
-            OpCode::ConstLoadFloat => word,
-            OpCode::ConstLoadString => word,
-            OpCode::LookUpGlobal => word,
+            OpCode::ConstLoadInteger => WORD,
+            OpCode::ConstLoadFloat => WORD,
+            OpCode::ConstLoadString => WORD,
+            OpCode::LookUpGlobal => WORD,
             OpCode::Return => 0,
             OpCode::Call0 => 0,
             OpCode::Call1 => 0,
-            OpCode::CallN => word,
+            OpCode::CallN => WORD,
             OpCode::Pop => 0,
-            OpCode::JumpFront => word,
-            OpCode::JumpBack => word,
-            OpCode::JumpFrontIfFalse => word,
-            OpCode::JumpBackIfFalse => word,
-            OpCode::AllocHeap => word,
-            OpCode::StackCopyBottom => word,
-            OpCode::StackAlloc => word,
-            OpCode::StackAssign => word,
+            OpCode::JumpFront => WORD,
+            OpCode::JumpBack => WORD,
+            OpCode::JumpFrontIfFalse => WORD,
+            OpCode::JumpBackIfFalse => WORD,
+            OpCode::AllocHeap => WORD,
+            OpCode::StackCopyBottom => WORD,
+            OpCode::StackAlloc => WORD,
+            OpCode::StackAssign => WORD,
             OpCode::PushTrue => 0,
             OpCode::PushFalse => 0,
             OpCode::PushUnit => 0,
-            OpCode::PushOffsetDeref => word,
-            OpCode::SetOffset => word,
+            OpCode::PushOffsetDeref => WORD,
+            OpCode::SetOffset => WORD,
             OpCode::LastMarker => panic!(),
         }
     }
