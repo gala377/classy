@@ -20,12 +20,8 @@ pub struct Linker<'vm, 'pool> {
 }
 
 impl<'vm, 'pool> Linker<'vm, 'pool> {
-
     pub fn new(vm: &'vm mut Vm, constant_pool: &'pool ConstantPool) -> Self {
-        Self {
-            vm,
-            constant_pool,
-        }
+        Self { vm, constant_pool }
     }
 
     pub fn link_types(&mut self, tctx: &TypCtx) {
@@ -47,6 +43,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                 println!("Linking of {:?} skipped", tctx.definitions.get(&tid).unwrap());
                 continue;
             };
+            println!("Linking of struct {name}");
             let class = Class {
                 name: unsafe { std::mem::transmute(str_instance) },
                 drop: None,
@@ -64,7 +61,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                         std::mem::transmute(self.intern_and_allocte_static_string(&name))
                     };
                     let sym_t_name = match typ {
-                        Type::Int => "Int".to_owned(),
+                        Type::Int => "Integer".to_owned(),
                         Type::UInt => "UInt".to_owned(),
                         Type::Bool => "Bool".to_owned(),
                         Type::String => "String".to_owned(),
@@ -101,33 +98,35 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
         unsafe fn read_field_sym_ref(
             cls_ptr: NonNullPtr<Class>,
             offset: usize,
-        ) -> NonNullPtr<StringInst> {
-            class::fields(cls_ptr)[offset].class.clone().cast()
+        ) -> class::Field {
+            class::fields(cls_ptr)[offset].clone()
         }
 
         unsafe fn set_field_cls(cls_ptr: NonNullPtr<Class>, offset: usize, val: NonNullPtr<Class>) {
             class::fields_mut(cls_ptr)[offset].class = val;
         }
 
-        for (_, cls_ptr) in user_classes.iter() {
+        for (name, cls_ptr) in user_classes.iter() {
+            unsafe {
+                let sym_str = class::string::as_rust_string(std::mem::transmute(*name));
+                println!("resolving symbolic references of class {sym_str}");
+            }
             let fields_count = unsafe { class::fields_count(cls_ptr.clone()) };
             for i in 0..fields_count {
                 unsafe {
-                    let sym = read_field_sym_ref(cls_ptr.clone(), i);
+                    let field = read_field_sym_ref(cls_ptr.clone(), i);
+                    {
+                        let sym = class::string::as_rust_string(std::mem::transmute(field.class));
+                        let name = class::string::as_rust_string(std::mem::transmute(field.name));
+                        println!("resolving symbolic references of field {name} with type {sym}");
+                    }
+                    let sym = field.class.cast();
                     let sym_str = class::string::as_rust_string(sym);
                     let field_cls_addr = match sym_str.as_str() {
-                        "Integer" => {
-                            self.vm.runtime.classes.int.clone()
-                        }
-                        "String" => {
-                            self.vm.runtime.classes.string.clone()
-                        }
-                        "Byte" => {
-                            self.vm.runtime.classes.byte.clone()
-                        }
-                        _ => {
-                            user_classes.get_class_ptr(std::mem::transmute(sym))
-                        }
+                        "Integer" => self.vm.runtime.classes.int.clone(),
+                        "String" => self.vm.runtime.classes.string.clone(),
+                        "Byte" => self.vm.runtime.classes.byte.clone(),
+                        _ => user_classes.get_class_ptr(std::mem::transmute(sym)),
                     };
                     set_field_cls(cls_ptr.clone(), i, field_cls_addr);
                 }

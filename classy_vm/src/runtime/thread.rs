@@ -224,6 +224,36 @@ impl Thread {
                     self.stack.push(value);
                     instr += OpCode::StackCopyBottom.argument_size();
                 }
+                OpCode::AllocHeap => {
+                    instr += 1;
+                    let class = read_word!();
+                    let inst: Ptr<()> = unsafe { self.allocate_instance(std::mem::transmute(class)) };
+                    assert!(!inst.is_null());
+                    self.stack.push(unsafe { std::mem::transmute(inst) });
+                    instr += OpCode::AllocHeap.argument_size();
+                }
+                OpCode::SetOffset => {
+                    instr += 1;
+                    let offset = read_word!();
+                    let value = self.stack.pop().unwrap();
+                    let address = self.stack.pop().unwrap();
+                    let address = address as *mut u64;
+                    unsafe {
+                        *address.add(offset as usize) = value;
+                    }
+                    instr += OpCode::SetOffset.argument_size();
+                }
+                OpCode::PushOffsetDeref => {
+                    instr += 1;
+                    let offset = read_word!();
+                    let address = self.stack.pop().unwrap();
+                    let address = address as *mut u64;
+                    let value = unsafe {
+                        address.add(offset as usize).read()
+                    };
+                    self.stack.push(value);
+                    instr += OpCode::PushOffsetDeref.argument_size();
+                }
                 i => todo!("Instruction not supported yet {i:?}"),
             }
         }

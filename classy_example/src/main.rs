@@ -80,6 +80,8 @@ fn main() {
                     print "Hello world" 
                     print "Hello world" 
                     print "Hello world 2"
+                    let a = type { a = "Hello"; b = 10 }
+                    print a.a
                 }
             "#;
             let (functions, constant_pool) = compile(&mut vm, source);
