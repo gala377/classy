@@ -3,13 +3,14 @@ use classy_c::code::{self, Code};
 use classy_c::typecheck::r#type::Type;
 use classy_c::typecheck::type_context::TypCtx;
 
-use crate::mem::ptr::{NonNullPtr, Ptr};
+use crate::mem::ptr::NonNullPtr;
 use crate::runtime::class::{self, Class};
 use crate::vm::Vm;
 
 use crate::mem::ObjectAllocator;
 
-use super::class::string::StringInst;
+use super::UserClasses;
+
 
 pub struct Linker<'vm, 'pool> {
     vm: &'vm mut Vm,
@@ -17,44 +18,57 @@ pub struct Linker<'vm, 'pool> {
 }
 
 impl<'vm, 'pool> Linker<'vm, 'pool> {
-    // pub fn allocate_user_classes_keep_symbolic_references(&mut self, tctx: &TypCtx) {
-    //     let names = tctx.types.clone();
-    //     for (name, tid) in names {
-    //         let str_instance = self.intern_and_allocte_static_string(&name);
-    //         let class = Class {
-    //             name: unsafe { std::mem::transmute(str_instance) },
-    //             drop: None,
-    //             trace: class::instance_trace,
-    //             instance_size: todo!(),
-    //             instance_align: std::mem::align_of::<usize>(),
-    //             actual_instance_size: ,
-    //             kind: todo!(),
-    //         }
-    //         self.vm.permament_heap.lock().unwrap().allocate_class(
-    //             str_instance,
-    //             self.vm.runtime.classes.class,
-    //             self.vm.runtime.classes.klass.clone(),
-    //         );
-    //         let typ = tctx.definitions.get(&tid).unwrap();
-    //         match typ {
-    //             Type::Struct { fields, .. } => {
-
-    //             },
-    //             t => {
-    //                 panic!("Allocation of type {t:?} is no supported");
-    //             }
-    //         }
-    //     }
-    //     todo!(
-    //         r"
-    //         Go through type ctx and allocate all classes needed for the program to work.
-    //         Important part is that this classes will have symbolic references that need to
-    //         be replaced with pointers to the actual class.
-    //         We also need to check for simple cases like String, Integer, Float, etc.
-    //         Where no allocation needs to happen
-    //     "
-    //     )
-    // }
+    pub fn allocate_user_classes_keep_symbolic_references(&mut self, tctx: &TypCtx) {
+        let names = tctx.types.clone();
+        let mut user_classes = UserClasses::new();
+        for (name, tid) in names {
+            let str_instance = self.intern_and_allocte_static_string(&name);
+            let Type::Struct { fields, .. } = tctx.definitions.get(&tid).unwrap() else {
+                panic!("Allocation of types different that structs is unsupported")
+            };
+            let class = Class {
+                name: unsafe { std::mem::transmute(str_instance) },
+                drop: None,
+                trace: class::instance_trace,
+                instance_size: std::mem::size_of::<usize>() * fields.len(),
+                instance_align: std::mem::align_of::<usize>(),
+                actual_instance_size: None,
+                kind: class::Kind::Instance,
+            };
+            let sym_fields = fields.iter().enumerate().map(|(i, (name, typ))| {
+                let field_name =
+                    unsafe { std::mem::transmute(self.intern_and_allocte_static_string(&name)) };
+                let sym_t_name = match typ {
+                    Type::Int => "Int".to_owned(),
+                    Type::UInt => "UInt".to_owned(),
+                    Type::Bool => "Bool".to_owned(),
+                    Type::String => "String".to_owned(),
+                    Type::Float => "Float".to_owned(),
+                    Type::Unit => "Unit".to_owned(),
+                    Type::Struct { def, .. } => {
+                        let tid = tctx.def_id_to_typ_id(*def);
+                        tctx.get_name(tid).unwrap()
+                    }
+                    _ => {
+                        panic!("Not supported yet")
+                    }
+                };
+                let sym_t_name = self.intern_and_allocte_static_string(&sym_t_name);
+                class::Field {
+                    name: field_name,
+                    offset: i as isize,
+                    class: unsafe { std::mem::transmute(sym_t_name) },
+                    reference: typ.is_ref().unwrap(),
+                }
+            }).collect::<Vec<_>>();
+            let cls_ptr = self.vm.permament_heap.lock().unwrap().allocate_class(
+                class,
+                &sym_fields,
+                self.vm.runtime.classes.klass.clone(),
+            );
+            user_classes.add_class(str_instance as usize, NonNullPtr::from_ptr(cls_ptr));
+        }
+    }
 
     /// Returns a pointer to the string on a permament heap
     fn intern_and_allocte_static_string(&mut self, val: &str) -> u64 {
@@ -71,7 +85,6 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                     .allocate_static_string(strcls, &val);
                 assert!(!instance.is_null());
                 let instance_word = instance.unwrap() as u64;
-                let instance_word_bytes = instance_word.to_le_bytes();
                 // add it as interned
                 self.vm
                     .interned_strings
