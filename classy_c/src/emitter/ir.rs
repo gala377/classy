@@ -2,12 +2,12 @@ use std::{collections::HashMap, mem::size_of};
 
 use crate::{
     code::{constant_pool, Code, OpCode},
-    ir::{self, emitter::IrFunction, instr::IsRef, Label},
+    ir::{self, emitter::IrFunction, instr::IsRef, Label}, typecheck::type_context::TypCtx,
 };
 
-const LABEL_BACKPATCH: u64 = std::u64::MAX;
+const LABEL_BACKPATCH_MASK: u64 = 0xFF00000000000000;
 
-pub struct FunctionEmitter {
+pub struct FunctionEmitter<'ctx> {
     current_line: usize,
     stack_map: Vec<bool>,
 
@@ -20,16 +20,19 @@ pub struct FunctionEmitter {
     /// Maps label to the line number its pointing to.
     /// This is later used for backpatching.
     label_lines: HashMap<Label, usize>,
+
+    type_ctx: &'ctx TypCtx,
 }
 
-impl FunctionEmitter {
-    pub fn new() -> Self {
+impl<'ctx> FunctionEmitter<'ctx> {
+    pub fn new(type_ctx: &'ctx TypCtx) -> Self {
         Self {
             current_line: 0,
             stack_map: Vec::new(),
             args_len: 0,
             locals_stack_depth: 0,
             label_lines: HashMap::new(),
+            type_ctx,
         }
     }
 
@@ -136,19 +139,34 @@ impl FunctionEmitter {
                     // as the set_address will pop the gc map already.
                     // and no allocation can happen between the push and pop.
                     self.emit_instr(&mut code, OpCode::PushOffsetDeref);
-                    self.emit_word(&mut code, match offset {
-                        ir::Address::ConstantInt(val) => val as u64,
-                        _ => todo!(),
-                    });
+                    self.emit_word(
+                        &mut code,
+                        match offset {
+                            ir::Address::ConstantInt(val) => val as u64,
+                            _ => todo!(),
+                        },
+                    );
                     self.set_address(&mut code, res);
-                },
+                }
                 ir::Instruction::IndexSet {
                     base,
                     offset,
                     value,
                 } => {
-                    todo!()
-                },
+                    self.push_address(&mut code, base);
+                    self.push_address(&mut code, value);
+                    self.emit_instr(&mut code, OpCode::SetOffset);
+                    self.emit_word(
+                        &mut code,
+                        match offset {
+                            ir::Address::ConstantInt(val) => val as u64,
+                            _ => todo!(),
+                        },
+                    );
+                    self.stack_map_pop();
+                    self.stack_map_pop();
+
+                }
                 ir::Instruction::GoTo(l) => match self.label_lines.get(&l) {
                     Some(line) => {
                         let offset = self.current_line - line;
@@ -157,21 +175,88 @@ impl FunctionEmitter {
                     }
                     None => {
                         self.emit_instr(&mut code, OpCode::JumpFront);
-                        self.emit_word(&mut code, LABEL_BACKPATCH);
+                        // Later in backpatching we need to check FLAG & VALUE == FLAG
+                        // to know if this requires backpatching
+                        self.emit_word(&mut code, LABEL_BACKPATCH_MASK | l.0 as u64);
                     }
                 },
-                ir::Instruction::If { cond, goto } => todo!(),
-                ir::Instruction::IfFalse { cond, goto } => todo!(),
-                ir::Instruction::Param(_) => todo!(),
+                ir::Instruction::If { .. } => {
+                    todo!()
+                }
+                ir::Instruction::IfFalse { cond, goto } => {
+                    self.push_address(&mut code, cond);
+                    match self.label_lines.get(&goto) {
+                        Some(line) => {
+                            let offset = self.current_line - line;
+                            self.emit_instr(&mut code, OpCode::JumpBackIfFlse);
+                            self.emit_word(&mut code, offset as u64);
+                        }
+                        None => {
+                            self.emit_instr(&mut code, OpCode::JumpFrontIfFalse);
+                            // Later in backpatching we need to check FLAG & VALUE == FLAG
+                            // to know if this requires backpatching
+                            self.emit_word(&mut code, LABEL_BACKPATCH_MASK | goto.0 as u64);
+                        }
+                    }
+                    // no more bool on the top of the stack
+                    self.stack_map_pop();
+                }
+                ir::Instruction::Param(val) => {
+                    let mut params = vec![val];
+                    index += 1;
+                    while let ir::Instruction::Param(val) = &body[index] {
+                        params.push(val.clone());
+                        index += 1;
+                    }
+                    let ir::Instruction::Call { res, func, argc } = &body[index] else {
+                        panic!("Expected call instruction");
+                    };
+                    assert_eq!(params.len(), *argc);
+                    match argc {
+                        1 => {
+                            self.push_address(&mut code, params[0].clone());
+                            self.push_address(&mut code, func.clone());
+                            self.emit_instr(&mut code, OpCode::Call1);
+                            // we have a stack of [param, func]
+                            // then we have a stack of [res]
+                            // and then set address pops this and pops the stack map
+                            // so we need to pop stack_map once to preserve the stack shape
+                            self.stack_map_pop();
+                            self.set_address(&mut code, res.clone());
+                        }
+                        n => {
+                            for param in &params {
+                                self.push_address(&mut code, param.clone());
+                            }
+                            self.push_address(&mut code, func.clone());
+                            self.emit_instr(&mut code, OpCode::CallN);
+                            self.emit_word(&mut code, *n as u64);
+                            for _ in &params {
+                                self.stack_map_pop();
+                            }
+                            self.set_address(&mut code, res.clone());
+                        }
+                    }
+                },
                 ir::Instruction::Call { res, func, argc } => match argc {
-                    0 => todo!(),
-                    1 => todo!(),
-                    n => todo!(),
+                    0 => {
+                        self.push_address(&mut code, func);
+                        self.emit_instr(&mut code, OpCode::Call0);
+                        self.set_address(&mut code, res);
+                    },
+                    _ => panic!("Other should not be possible"),
                 },
                 ir::Instruction::Label(i) => {
                     self.label_lines.insert(Label(i), self.current_line);
+                }
+                ir::Instruction::Alloc { res, typ, .. } => {
+                    self.emit_instr(&mut code, OpCode::AllocHeap);
+                    let name = self.type_ctx.get_name(typ).unwrap();
+                    let id = code.constant_pool.add_entry(name.into());
+                    self.emit_word(&mut code, id as u64);
+                    self.stack_map_add_ref();
+                    self.set_address(&mut code, res);
                 },
-                ir::Instruction::Alloc { .. } => todo!(),
                 ir::Instruction::AllocArray { .. } => todo!(),
                 ir::Instruction::Return(v) => {
                     self.push_address(&mut code, v);

@@ -47,7 +47,7 @@ pub enum OpCode {
     /// Call function with one argument that is on top of the stack. And the function is below it.
     Call1,
     /// Call function on the top of the stack with "N"
-    /// arguments where "n" is stored as a single byte after the
+    /// arguments where "n" is stored as a word the
     /// instruction. "N" arguments are on the stack.
     /// 
     /// Args:
@@ -98,7 +98,7 @@ pub enum OpCode {
     /// that is specified as a word following this instruction.
     /// 
     /// Args:
-    /// - offset: Word
+    /// - num_of_words: Word
     StackAlloc,
     /// do stack[bottom + offset] = pop 
     /// where the offset is followed as word after this instruction.
@@ -120,6 +120,12 @@ pub enum OpCode {
     /// Args: 
     ///  - offset: Word
     PushOffsetDeref,
+    /// Pop value from the top of the stack and also pop an address.
+    /// Then store the value at the address shifter by the offset.
+    /// 
+    /// Args:
+    ///  - offset: Word
+    SetOffset,
 
     /// Used as the marker for the last instruction
     LastMarker,
@@ -138,12 +144,33 @@ impl From<u8> for OpCode {
 
 impl OpCode {
     pub fn argument_size(&self) -> usize {
+        const word: usize = std::mem::size_of::<u64>();
         match self {
-            Self::ConstLoadFloat => 1,
-            Self::ConstLoadInteger => 1,
-            Self::ConstLoadString => std::mem::size_of::<u64>(),
-            Self::LookUpGlobal => std::mem::size_of::<u64>(),
-            _ => 0,
+            OpCode::AddInteger => 0,
+            OpCode::AddFloat => 0,
+            OpCode::ConstLoadInteger => word,
+            OpCode::ConstLoadFloat => word,
+            OpCode::ConstLoadString => word,
+            OpCode::LookUpGlobal => word,
+            OpCode::Return => 0,
+            OpCode::Call0 => 0,
+            OpCode::Call1 => 0,
+            OpCode::CallN => word,
+            OpCode::Pop => 0,
+            OpCode::JumpFront => word,
+            OpCode::JumpBack => word,
+            OpCode::JumpFrontIfFalse => word,
+            OpCode::JumpBackIfFlse => word,
+            OpCode::AllocHeap => word,
+            OpCode::StackCopyBottom => word,
+            OpCode::StackAlloc => word,
+            OpCode::StackAssign => word,
+            OpCode::PushTrue => 0,
+            OpCode::PushFalse => 0,
+            OpCode::PushUnit => 0,
+            OpCode::PushOffsetDeref => word,
+            OpCode::SetOffset => word,
+            OpCode::LastMarker => panic!(),
         }
     }
 }

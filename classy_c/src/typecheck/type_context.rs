@@ -116,6 +116,13 @@ impl TypCtx {
         self.definitions.get(id).cloned()
     }
 
+    pub fn get_name(&self, type_id: TypeId) -> Option<String> {
+        self.types
+            .iter()
+            .find(|(_, id)| **id == type_id)
+            .map(|(name, _)| name.clone())
+    }
+
     pub fn add_variable(&mut self, name: impl Into<String>, typ: TypeId) {
         let name = name.into();
         assert!(
