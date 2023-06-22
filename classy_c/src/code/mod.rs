@@ -179,9 +179,9 @@ impl OpCode {
 #[derive(Clone)]
 pub struct GcStackMapEntry {
     // Line starting at which this map entry starts.
-    line: usize,
+    pub line: usize,
     // True for the stack slot wher the reference lives.
-    references: BitVec,
+    pub references: BitVec,
 }
 
 impl GcStackMapEntry {

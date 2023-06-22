@@ -2,6 +2,7 @@ use std::{
     alloc::Layout,
     collections::HashMap,
     mem::size_of,
+    rc::Rc,
     sync::{Arc, Mutex},
 };
 
@@ -22,15 +23,16 @@ use crate::{
     },
 };
 
-type Word = u64;
+use super::class::frame::Frame;
+
+pub type Word = u64;
 
 pub struct Thread {
     heap: Heap,
     _permament_heap: Arc<Mutex<permament_heap::PermamentHeap>>,
-    _runtime: Runtime,
+    runtime: Runtime,
     _thread_manager: Arc<ThreadManager>,
     code: Code,
-    stack: Vec<Word>,
     debug: bool,
     // todo: this is temporary
     native_functions: HashMap<String, fn(&mut Thread, &[Word]) -> Word>,
@@ -61,10 +63,9 @@ impl Thread {
                 },
             ),
             _permament_heap: permament_heap,
-            _runtime: runtime,
+            runtime,
             _thread_manager: thread_manager,
             code,
-            stack: Vec::new(),
             debug,
             native_functions: {
                 let mut m = HashMap::new();
@@ -115,8 +116,8 @@ impl Thread {
 
     pub fn interpert(&mut self) {
         let mut instr = 0;
+        let mut frames = vec![self.alloc_frame(Arc::new(self.code.clone()))];
         let code_end = self.code.instructions.len();
-
         macro_rules! read_word {
             () => {{
                 let bytes = &self.code.instructions[instr..instr + size_of::<u64>()];
@@ -128,8 +129,37 @@ impl Thread {
                 u64::from_le_bytes(address_bytes_array)
             }};
         }
+        let mut c_frame = frames[0];
+
+        macro_rules! push {
+            ($v:expr) => {
+                #[allow(unused_unsafe)]
+                unsafe {
+                    (*c_frame.get()).stack.push($v);
+                }
+            };
+        }
+
+        macro_rules! pop {
+            () => {
+                unsafe { (*c_frame.get()).stack.pop().unwrap() }
+            };
+        }
+
+        macro_rules! stack_get {
+            ($offset:expr) => {
+                unsafe { (*c_frame.get()).stack[$offset] }
+            };
+        }
+
+        macro_rules! stack_set {
+            ($offset:expr, $value:expr) => {
+                unsafe { (*c_frame.get()).stack[$offset] = $value }
+            };
+        }
+
         while instr < code_end {
-            let opcode: OpCode = self.code.instructions[instr].into();
+            let opcode: OpCode = unsafe { (*c_frame.get()).code.instructions[instr].into() };
             self.log(|| format!("{instr} => {opcode:?}"));
             match opcode {
                 OpCode::AddInteger => todo!(),
@@ -137,13 +167,13 @@ impl Thread {
                 OpCode::ConstLoadFloat => {
                     instr += 1;
                     let word = read_word!();
-                    self.stack.push(word);
+                    push!(word);
                     instr += OpCode::ConstLoadFloat.argument_size();
                 }
                 OpCode::ConstLoadInteger => {
                     instr += 1;
                     let word = read_word!();
-                    self.stack.push(word);
+                    push!(word);
                     instr += OpCode::ConstLoadInteger.argument_size();
                 }
                 OpCode::ConstLoadString => {
@@ -155,12 +185,10 @@ impl Thread {
                         let val = class::string::as_rust_str(&ptr);
                         format!("vm: loaded string literal: {val}")
                     });
-                    self.stack.push(
-                        instance
-                            .inner()
-                            .expect("could not allocate a string literal")
-                            .as_ptr() as Word,
-                    );
+                    push!(instance
+                        .inner()
+                        .expect("could not allocate a string literal")
+                        .as_ptr() as Word);
                     instr += OpCode::ConstLoadString.argument_size();
                 }
                 OpCode::LookUpGlobal => {
@@ -169,28 +197,34 @@ impl Thread {
                     instr += 1;
                     let address = read_word!();
                     let name: NonNullPtr<StringInst> = unsafe { std::mem::transmute(address) };
-                    self.log(| |unsafe {
+                    self.log(|| unsafe {
                         let val = class::string::as_rust_str(&name);
                         format!("vm: looking up global: {val}")
                     });
                     let name = unsafe { (*name.get()).as_rust_string() };
                     let to_push = *self.native_functions.get(&name).expect("Unknown name");
-                    self.stack.push(to_push as *mut () as Word);
+                    push!(to_push as *mut () as Word);
                     instr += OpCode::LookUpGlobal.argument_size();
                 }
                 OpCode::Return => {
-                    // For now nothing to do as we do not have function frames
-                    instr += 1;
+                    let ret = pop!();
+                    frames.pop();
+                    if frames.is_empty() {
+                        break;
+                    }
+                    c_frame = frames.last().unwrap().clone();
+                    instr = unsafe { (*c_frame.get()).ip };
+                    push!(ret);
                 }
                 OpCode::Call1 => {
                     // TODO: temporary just so something works
                     // Only calls rust functions now
-                    let func = self.stack.pop().unwrap();
-                    let arg = self.stack.pop().unwrap();
+                    let func = pop!();
+                    let arg = pop!();
                     unsafe {
                         let func: fn(&mut Thread, &[Word]) -> Word = std::mem::transmute(func);
                         let res = func(self, &[arg]);
-                        self.stack.push(res);
+                        push!(res);
                     }
                     instr += 1;
                 }
@@ -198,14 +232,14 @@ impl Thread {
                     panic!("This instruction should have never been emitted")
                 }
                 OpCode::Pop => {
-                    self.stack.pop().unwrap();
+                    pop!();
                     instr += 1;
                 }
                 OpCode::StackAlloc => {
                     instr += 1;
                     let size = read_word!();
                     for _ in 0..size {
-                        self.stack.push(0);
+                        push!(0);
                     }
                     self.log(|| format!("vm: allocated {size} words on the stack"));
                     instr += OpCode::AllocHeap.argument_size();
@@ -213,30 +247,31 @@ impl Thread {
                 OpCode::StackAssign => {
                     instr += 1;
                     let offset = read_word!();
-                    let value = self.stack.pop().unwrap();
-                    self.stack[offset as usize] = value;
+                    let value = pop!();
+                    stack_set!(offset as usize, value);
                     instr += OpCode::StackAssign.argument_size();
                 }
                 OpCode::StackCopyBottom => {
                     instr += 1;
                     let offset = read_word!();
-                    let value = self.stack[offset as usize];
-                    self.stack.push(value);
+                    let value = stack_get!(offset as usize);
+                    push!(value);
                     instr += OpCode::StackCopyBottom.argument_size();
                 }
                 OpCode::AllocHeap => {
                     instr += 1;
                     let class = read_word!();
-                    let inst: Ptr<()> = unsafe { self.allocate_instance(std::mem::transmute(class)) };
+                    let inst: Ptr<()> =
+                        unsafe { self.allocate_instance(std::mem::transmute(class)) };
                     assert!(!inst.is_null());
-                    self.stack.push(unsafe { std::mem::transmute(inst) });
+                    push!(std::mem::transmute(inst));
                     instr += OpCode::AllocHeap.argument_size();
                 }
                 OpCode::SetOffset => {
                     instr += 1;
                     let offset = read_word!();
-                    let value = self.stack.pop().unwrap();
-                    let address = self.stack.pop().unwrap();
+                    let value = pop!();
+                    let address = pop!();
                     let address = address as *mut u64;
                     unsafe {
                         *address.add(offset as usize) = value;
@@ -246,17 +281,30 @@ impl Thread {
                 OpCode::PushOffsetDeref => {
                     instr += 1;
                     let offset = read_word!();
-                    let address = self.stack.pop().unwrap();
+                    let address = pop!();
                     let address = address as *mut u64;
-                    let value = unsafe {
-                        address.add(offset as usize).read()
-                    };
-                    self.stack.push(value);
+                    let value = unsafe { address.add(offset as usize).read() };
+                    push!(value);
                     instr += OpCode::PushOffsetDeref.argument_size();
                 }
                 i => todo!("Instruction not supported yet {i:?}"),
             }
         }
+    }
+
+    pub fn alloc_frame(&mut self, code: Arc<Code>) -> NonNullPtr<Frame> {
+        let frame = unsafe { self.allocate_instance::<Frame>(self.runtime.classes.frame) };
+        if frame.is_null() {
+            panic!("Cannot allocate a frame should call gc");
+        }
+        unsafe {
+            frame.inner().unwrap().as_ptr().write(Frame {
+                stack: Vec::new(),
+                ip: 0,
+                code,
+            });
+        }
+        NonNullPtr::from_ptr(frame)
     }
 
     fn log(&self, f: impl FnOnce() -> String) {

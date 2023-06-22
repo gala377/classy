@@ -42,6 +42,7 @@ pub struct RuntimeClasses {
     pub string: NonNullPtr<Class>,
     pub byte: NonNullPtr<Class>,
     pub int: NonNullPtr<Class>,
+    pub frame: NonNullPtr<Class>,
     // pub bool: NonNullPtr<class::Bool>,
 }
 
@@ -64,11 +65,20 @@ impl RuntimeClasses {
             &class::integer::INTEGER_CLASS,
             &[],
         );
+        let frame = setup_class(
+            heap,
+            klass,
+            string,
+            "Frame",
+            &class::frame::make_frame_class(),
+            &[],
+        );
         RuntimeClasses {
             klass,
             string,
             byte,
             int,
+            frame,
         }
     }
 }
