@@ -9,6 +9,45 @@ use super::instr::{Address, Block, Instruction, IsRef, Label};
 
 type Scope = HashMap<String, Address>;
 
+enum Lval {
+    Address(Address),
+    Indexed(Address, usize),
+}
+
+pub struct IrFunction {
+    pub name: String,
+    pub args: Vec<(String, IsRef)>,
+    pub body: Block,
+}
+
+pub struct SourceEmitter {
+    functions: HashMap<String, IrFunction>,
+}
+
+impl SourceEmitter {
+    pub fn new() -> Self {
+        Self {
+            functions: HashMap::new(),
+        }
+    }
+
+    pub fn compile(
+        mut self,
+        program: ast::Program,
+        tctx: &mut TypCtx,
+        tenv: &TypeEnv,
+    ) -> HashMap<String, IrFunction> {
+        for decl in program.items {
+            if let ast::TopLevelItem::FunctionDefinition(def) = decl {
+                let emmiter = FunctionEmitter::new(tctx, tenv);
+                let instrcs = emmiter.emit_fn(&def);
+                self.functions.insert(def.name, instrcs);
+            }
+        }
+        self.functions
+    }
+}
+
 pub struct FunctionEmitter<'ctx, 'env> {
     next_label: usize,
     next_temporary: usize,
@@ -32,10 +71,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
         }
     }
 
-    pub fn emit_fn(mut self, func: &ast::FunctionDefinition) -> Block {
-        // get, from the definition a type of a function and then get the type of the arguments
-        // to check if they are references or not
-
+    pub fn emit_fn(mut self, func: &ast::FunctionDefinition) -> IrFunction {
         let func_name = func.name.clone();
         let func_t_id = self.tctx.variables.get(&func_name).unwrap();
         let Type::Function { args, .. } = self.tctx.definitions.get(func_t_id).unwrap() else {
@@ -60,7 +96,11 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
         let res = self.emit_expr(&func.body);
         self.current_block.push(Instruction::Return(res));
 
-        self.current_block
+        IrFunction {
+            name: func_name,
+            args: self.args,
+            body: self.current_block,
+        }
     }
 
     fn emit_expr(&mut self, ast::Expr { id, kind: expr }: &ast::Expr) -> Address {
@@ -80,11 +120,27 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 res.unwrap()
             }
             ast::ExprKind::Assignment { lval, rval } => {
-                let lval = self.emit_expr(lval);
+                // TODO: I am not sure if this will
+                // wotk with complex assignments like
+                // a.b[10].c.d[20] = 1
+                // but we would need to check it when the interpreter is ready
+                let lval = self.emit_lval(lval);
                 let rval = self.emit_expr(rval);
-                self.current_block
-                    .push(Instruction::CopyAssign(lval.clone(), rval));
-                lval
+                match lval {
+                    Lval::Address(addr) => {
+                        self.current_block
+                            .push(Instruction::CopyAssign(addr.clone(), rval));
+                        addr
+                    }
+                    Lval::Indexed(addr, index) => {
+                        self.current_block.push(Instruction::IndexSet {
+                            base: addr.clone(),
+                            offset: Address::ConstantInt(index as isize),
+                            value: rval,
+                        });
+                        Address::ConstantUnit
+                    }
+                }
             }
             ast::ExprKind::IntConst(v) => Address::ConstantInt(*v),
             ast::ExprKind::StringConst(v) => Address::ConstantString(v.clone()),
@@ -317,6 +373,30 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
             Address::ConstantString(_) => IsRef::Ref,
             Address::ConstantUnit => IsRef::NoRef,
             Address::Parameter(i) => self.args[*i].1.clone(),
+        }
+    }
+
+    fn emit_lval(&mut self, expr: &ast::Expr) -> Lval {
+        match &expr.kind {
+            ast::ExprKind::Name(name) => {
+                if let Some(addr) = self.find_in_scopes(name) {
+                    return Lval::Address(addr);
+                }
+                if let Some(pos) = self.args.iter().position(|(arg, _)| arg == name) {
+                    return Lval::Address(Address::Parameter(pos));
+                }
+                Lval::Address(Address::Name(name.clone()))
+            }
+            ast::ExprKind::Access { val, field } => {
+                let lhs_id = val.id;
+                let val = self.emit_expr(val);
+                let Type::Struct { fields, .. } = self.env.get(&lhs_id).unwrap() else {
+                    panic!("Should be a struct");
+                };
+                let offset = fields.iter().position(|(name, _)| name == field).unwrap();
+                Lval::Indexed(val, offset)
+            }
+            _ => panic!("Not lval"),
         }
     }
 }

@@ -10,12 +10,12 @@ pub enum IsRef {
     NoRef,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Label(pub usize);
 
 impl Debug for Label {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.to_string().bold().purple())
+        write!(f, "{}", self.0.to_string().bold().yellow())
     }
 }
 
@@ -38,17 +38,17 @@ impl Debug for Address {
             Self::Temporary(arg0, is_ref) => write!(f, "{}", {
                 let s = format!("t_{arg0}");
                 if let IsRef::Ref = is_ref {
-                    s.blue()
+                    s.bright_cyan()
                 } else {
                     s.normal()
                 }
             }),
             Self::Name(arg0) => write!(f, "{arg0}"),
-            Self::ConstantInt(arg0) => write!(f, "{}", arg0.to_string().red()),
-            Self::ConstantFloat(arg0) => write!(f, "{}", arg0.to_string().red()),
-            Self::ConstantBool(arg0) => write!(f, "{}", arg0.to_string().red()),
-            Self::ConstantString(arg0) => write!(f, "{}", format!("\"{arg0}\"").red()),
-            Self::ConstantUnit => write!(f, "{}", "()".red()),
+            Self::ConstantInt(arg0) => write!(f, "{}", arg0.to_string().bright_magenta()),
+            Self::ConstantFloat(arg0) => write!(f, "{}", arg0.to_string().bright_magenta()),
+            Self::ConstantBool(arg0) => write!(f, "{}", arg0.to_string().bright_magenta()),
+            Self::ConstantString(arg0) => write!(f, "{}", format!("\"{arg0}\"").bright_magenta()),
+            Self::ConstantUnit => write!(f, "{}", "()".bright_magenta()),
             Self::Parameter(arg0) => write!(f, "{} {}", "arg".bold().green(), arg0),
         }
     }
@@ -188,7 +188,7 @@ impl Debug for Instruction {
                 f,
                 "{} {}",
                 "label".bold().green(),
-                arg0.to_string().bold().purple()
+                arg0.to_string().bold().yellow()
             ),
             Self::Alloc { res, size, typ } => write!(
                 f,

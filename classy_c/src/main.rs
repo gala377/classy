@@ -30,6 +30,8 @@ const SOURCE: &'static str = r#"
         print "Hello world"
         let c = type { a = "Hello"; b = 10 }
         let d = c.b;
+
+        c.a = "Hello again"
     }
 "#;
 
@@ -58,7 +60,7 @@ fn compile(source: &str, packages: &[classy_c::package::Package]) -> TypCtx {
         if let ast::TopLevelItem::FunctionDefinition(fdef) = def {
             println!("\n\n\nFunction definition {:#?}", fdef.name);
             let emmiter = classy_c::ir::Emitter::new(&tctx, &tenv);
-            let block = emmiter.emit_fn(fdef);
+            let block = emmiter.emit_fn(fdef).body;
             for (i, instr) in block.iter().enumerate() {
                 println!("{} {:?}", format!("{i:03}|").dimmed(), instr);
             }

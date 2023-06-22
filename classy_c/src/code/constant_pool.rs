@@ -45,6 +45,10 @@ impl ConstantPool {
         // SAFETY: All transmutes are used only for the type erasure.
         unsafe {
             match &entry {
+                TypedEntry::Bool(b) => self.entries.push(Entry {
+                    typ: EntryType::Bool,
+                    val: if *b { 1 } else { 0 },
+                }),
                 TypedEntry::Int(val) => self.entries.push(Entry {
                     typ: EntryType::Int,
                     val: std::mem::transmute_copy(val),
@@ -110,6 +114,9 @@ impl ConstantPool {
                 // SAFETY: safe, we checked the entry's type.
                 Ok(unsafe { self.get_unchecked::<T>(index) })
             }
+            EntryType::Bool => {
+                Ok(T::from_usize(self.entries[index].val))
+            }
             EntryType::String => {
                 let string_word = self.entries[index].val;
                 let offset = string_word & STRING_OFFSET_MASK;
@@ -158,6 +165,10 @@ pub enum EntryType {
     /// The word erased value of this entry type is an u32 offset
     /// into a string table followed by an u32 lenght of the string.
     String,
+    /// The value of this tag is a bool extended to u64 but it will
+    /// either have 1 or 0
+    Bool,
+
 }
 
 /// A type safe wrapped around `EntryType`.
@@ -173,6 +184,7 @@ pub enum TypedEntry {
     Int(isize),
     Float(f64),
     String(String),
+    Bool(bool),
 }
 
 impl PartialEq for TypedEntry {
@@ -181,6 +193,7 @@ impl PartialEq for TypedEntry {
             (Self::Int(l0), Self::Int(r0)) => l0 == r0,
             (Self::Float(l0), Self::Float(r0)) => l0 == r0,
             (Self::String(l0), Self::String(r0)) => l0 == r0,
+            (Self::Bool(b1), Self::Bool(b2)) => b1 == b2,
             _ => false,
         }
     }
@@ -204,6 +217,12 @@ impl From<String> for TypedEntry {
     }
 }
 
+impl From<bool> for TypedEntry {
+    fn from(val: bool) -> Self {
+        Self::Bool(val)
+    }
+}
+
 /// Convienience trait to retrieve type tag
 /// for the constant pool entry of some generic T: Tagged.
 pub trait Tagged: Sized {
@@ -211,6 +230,9 @@ pub trait Tagged: Sized {
 
     fn from_string(_: String) -> Self {
         panic!("This entry does not support converting from string")
+    }
+    fn from_usize(_: usize) -> Self {
+        panic!("This entry does not support this conversion")
     }
 }
 
@@ -233,6 +255,21 @@ impl Tagged for String {
 
     fn from_string(s: String) -> Self {
         s
+    }
+}
+
+impl Tagged for bool {
+    fn tag() -> EntryType {
+        EntryType::Bool
+    }
+
+    fn from_usize(val: usize) -> Self {
+        if val == 0 {
+            return false
+        } else if val == 1 {
+            return true
+        }
+        panic!("Illegal value of bool")
     }
 }
 

@@ -178,6 +178,7 @@ impl Thread {
                     self.stack.pop().unwrap();
                     instr += 1;
                 }
+                _ => todo!(),
             }
         }
     }

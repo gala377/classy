@@ -22,15 +22,65 @@ type Word = usize;
 #[derive(Clone, Copy)]
 #[repr(u8)]
 pub enum OpCode {
+    /// Add two values from the top of the stack 
+    /// and push the result on top of the stack.
     AddInteger,
     AddFloat,
+    /// Load constant with the index following this instruction
+    /// as a word. (Meaning push it on top of the stack) 
     ConstLoadInteger,
     ConstLoadFloat,
     ConstLoadString,
+    /// Lookup value of a global variable with the name
+    /// being a symbol pointed by the following word.
     LookUpGlobal,
+    /// Return from the function with the value on top of the stack.
     Return,
+    /// Call function with no arguments. The function is on top of the stack.
+    Call0,
+    /// Call function with one argument that is on top of the stack. And the function is below it.
     Call1,
+    /// Call function on the top of the stack with "N"
+    /// arguments where "n" is stored as a single byte after the
+    /// instruction. "N" arguments are on the stack.
+    CallN,
+    /// Pop value from the top of the stack
     Pop,
+
+    /// Increase the instruction pointer by the amount given as a word
+    /// following this instruction
+    JumpFront,
+    /// Decrement the instruction pointer by the amout given as a word
+    /// following this instruction
+    JumpBack,
+    /// Jump front but only if the top of the stack is false
+    JumpFrontIfFalse,
+    /// Jump back but only if the top of the stack is false
+    JumpBackIfFlse,
+
+
+    /// Allocate an instance of a class that has a name followed
+    /// as an symbol index to a constant pool followed by this instruction
+    AllocHeap,  
+
+    /// Copy a value from the bottom of the stack that is indexed by the word
+    /// following this instruction and push it to the top of the stack
+    StackCopyBottom,
+
+    /// Allocate space on a stack for a number of words
+    /// that is specified as a word following this instruction.
+    StackAlloc,
+    /// do stack[bottom + offset] = pop 
+    /// where the offset is followed as word after this instruction.
+    StackAssign,
+
+    /// Push true or false on top of the stack
+    PushTrue,
+    PushFalse,
+    /// Push pointer to unit on the top of the stack
+    PushUnit,
+
+    /// Used as the marker for the last instruction
     LastMarker,
 }
 

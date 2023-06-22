@@ -22,6 +22,7 @@ enum InternableEntry {
     String(String),
     Float(HashableFloat),
     Int(isize),
+    Bool(bool),
 }
 
 impl From<constant_pool::TypedEntry> for InternableEntry {
@@ -30,6 +31,7 @@ impl From<constant_pool::TypedEntry> for InternableEntry {
             TypedEntry::String(s) => Self::String(s),
             TypedEntry::Int(i) => Self::Int(i),
             TypedEntry::Float(f) => Self::Float(HashableFloat(f)),
+            TypedEntry::Bool(b) => Self::Bool(b)
         }
     }
 }
