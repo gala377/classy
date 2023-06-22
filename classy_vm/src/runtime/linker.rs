@@ -95,10 +95,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
     }
 
     fn resolve_symbolic_references_in_classes(&mut self, user_classes: &mut UserClasses) {
-        unsafe fn read_field_sym_ref(
-            cls_ptr: NonNullPtr<Class>,
-            offset: usize,
-        ) -> class::Field {
+        unsafe fn read_field_sym_ref(cls_ptr: NonNullPtr<Class>, offset: usize) -> class::Field {
             class::fields(cls_ptr)[offset].clone()
         }
 

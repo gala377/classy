@@ -1,9 +1,9 @@
-use std::{sync::Arc};
+use std::sync::Arc;
 
 use classy_c::code::{Code, GcStackMapEntry};
 
 use crate::{
-    mem::{ptr::{Ptr}},
+    mem::ptr::Ptr,
     runtime::{thread::Word, trace::Tracer},
 };
 

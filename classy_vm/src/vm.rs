@@ -4,7 +4,7 @@ use std::{
     thread::ThreadId,
 };
 
-use classy_c::{typecheck::type_context::TypCtx, code::constant_pool::ConstantPool};
+use classy_c::{code::constant_pool::ConstantPool, typecheck::type_context::TypCtx};
 
 use crate::{
     mem::{
@@ -12,7 +12,7 @@ use crate::{
         heap::{self, SemiSpaceKind},
         permament_heap,
     },
-    runtime::{self, thread_manager::ThreadManager, Runtime, UserClasses, linker::Linker},
+    runtime::{self, linker::Linker, thread_manager::ThreadManager, Runtime, UserClasses},
 };
 
 #[derive(Clone)]

@@ -1,8 +1,13 @@
-use std::{mem::size_of, collections::HashMap};
+use std::{collections::HashMap, mem::size_of};
 
 use clap::{Parser, ValueEnum};
 
-use classy_c::{code::{constant_pool::ConstantPool, Code}, typecheck::{type_context::TypCtx, add_types::AddTypes, self}, syntax::ast::{self, Visitor}, ast_passes::run_before_typechecking_passes};
+use classy_c::{
+    ast_passes::run_before_typechecking_passes,
+    code::{constant_pool::ConstantPool, Code},
+    syntax::ast::{self, Visitor},
+    typecheck::{self, add_types::AddTypes, type_context::TypCtx},
+};
 use classy_vm::{
     mem::{
         page::Page,
@@ -97,22 +102,23 @@ fn main() {
 }
 
 fn compile(vm: &mut Vm, source: &str) -> (HashMap<String, Code>, ConstantPool) {
-    let mut parser = classy_c::syntax::parser::Parser::new(classy_c::syntax::lexer::Lexer::new(source));
+    let mut parser =
+        classy_c::syntax::parser::Parser::new(classy_c::syntax::lexer::Lexer::new(source));
     let ast = parser.parse().unwrap();
     let ast = classy_c::ast_passes::run_befor_type_context_passes(ast);
     let tctx = classy_c::typecheck::type_context::TypCtx::new();
     let mut tctx = prepare_type_ctx(tctx, &ast);
     let res = run_before_typechecking_passes(&tctx, ast);
     let tenv = typecheck::run(&mut tctx, &res);
-    
+
     let mut constant_pool = ConstantPool::new();
     let mut functions = HashMap::new();
-    
+
     for def in &res.items {
         if let ast::TopLevelItem::FunctionDefinition(fdef) = def {
             let emmiter = classy_c::ir::Emitter::new(&tctx, &tenv);
             let block = emmiter.emit_fn(fdef);
-            
+
             let compiled =
                 classy_c::emitter::compile_ir_function(&block, &tctx, &mut constant_pool);
             println!("\n\n\nFunction definition {:#?}", fdef.name);
@@ -132,7 +138,6 @@ pub fn prepare_type_ctx(mut tctx: TypCtx, ast: &ast::Program) -> TypCtx {
     typecheck::dedup_trivially_eq_types(&mut tctx);
     tctx
 }
-
 
 fn wait_for_all_threads(vm: Vm) {
     // we need to count that vm registers current thread
@@ -165,7 +170,8 @@ fn make_thread_loop(
     let allocate_integers = *allocate_integers;
     let create_handle_every = *create_handle_every;
     move || {
-        let mut thread = vm.create_evaluation_thread(classy_c::code::Code::new(), &ConstantPool::new());
+        let mut thread =
+            vm.create_evaluation_thread(classy_c::code::Code::new(), &ConstantPool::new());
         let runtime = vm.runtime();
         let mut handles = Vec::new();
         for i in 0..allocate_integers {
