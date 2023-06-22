@@ -18,7 +18,7 @@ type Word = usize;
 /// them directly in the bytecode. (These could be expressed
 /// as arguments in the enum variants however, to keep the
 /// bytecode size low, this enum only contains the operations's type)
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[repr(u8)]
 pub enum OpCode {
     /// Add two values from the top of the stack
@@ -176,6 +176,7 @@ impl OpCode {
 /// Entry for a gc stack map.
 /// Represents stack information about cells holding references
 /// to scan.
+#[derive(Clone)]
 pub struct GcStackMapEntry {
     // Line starting at which this map entry starts.
     line: usize,
@@ -197,6 +198,7 @@ impl GcStackMapEntry {
 pub type GcStackMap = Vec<GcStackMapEntry>;
 
 /// Bytecode to execute by the virtual machine.
+#[derive(Clone)]
 pub struct Code {
     pub instructions: Vec<u8>,
     pub stack_map: GcStackMap,

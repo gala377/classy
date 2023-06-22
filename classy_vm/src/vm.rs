@@ -37,6 +37,7 @@ pub struct Options {
     pub page_align: usize,
     pub young_space_size: usize,
     pub initial_tlab_size: usize,
+    pub debug: bool,
 }
 
 impl Vm {
@@ -102,6 +103,7 @@ impl Vm {
             self.options.initial_tlab_size,
             self.options.young_space_size,
             code,
+            self.options.debug,
         )
     }
 
@@ -115,6 +117,10 @@ impl Vm {
 
     pub fn load_types(&mut self, type_ctx: &TypCtx, constant_pool: &ConstantPool) {
         Linker::new(self, constant_pool).link_types(type_ctx);
+    }
+
+    pub fn link_code(&mut self, constant_pool: &ConstantPool, code: &mut classy_c::code::Code) {
+        Linker::new(self, constant_pool).link_code(code);
     }
 }
 
@@ -160,19 +166,20 @@ mod tests {
         vm::{self, Vm},
     };
 
-    fn setup_vm(page_size: usize, page_count: usize) -> Vm {
+    fn setup_vm(page_size: usize, page_count: usize, debug: bool) -> Vm {
         let actual_page_size = size_of::<Page>() + page_size;
         Vm::new_default(vm::Options {
             page_size: actual_page_size,
             page_align: align_of::<usize>(),
             young_space_size: actual_page_size * page_count,
             initial_tlab_size: page_size,
+            debug,
         })
     }
 
     #[test]
     fn gc_changes_the_handles_address_but_preserves_the_value() {
-        let mut vm = setup_vm(4 * size_of::<usize>(), 1);
+        let mut vm = setup_vm(4 * size_of::<usize>(), 1, true);
         let mut t = vm.create_evaluation_thread(classy_c::code::Code::new(), &ConstantPool::new());
         unsafe {
             let ptr: Ptr<isize> = t.allocate_instance(vm.runtime.classes.int);
@@ -192,7 +199,7 @@ mod tests {
 
     #[test]
     fn revoking_a_handle_allows_gc_to_collect_garbage() {
-        let mut vm = setup_vm(4 * size_of::<usize>(), 1);
+        let mut vm = setup_vm(4 * size_of::<usize>(), 1, false);
         let mut t = vm.create_evaluation_thread(classy_c::code::Code::new(), &ConstantPool::new());
         unsafe {
             let ptr: Ptr<isize> = t.allocate_instance(vm.runtime.classes.int);

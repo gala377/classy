@@ -44,7 +44,8 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
         for (name, tid) in names {
             let str_instance = self.intern_and_allocte_static_string(&name);
             let Type::Struct { fields, .. } = tctx.definitions.get(&tid).unwrap() else {
-                panic!("Allocation of types different that structs is unsupported")
+                println!("Linking of {:?} skipped", tctx.definitions.get(&tid).unwrap());
+                continue;
             };
             let class = Class {
                 name: unsafe { std::mem::transmute(str_instance) },
