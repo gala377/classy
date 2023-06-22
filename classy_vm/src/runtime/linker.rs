@@ -6,7 +6,7 @@ use classy_c::typecheck::r#type::Type;
 use classy_c::typecheck::type_context::TypCtx;
 
 use crate::mem::ptr::NonNullPtr;
-use crate::runtime::class::string::StringInst;
+
 use crate::runtime::class::{self, Class};
 use crate::vm::Vm;
 

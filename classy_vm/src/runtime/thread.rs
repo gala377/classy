@@ -2,7 +2,6 @@ use std::{
     alloc::Layout,
     collections::HashMap,
     mem::size_of,
-    rc::Rc,
     sync::{Arc, Mutex},
 };
 
