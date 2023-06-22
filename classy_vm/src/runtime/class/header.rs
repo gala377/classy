@@ -18,8 +18,14 @@ impl Flags {
 
 #[repr(C, align(8))]
 pub struct Header {
+    /// A class of this instance, a class of a class is class itself
     pub class: NonNullPtr<Class>,
+    /// Flags associated with this object, like forwarding, permament heap etc.
     pub flags: usize,
+    /// Data differs between different objects.
+    /// For arrays it is a number of elements.
+    /// For instances it is a number of fields.
+    /// For ADTs it is a tag.
     pub data: usize,
 }
 

@@ -208,6 +208,10 @@ impl UserClasses {
     pub fn add_class(&mut self, key: usize, ptr: NonNullPtr<Class>) {
         self.classes.insert(key, ptr);
     }
+
+    pub fn iter(&self) -> std::collections::hash_map::Iter<usize, NonNullPtr<Class>> {
+        self.classes.iter()
+    }
 }
 
 // TODO:

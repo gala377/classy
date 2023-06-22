@@ -1,9 +1,12 @@
+use std::sync::Arc;
+
 use classy_c::code::constant_pool::ConstantPool;
 use classy_c::code::{self, Code};
 use classy_c::typecheck::r#type::Type;
 use classy_c::typecheck::type_context::TypCtx;
 
 use crate::mem::ptr::NonNullPtr;
+use crate::runtime::class::string::StringInst;
 use crate::runtime::class::{self, Class};
 use crate::vm::Vm;
 
@@ -11,14 +14,31 @@ use crate::mem::ObjectAllocator;
 
 use super::UserClasses;
 
-
 pub struct Linker<'vm, 'pool> {
     vm: &'vm mut Vm,
     constant_pool: &'pool ConstantPool,
 }
 
 impl<'vm, 'pool> Linker<'vm, 'pool> {
-    pub fn allocate_user_classes_keep_symbolic_references(&mut self, tctx: &TypCtx) {
+
+    pub fn new(&mut self, vm: &'vm mut Vm, constant_pool: &'pool ConstantPool) -> Self {
+        Self {
+            vm,
+            constant_pool,
+        }
+    }
+
+    pub fn link_types(&mut self, tctx: &TypCtx) {
+        let mut user_classes = self.allocate_user_classes_keep_symbolic_references(tctx);
+        self.resolve_symbolic_references_in_classes(&mut user_classes);
+        self.vm.runtime.user_classes = Arc::new(user_classes);
+    }
+
+    pub fn link_code(&mut self, code: &mut Code) {
+        self.replace_symbolic_references_in_code(code);
+    }
+
+    fn allocate_user_classes_keep_symbolic_references(&mut self, tctx: &TypCtx) -> UserClasses {
         let names = tctx.types.clone();
         let mut user_classes = UserClasses::new();
         for (name, tid) in names {
@@ -35,38 +55,82 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                 actual_instance_size: None,
                 kind: class::Kind::Instance,
             };
-            let sym_fields = fields.iter().enumerate().map(|(i, (name, typ))| {
-                let field_name =
-                    unsafe { std::mem::transmute(self.intern_and_allocte_static_string(&name)) };
-                let sym_t_name = match typ {
-                    Type::Int => "Int".to_owned(),
-                    Type::UInt => "UInt".to_owned(),
-                    Type::Bool => "Bool".to_owned(),
-                    Type::String => "String".to_owned(),
-                    Type::Float => "Float".to_owned(),
-                    Type::Unit => "Unit".to_owned(),
-                    Type::Struct { def, .. } => {
-                        let tid = tctx.def_id_to_typ_id(*def);
-                        tctx.get_name(tid).unwrap()
+            let sym_fields = fields
+                .iter()
+                .enumerate()
+                .map(|(i, (name, typ))| {
+                    let field_name = unsafe {
+                        std::mem::transmute(self.intern_and_allocte_static_string(&name))
+                    };
+                    let sym_t_name = match typ {
+                        Type::Int => "Int".to_owned(),
+                        Type::UInt => "UInt".to_owned(),
+                        Type::Bool => "Bool".to_owned(),
+                        Type::String => "String".to_owned(),
+                        Type::Float => "Float".to_owned(),
+                        Type::Unit => "Unit".to_owned(),
+                        Type::Struct { def, .. } => {
+                            let tid = tctx.def_id_to_typ_id(*def);
+                            tctx.get_name(tid).unwrap()
+                        }
+                        _ => {
+                            panic!("Not supported yet")
+                        }
+                    };
+                    let sym_t_name = self.intern_and_allocte_static_string(&sym_t_name);
+                    class::Field {
+                        name: field_name,
+                        offset: i as isize,
+                        class: unsafe { std::mem::transmute(sym_t_name) },
+                        reference: typ.is_ref().unwrap(),
                     }
-                    _ => {
-                        panic!("Not supported yet")
-                    }
-                };
-                let sym_t_name = self.intern_and_allocte_static_string(&sym_t_name);
-                class::Field {
-                    name: field_name,
-                    offset: i as isize,
-                    class: unsafe { std::mem::transmute(sym_t_name) },
-                    reference: typ.is_ref().unwrap(),
-                }
-            }).collect::<Vec<_>>();
+                })
+                .collect::<Vec<_>>();
             let cls_ptr = self.vm.permament_heap.lock().unwrap().allocate_class(
                 class,
                 &sym_fields,
                 self.vm.runtime.classes.klass.clone(),
             );
             user_classes.add_class(str_instance as usize, NonNullPtr::from_ptr(cls_ptr));
+        }
+        user_classes
+    }
+
+    fn resolve_symbolic_references_in_classes(&mut self, user_classes: &mut UserClasses) {
+        unsafe fn read_field_sym_ref(
+            cls_ptr: NonNullPtr<Class>,
+            offset: usize,
+        ) -> NonNullPtr<StringInst> {
+            class::fields(cls_ptr)[offset].class.clone().cast()
+        }
+
+        unsafe fn set_field_cls(cls_ptr: NonNullPtr<Class>, offset: usize, val: NonNullPtr<Class>) {
+            class::fields_mut(cls_ptr)[offset].class = val;
+        }
+
+        for (_, cls_ptr) in user_classes.iter() {
+            let fields_count = unsafe { class::fields_count(cls_ptr.clone()) };
+            for i in 0..fields_count {
+                unsafe {
+                    let sym = read_field_sym_ref(cls_ptr.clone(), i);
+                    let sym_str = class::string::as_rust_string(sym);
+                    let field_cls_addr = match sym_str.as_str() {
+                        "Integer" => {
+                            self.vm.runtime.classes.int.clone()
+                        }
+                        "String" => {
+                            self.vm.runtime.classes.string.clone()
+                        }
+                        "Byte" => {
+                            self.vm.runtime.classes.byte.clone()
+                        }
+                        _ => {
+                            user_classes.get_class_ptr(std::mem::transmute(sym))
+                        }
+                    };
+                    set_field_cls(cls_ptr.clone(), i, field_cls_addr);
+                }
+            }
         }
     }
 
@@ -94,7 +158,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
         }
     }
 
-    pub fn replace_symbolic_references_in_code(&mut self, code: &mut Code) {
+    fn replace_symbolic_references_in_code(&mut self, code: &mut Code) {
         let mut instr = 0;
         let end = code.instructions.len();
         while instr < end {

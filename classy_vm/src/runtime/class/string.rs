@@ -53,12 +53,12 @@ impl StringInst {
         }
     }
 }
-unsafe fn as_rust_str(ptr: &NonNullPtr<StringInst>) -> &str {
+pub unsafe fn as_rust_str(ptr: &NonNullPtr<StringInst>) -> &str {
     let len = Header::data_from_nonnull(*ptr);
     let as_slice = std::slice::from_raw_parts(ptr.get() as *const u8, len);
     std::str::from_utf8(as_slice).unwrap()
 }
 
-unsafe fn as_rust_string(ptr: NonNullPtr<StringInst>) -> String {
+pub unsafe fn as_rust_string(ptr: NonNullPtr<StringInst>) -> String {
     as_rust_str(&ptr).to_owned()
 }
