@@ -25,6 +25,7 @@ pub fn debug_print_code(instrs: &Vec<u8>, cp: &constant_pool::ConstantPool) {
     }
 
     while index < instrs.len() {
+        let saved_index = index;
         let instr = OpCode::from(instrs[index]);
         let repr: (&str, Vec<String>) = match instr {
             OpCode::AddInteger => {
@@ -148,7 +149,7 @@ pub fn debug_print_code(instrs: &Vec<u8>, cp: &constant_pool::ConstantPool) {
         };
         println!(
             "{}| {:20} | {}",
-            format!("{:04}", index).dimmed(),
+            format!("{:04}", saved_index).dimmed(),
             repr.0.bold(),
             repr.1.join(", ").red()
         );
