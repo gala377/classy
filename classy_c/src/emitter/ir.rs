@@ -3,7 +3,7 @@ use std::{collections::HashMap, mem::size_of};
 use crate::{
     code::{
         constant_pool::{self, ConstantPool},
-        Code, OpCode,
+        Code, OpCode, GcStackMapEntry,
     },
     ir::{self, emitter::IrFunction, instr::IsRef, Label},
     typecheck::type_context::TypCtx,
@@ -233,6 +233,11 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
                         1 => {
                             self.push_address(&mut code, params[0].clone());
                             self.push_address(&mut code, func.clone());
+                            // We export stack map after we push the function so the code
+                            // needs to remember that in case of the gc it needs to push
+                            // the values popped again onto the stack in the reverse order
+                            // of popping them
+                            self.export_stack_map(&mut code);
                             self.emit_instr(&mut code, OpCode::Call1);
                             // we have a stack of [param, func]
                             // then we have a stack of [res]
@@ -248,6 +253,11 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
                                 self.push_address(&mut code, param.clone());
                             }
                             self.push_address(&mut code, func.clone());
+                            // We export stack map after we push the function so the code
+                            // needs to remember that in case of the gc it needs to push
+                            // the values popped again onto the stack in the reverse order
+                            // of popping them
+                            self.export_stack_map(&mut code);
                             self.emit_instr(&mut code, OpCode::CallN);
                             self.emit_word(&mut code, *n as u64);
                             for _ in &params {
@@ -262,6 +272,10 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
                 ir::Instruction::Call { res, func, argc } => match argc {
                     0 => {
                         self.push_address(&mut code, func);
+                        // We export stack map after we push the function so the code
+                        // needs to remember that in case of the gc it needs to push
+                        // the values popped again onto the stack
+                        self.export_stack_map(&mut code);
                         self.emit_instr(&mut code, OpCode::Call0);
                         self.set_address(&mut code, res)
                             .map_err(|e| format!("line {index}, {debug_op:?} => {e}"))
@@ -273,6 +287,7 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
                     self.label_lines.insert(Label(i), self.current_line);
                 }
                 ir::Instruction::Alloc { res, typ, .. } => {
+                    self.export_stack_map(&mut code);
                     self.emit_instr(&mut code, OpCode::AllocHeap);
                     let name = self.type_ctx.get_name(typ).unwrap();
                     let id = self.constant_pool.add_entry(name.into());
@@ -402,4 +417,12 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
     fn stack_map_pop(&mut self) {
         self.stack_map.pop();
     }
+
+    fn export_stack_map(&self, code: &mut Code) {
+        let entry = GcStackMapEntry {
+            line: self.current_line,
+            references: self.stack_map.iter().collect(),
+        };
+        code.stack_map.push(entry);
+    } 
 }

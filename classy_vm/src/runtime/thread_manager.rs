@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use classy_c::code::GcStackMapEntry;
 use thiserror::Error;
 
 use std::collections::HashMap;
@@ -20,6 +21,10 @@ use loom::{
     },
     thread::{self, ThreadId},
 };
+
+use crate::mem::ptr::NonNullPtr;
+
+use super::class::frame::Frame;
 
 struct SyncBarrier {
     should_wait: Mutex<bool>,
@@ -53,10 +58,17 @@ impl SyncBarrier {
     }
 }
 
+pub struct ThreadGcData {
+    pub stack: Vec<NonNullPtr<Frame>>,
+    pub handle: Option<thread::JoinHandle<()>>,
+}
+
+unsafe impl Send for ThreadGcData {}
+
 struct ThreadsState {
     count: usize,
     stop_for_gc: bool,
-    threads: HashMap<ThreadId, Option<thread::JoinHandle<()>>>,
+    threads: HashMap<ThreadId, ThreadGcData>,
     parked_threads: usize,
 }
 
@@ -105,7 +117,13 @@ impl ThreadManager {
             t.thread().id(),
             state.count
         );
-        state.threads.insert(t.thread().id(), Some(t));
+        state.threads.insert(
+            t.thread().id(),
+            ThreadGcData {
+                handle: Some(t),
+                stack: Vec::new(),
+            },
+        );
         Ok(())
     }
 
@@ -125,7 +143,13 @@ impl ThreadManager {
         }
         state.count += 1;
         println!("Registering thread with id {id:?} count is {}", state.count);
-        state.threads.insert(id, None);
+        state.threads.insert(
+            id,
+            ThreadGcData {
+                stack: Vec::new(),
+                handle: None,
+            },
+        );
         Ok(())
     }
 
@@ -221,6 +245,12 @@ impl ThreadManager {
         }
         self.wait_for_all_threads_stopped_from_unmanaged_thread();
         Ok(())
+    }
+
+    pub fn update_gc_data(&self, thread_id: ThreadId, stack: Vec<NonNullPtr<Frame>>) {
+        let mut state = self.state.lock().unwrap();
+        let data = state.threads.get_mut(&thread_id).unwrap();
+        data.stack = stack;
     }
 }
 

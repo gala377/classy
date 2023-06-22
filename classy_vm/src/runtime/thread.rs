@@ -1,3 +1,4 @@
+use core::panic;
 use std::{
     alloc::Layout,
     collections::HashMap,
@@ -22,7 +23,7 @@ use crate::{
     },
 };
 
-use super::class::frame::Frame;
+use super::{class::frame::Frame, thread_manager::StopRequetError};
 
 pub type Word = u64;
 
@@ -30,7 +31,7 @@ pub struct Thread {
     heap: Heap,
     _permament_heap: Arc<Mutex<permament_heap::PermamentHeap>>,
     runtime: Runtime,
-    _thread_manager: Arc<ThreadManager>,
+    thread_manager: Arc<ThreadManager>,
     code: Code,
     debug: bool,
     // todo: this is temporary
@@ -63,7 +64,7 @@ impl Thread {
             ),
             _permament_heap: permament_heap,
             runtime,
-            _thread_manager: thread_manager,
+            thread_manager,
             code,
             debug,
             native_functions: {
@@ -157,6 +158,15 @@ impl Thread {
             };
         }
 
+        macro_rules! safepoint {
+            () => {
+                unsafe {
+                    (*c_frame.get()).ip = instr;
+                    self.gc_safepoint(&frames);
+                }
+            };
+        }
+
         while instr < code_end {
             let opcode: OpCode = unsafe { (*c_frame.get()).code.instructions[instr].into() };
             self.log(|| format!("{instr} => {opcode:?}"));
@@ -218,6 +228,7 @@ impl Thread {
                 OpCode::Call1 => {
                     // TODO: temporary just so something works
                     // Only calls rust functions now
+                    safepoint!();
                     let func = pop!();
                     let arg = pop!();
                     unsafe {
@@ -258,11 +269,14 @@ impl Thread {
                     instr += OpCode::StackCopyBottom.argument_size();
                 }
                 OpCode::AllocHeap => {
+                    safepoint!();
                     instr += 1;
                     let class = read_word!();
                     let inst: Ptr<()> =
                         unsafe { self.allocate_instance(std::mem::transmute(class)) };
-                    assert!(!inst.is_null());
+                    if inst.is_null() {
+                        panic!("out of memory")
+                    }
                     push!(std::mem::transmute(inst));
                     instr += OpCode::AllocHeap.argument_size();
                 }
@@ -294,7 +308,7 @@ impl Thread {
     pub fn alloc_frame(&mut self, code: Arc<Code>) -> NonNullPtr<Frame> {
         let frame = unsafe { self.allocate_instance::<Frame>(self.runtime.classes.frame) };
         if frame.is_null() {
-            panic!("Cannot allocate a frame should call gc");
+            panic!("out of memory")
         }
         unsafe {
             frame.inner().unwrap().as_ptr().write(Frame {
@@ -311,5 +325,19 @@ impl Thread {
             let res = f();
             println!("vm: {res}");
         }
+    }
+
+    #[inline]
+    fn gc_safepoint(&mut self, stack: &[NonNullPtr<Frame>]) {
+        if self.thread_manager.should_stop_thread_for_gc() {
+            self.export_gc_data(stack);
+            self.thread_manager.stop_for_gc().unwrap();
+        }
+    }
+
+    #[inline]
+    fn export_gc_data(&mut self, stack: &[NonNullPtr<Frame>]) {
+        self.thread_manager
+            .update_gc_data(std::thread::current().id(), stack.into());
     }
 }

@@ -185,6 +185,13 @@ pub struct GcStackMapEntry {
 }
 
 impl GcStackMapEntry {
+    pub fn empty() -> Self {
+        Self {
+            line: 0,
+            references: BitVec::new(),
+        }
+    }
+
     pub fn line(&self) -> usize {
         self.line
     }
