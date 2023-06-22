@@ -2,7 +2,8 @@ use std::{collections::HashMap, mem::size_of};
 
 use crate::{
     code::{constant_pool, Code, OpCode},
-    ir::{self, emitter::IrFunction, instr::IsRef, Label}, typecheck::type_context::TypCtx,
+    ir::{self, emitter::IrFunction, instr::IsRef, Label},
+    typecheck::type_context::TypCtx,
 };
 
 pub const LABEL_BACKPATCH_MASK: u64 = 0xFF00000000000000;
@@ -34,6 +35,10 @@ impl<'ctx> FunctionEmitter<'ctx> {
             label_lines: HashMap::new(),
             type_ctx,
         }
+    }
+
+    pub fn labels(&self) -> &HashMap<Label, usize> {
+        &self.label_lines
     }
 
     fn prepare_locals(&mut self, func: &IrFunction) {
@@ -123,15 +128,21 @@ impl<'ctx> FunctionEmitter<'ctx> {
         self.prepare_locals(func);
 
         let mut code = Code::new();
+        self.emit_instr(&mut code, OpCode::StackAlloc);
+        self.emit_word(&mut code, (self.args_len + self.locals_stack_depth) as u64);
         let mut index = 0;
         while index < body.len() {
             let op = body[index].clone();
+            // TODO: remove later
+            let debug_op = op.clone();
             match op {
                 ir::Instruction::BinOpAssign(_, _, _, _) => todo!(),
                 ir::Instruction::UnOpAssing(_, _, _) => todo!(),
                 ir::Instruction::CopyAssign(a1, a2) => {
-                    self.push_address(&mut code, a1);
-                    self.set_address(&mut code, a2);
+                    self.push_address(&mut code, a2);
+                    self.set_address(&mut code, a1)
+                        .map_err(|e| format!("line {index}, {debug_op:?} => {e}"))
+                        .unwrap();
                 }
                 ir::Instruction::IndexCopy { res, base, offset } => {
                     self.push_address(&mut code, base);
@@ -146,7 +157,9 @@ impl<'ctx> FunctionEmitter<'ctx> {
                             _ => todo!(),
                         },
                     );
-                    self.set_address(&mut code, res);
+                    self.set_address(&mut code, res)
+                        .map_err(|e| format!("line {index}, {debug_op:?} => {e}"))
+                        .unwrap();
                 }
                 ir::Instruction::IndexSet {
                     base,
@@ -165,7 +178,6 @@ impl<'ctx> FunctionEmitter<'ctx> {
                     );
                     self.stack_map_pop();
                     self.stack_map_pop();
-
                 }
                 ir::Instruction::GoTo(l) => match self.label_lines.get(&l) {
                     Some(line) => {
@@ -187,7 +199,7 @@ impl<'ctx> FunctionEmitter<'ctx> {
                     self.push_address(&mut code, cond);
                     match self.label_lines.get(&goto) {
                         Some(line) => {
-                            let offset = self.current_line - line;
+                            let offset = self.current_line - line + size_of::<u64>() + 1;
                             self.emit_instr(&mut code, OpCode::JumpBackIfFalse);
                             self.emit_word(&mut code, offset as u64);
                         }
@@ -222,7 +234,9 @@ impl<'ctx> FunctionEmitter<'ctx> {
                             // and then set address pops this and pops the stack map
                             // so we need to pop stack_map once to preserve the stack shape
                             self.stack_map_pop();
-                            self.set_address(&mut code, res.clone());
+                            self.set_address(&mut code, res.clone())
+                                .map_err(|e| format!("line {index}, {debug_op:?} => {e}"))
+                                .unwrap();
                         }
                         n => {
                             for param in &params {
@@ -234,16 +248,20 @@ impl<'ctx> FunctionEmitter<'ctx> {
                             for _ in &params {
                                 self.stack_map_pop();
                             }
-                            self.set_address(&mut code, res.clone());
+                            self.set_address(&mut code, res.clone())
+                                .map_err(|e| format!("line {index}, {debug_op:?} => {e}"))
+                                .unwrap();
                         }
                     }
-                },
+                }
                 ir::Instruction::Call { res, func, argc } => match argc {
                     0 => {
                         self.push_address(&mut code, func);
                         self.emit_instr(&mut code, OpCode::Call0);
-                        self.set_address(&mut code, res);
-                    },
+                        self.set_address(&mut code, res)
+                            .map_err(|e| format!("line {index}, {debug_op:?} => {e}"))
+                            .unwrap();
+                    }
                     _ => panic!("Other should not be possible"),
                 },
                 ir::Instruction::Label(i) => {
@@ -255,8 +273,10 @@ impl<'ctx> FunctionEmitter<'ctx> {
                     let id = code.constant_pool.add_entry(name.into());
                     self.emit_word(&mut code, id as u64);
                     self.stack_map_add_ref();
-                    self.set_address(&mut code, res);
-                },
+                    self.set_address(&mut code, res)
+                        .map_err(|e| format!("line {index}, {debug_op:?} => {e}"))
+                        .unwrap();
+                }
                 ir::Instruction::AllocArray { .. } => todo!(),
                 ir::Instruction::Return(v) => {
                     self.push_address(&mut code, v);
@@ -332,24 +352,22 @@ impl<'ctx> FunctionEmitter<'ctx> {
         }
     }
 
-    fn set_address(&mut self, code: &mut Code, addr: ir::Address) {
+    fn set_address(&mut self, code: &mut Code, addr: ir::Address) -> Result<(), String> {
         match addr {
             ir::Address::Temporary(i, _) => {
                 self.emit_instr(code, OpCode::StackAssign);
                 self.emit_word(code, (i + self.args_len) as u64);
                 self.stack_map_pop();
+                Ok(())
             }
             ir::Address::Parameter(i) => {
                 self.emit_instr(code, OpCode::StackAssign);
                 self.emit_word(code, i as u64);
                 self.stack_map_pop();
+                Ok(())
             }
             ir::Address::Name(_) => todo!("Global values not assignable yet"),
-            ir::Address::ConstantInt(_)
-            | ir::Address::ConstantFloat(_)
-            | ir::Address::ConstantBool(_)
-            | ir::Address::ConstantString(_)
-            | ir::Address::ConstantUnit => panic!("Not an address that can be set"),
+            addr => Err(format!("{addr:?} is not an assignable address")),
         }
     }
 

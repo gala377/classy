@@ -60,10 +60,13 @@ fn compile(source: &str, packages: &[classy_c::package::Package]) -> TypCtx {
         if let ast::TopLevelItem::FunctionDefinition(fdef) = def {
             println!("\n\n\nFunction definition {:#?}", fdef.name);
             let emmiter = classy_c::ir::Emitter::new(&tctx, &tenv);
-            let block = emmiter.emit_fn(fdef).body;
-            for (i, instr) in block.iter().enumerate() {
+            let block = emmiter.emit_fn(fdef);
+            for (i, instr) in block.body.iter().enumerate() {
                 println!("{} {:?}", format!("{i:03}|").dimmed(), instr);
             }
+            println!("\n\nCompiled:");
+            let compiled = classy_c::emitter::compile_ir_function(&block, &tctx);
+            classy_c::code::debug::debug_print_code(&compiled.instructions, &compiled.constant_pool);
         }
     }
     tctx

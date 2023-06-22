@@ -1,6 +1,7 @@
 use bitvec::vec::BitVec;
 
 pub mod constant_pool;
+pub mod debug;
 pub mod interner;
 
 use constant_pool::ConstantPool;

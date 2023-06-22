@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use crate::{code::OpCode, ir::Label};
 
+use super::ir::LABEL_BACKPATCH_MASK;
+
 pub struct Backpatcher {
     labels: HashMap<Label, usize>,
 }
@@ -18,22 +20,29 @@ impl Backpatcher {
             match instr {
                 OpCode::JumpFront | OpCode::JumpFrontIfFalse => {
                     index += 1;
-                    let label_val = usize::from_le_bytes(
+                    let label_val = u64::from_le_bytes(
                         instrs[index..index + std::mem::size_of::<u64>()]
                             .try_into()
                             .unwrap(),
                     );
-                    let label = Label(label_val);
+                    // TODO:
+                    // technicaly not usuful as only jumps forward require backpatching
+                    if (LABEL_BACKPATCH_MASK & label_val) > 0 {
+                        // requires backpatching
+                        let label = Label((label_val & (!LABEL_BACKPATCH_MASK)) as usize);
 
-                    let label_line = self.labels[&label];
-                    let offset = label_line - index - 1;
-                    instrs[index..index + std::mem::size_of::<u64>()]
-                        .copy_from_slice(&offset.to_le_bytes());
+                        let label_line = match self.labels.get(&label) {
+                            Some(line) => *line,
+                            None => panic!("Label {:?} not found", label),
+                        };
+                        let offset = label_line - index - 1;
+                        instrs[index..index + std::mem::size_of::<u64>()]
+                            .copy_from_slice(&offset.to_le_bytes());
+                    }
                     index += std::mem::size_of::<u64>();
                 }
-                i => index += i.argument_size(),
+                i => index += 1 + i.argument_size(),
             }
-            index += 1;
         }
         instrs
     }
