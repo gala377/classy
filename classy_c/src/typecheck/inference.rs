@@ -83,7 +83,7 @@ impl Inference {
             env: HashMap::new(),
             constraints: Vec::new(),
             next_var: self.next_var,
-            ret_t: None,
+            ret_t: self.ret_t.clone(),
         };
         let ret = f(&mut sub);
         self.merge(sub);
@@ -297,7 +297,9 @@ impl Inference {
                 self.env.insert(id, Type::Unit);
                 let cond_t = self.infer_in_expr(cond);
                 self.constraints.push(Constraint::Eq(cond_t, Type::Bool));
-                let _ = self.infer_in_expr(body);
+                let _ = self.in_scope(Scope::empty_scope_with_parent(self.scope.clone()), |this| {
+                    this.infer_in_expr(body)
+                });
                 Type::Unit
             }
             ast::ExprKind::Return(expr) => {
@@ -316,14 +318,20 @@ impl Inference {
                 self.env.insert(id, if_t.clone());
                 let cond_t = self.infer_in_expr(cond);
                 self.constraints.push(Constraint::Eq(cond_t, Type::Bool));
-                let body_t = self.infer_in_expr(body);
+                let body_t = self
+                    .in_scope(Scope::empty_scope_with_parent(self.scope.clone()), |this| {
+                        this.infer_in_expr(body)
+                    });
                 match else_body {
                     None => {
                         self.constraints
                             .push(Constraint::Eq(if_t.clone(), Type::Unit));
                     }
                     Some(else_body) => {
-                        let else_body_t = self.infer_in_expr(else_body);
+                        let else_body_t = self
+                            .in_scope(Scope::empty_scope_with_parent(self.scope.clone()), |this| {
+                                this.infer_in_expr(else_body)
+                            });
                         self.constraints
                             .push(Constraint::Eq(body_t.clone(), else_body_t));
                         self.constraints.push(Constraint::Eq(if_t.clone(), body_t));

@@ -63,7 +63,7 @@ impl<'ctx> ConstraintSolver<'ctx> {
             Constraint::Eq(t, Type::Alias(id)) => {
                 let resolved = self.tctx.resolve_alias(id);
                 constraints.push(Constraint::Eq(t, resolved));
-            } 
+            }
             Constraint::Eq(Type::Fresh(id1), Type::Fresh(id2)) if id1 == id2 => {}
             Constraint::Eq(Type::Struct { def: def_1, .. }, Type::Struct { def: def_2, .. })
                 if def_1 == def_2 => {}

@@ -4,7 +4,7 @@ use classy_c::typecheck::r#type::Type;
 use classy_c::typecheck::type_context::TypCtx;
 
 use crate::mem::ptr::{NonNullPtr, Ptr};
-use crate::runtime::class::{Class, self};
+use crate::runtime::class::{self, Class};
 use crate::vm::Vm;
 
 use crate::mem::ObjectAllocator;
@@ -38,7 +38,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
     //         let typ = tctx.definitions.get(&tid).unwrap();
     //         match typ {
     //             Type::Struct { fields, .. } => {
-                    
+
     //             },
     //             t => {
     //                 panic!("Allocation of type {t:?} is no supported");
@@ -73,11 +73,13 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                 let instance_word = instance.unwrap() as u64;
                 let instance_word_bytes = instance_word.to_le_bytes();
                 // add it as interned
-                self.vm.interned_strings.insert(val.to_owned(), instance_word);
+                self.vm
+                    .interned_strings
+                    .insert(val.to_owned(), instance_word);
                 instance_word
             }
         }
-    } 
+    }
 
     pub fn replace_symbolic_references_in_code(&mut self, code: &mut Code) {
         let mut instr = 0;
