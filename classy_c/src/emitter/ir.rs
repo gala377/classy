@@ -1,4 +1,4 @@
-use std::{mem::size_of, collections::HashMap, hash::Hash};
+use std::{collections::HashMap, mem::size_of};
 
 use crate::{
     code::{constant_pool, Code, OpCode},
@@ -126,24 +126,38 @@ impl FunctionEmitter {
             match op {
                 ir::Instruction::BinOpAssign(_, _, _, _) => todo!(),
                 ir::Instruction::UnOpAssing(_, _, _) => todo!(),
-                ir::Instruction::CopyAssign(_, _) => todo!(),
-                ir::Instruction::IndexCopy { res, base, offset } => todo!(),
+                ir::Instruction::CopyAssign(a1, a2) => {
+                    self.push_address(&mut code, a1);
+                    self.set_address(&mut code, a2);
+                }
+                ir::Instruction::IndexCopy { res, base, offset } => {
+                    self.push_address(&mut code, base);
+                    // There is no need to pop or push anything to the gc map
+                    // as the set_address will pop the gc map already.
+                    // and no allocation can happen between the push and pop.
+                    self.emit_instr(&mut code, OpCode::PushOffsetDeref);
+                    self.emit_word(&mut code, match offset {
+                        ir::Address::ConstantInt(val) => val as u64,
+                        _ => todo!(),
+                    });
+                    self.set_address(&mut code, res);
+                },
                 ir::Instruction::IndexSet {
                     base,
                     offset,
                     value,
-                } => todo!(),
-                ir::Instruction::GoTo(l) => {
-                    match self.label_lines.get(&l) {
-                        Some(line) => {
-                            let offset = self.current_line - line;
-                            self.emit_instr(&mut code, OpCode::JumpBack);
-                            self.emit_word(&mut code, offset as u64);
-                        },
-                        None => {
-                            self.emit_instr(&mut code, OpCode::JumpFront);
-                            self.emit_word(&mut code, LABEL_BACKPATCH);
-                        },
+                } => {
+                    todo!()
+                },
+                ir::Instruction::GoTo(l) => match self.label_lines.get(&l) {
+                    Some(line) => {
+                        let offset = self.current_line - line;
+                        self.emit_instr(&mut code, OpCode::JumpBack);
+                        self.emit_word(&mut code, offset as u64);
+                    }
+                    None => {
+                        self.emit_instr(&mut code, OpCode::JumpFront);
+                        self.emit_word(&mut code, LABEL_BACKPATCH);
                     }
                 },
                 ir::Instruction::If { cond, goto } => todo!(),
@@ -154,8 +168,10 @@ impl FunctionEmitter {
                     1 => todo!(),
                     n => todo!(),
                 },
-                ir::Instruction::Label(_) => todo!(),
-                ir::Instruction::Alloc { res, size, typ } => todo!(),
+                ir::Instruction::Label(i) => {
+                    self.label_lines.insert(Label(i), self.current_line);
+                },
+                ir::Instruction::Alloc { .. } => todo!(),
                 ir::Instruction::AllocArray { .. } => todo!(),
                 ir::Instruction::Return(v) => {
                     self.push_address(&mut code, v);
@@ -228,6 +244,27 @@ impl FunctionEmitter {
                 self.emit_word(code, i as u64);
                 self.stack_map_add(self.stack_map[i]);
             }
+        }
+    }
+
+    fn set_address(&mut self, code: &mut Code, addr: ir::Address) {
+        match addr {
+            ir::Address::Temporary(i, _) => {
+                self.emit_instr(code, OpCode::StackAssign);
+                self.emit_word(code, (i + self.args_len) as u64);
+                self.stack_map_pop();
+            }
+            ir::Address::Parameter(i) => {
+                self.emit_instr(code, OpCode::StackAssign);
+                self.emit_word(code, i as u64);
+                self.stack_map_pop();
+            }
+            ir::Address::Name(_) => todo!("Global values not assignable yet"),
+            ir::Address::ConstantInt(_)
+            | ir::Address::ConstantFloat(_)
+            | ir::Address::ConstantBool(_)
+            | ir::Address::ConstantString(_)
+            | ir::Address::ConstantUnit => panic!("Not an address that can be set"),
         }
     }
 
