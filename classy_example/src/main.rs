@@ -68,6 +68,10 @@ fn main() {
         }
         Example::Print => {
             let source = r#"
+                type Integer {
+                    v: Int
+                }
+
                 print: (String) -> ()
                 print(s) = ()
 
@@ -81,6 +85,7 @@ fn main() {
                     print "Hello world" 
                     print "Hello world 2"
                     let a = type { a = "Hello"; b = 10 }
+                    let b = Integer(v=10)
                     print a.a
                 }
             "#;

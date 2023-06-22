@@ -61,7 +61,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                         std::mem::transmute(self.intern_and_allocte_static_string(&name))
                     };
                     let sym_t_name = match typ {
-                        Type::Int => "Integer".to_owned(),
+                        Type::Int => "Int".to_owned(),
                         Type::UInt => "UInt".to_owned(),
                         Type::Bool => "Bool".to_owned(),
                         Type::String => "String".to_owned(),
@@ -123,7 +123,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                     let sym = field.class.cast();
                     let sym_str = class::string::as_rust_string(sym);
                     let field_cls_addr = match sym_str.as_str() {
-                        "Integer" => self.vm.runtime.classes.int.clone(),
+                        "Int" => self.vm.runtime.classes.int.clone(),
                         "String" => self.vm.runtime.classes.string.clone(),
                         "Byte" => self.vm.runtime.classes.byte.clone(),
                         _ => user_classes.get_class_ptr(std::mem::transmute(sym)),

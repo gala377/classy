@@ -60,7 +60,7 @@ impl RuntimeClasses {
             heap,
             klass,
             string,
-            "Integer",
+            "Int",
             &class::integer::INTEGER_CLASS,
             &[],
         );
