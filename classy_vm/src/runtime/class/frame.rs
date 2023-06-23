@@ -3,7 +3,7 @@ use std::sync::Arc;
 use classy_c::code::{Code, GcStackMapEntry};
 
 use crate::{
-    mem::ptr::Ptr,
+    mem::ptr::{ErasedPtr, Ptr},
     runtime::{thread::Word, trace::Tracer},
 };
 
@@ -14,6 +14,36 @@ pub struct Frame {
     pub ip: usize,
     pub stack: Vec<Word>,
     pub code: Arc<Code>,
+}
+
+impl Frame {
+    pub fn get_references(&self, references: &mut Vec<*mut ErasedPtr>) {
+        let ip = self.ip;
+        let stack_map = {
+            let mut stack_map = None;
+            for GcStackMapEntry { line, references } in self.code.stack_map.iter() {
+                if *line < ip {
+                    stack_map = Some(references);
+                } else {
+                    break;
+                }
+            }
+            stack_map.expect("no matching stack map")
+        };
+        assert_eq!(
+            self.stack.len(),
+            stack_map.len(),
+            "mismatched stack and stack map"
+        );
+        for (i, reference) in stack_map.iter().enumerate() {
+            if *reference {
+                let stack_entry = unsafe {
+                    self.stack.get_unchecked(i) as *const u64 as *mut u64 as *mut ErasedPtr
+                };
+                references.push(stack_entry)
+            }
+        }
+    }
 }
 
 unsafe fn drop_frame(frame_inst: *mut ()) {

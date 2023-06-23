@@ -17,7 +17,7 @@ use crate::{
     },
     runtime::{
         thread_manager::{StopRequetError, ThreadManager},
-        trace::Gc,
+        trace::Gc, class::{frame::Frame, Class},
     },
 };
 
@@ -239,6 +239,57 @@ impl Heap {
         }
         res
     }
+
+    pub fn run_gc(&mut self, for_class: NonNullPtr<Class>, stack: &mut [NonNullPtr<Frame>]) {
+        let (new_tlab_size, new_tlab_align) = unsafe {
+            let cls = &*for_class.get();
+            cls.size_align()
+        };
+        
+        match self.stop_threads_for_gc() {
+            ShouldPerformGc::ShouldWait => self.thread_manager.stop_for_gc().unwrap(),
+            ShouldPerformGc::ShouldPerform => {
+                self.thread_manager.wait_for_all_threads_stopped().unwrap();
+                self.scavenge_young_generation_with_stack(stack);
+                self.from_space.lock().unwrap().reset_all_pages();
+                self.from_space.lock().unwrap().toggle_kind();
+                self.to_space.lock().unwrap().toggle_kind();
+                self.thread_manager.release_stopped_threads();
+            }
+        }
+        self.swap_semispaces(new_tlab_size, new_tlab_align);
+    }
+
+
+    fn scavenge_young_generation_with_stack(&mut self, stack: &mut [NonNullPtr<Frame>]) {
+        let mut roots = Vec::new();
+        self.collect_roots(&mut roots, stack);
+        {
+            let mut to_space = self.to_space.lock().unwrap();
+            let mut gc = Gc::new(&mut to_space.allocator, self.options.initial_tlab_free_size);
+            unsafe { gc.collect(&roots) };
+        }
+    }
+
+    fn collect_roots(&mut self, roots: &mut Vec<*mut ErasedPtr>, curr_thread_stack: &mut [NonNullPtr<Frame>]) {
+        let mut gc_thread_data = self.thread_manager.get_gc_data();
+        gc_thread_data.remove(&std::thread::current().id());
+        self.collect_handles_to_roots(roots);
+        for frame in curr_thread_stack.iter_mut() {
+            unsafe {
+                let frame = &*frame.get();
+                frame.get_references(roots);
+            }
+        }
+        for (_, stack) in gc_thread_data {
+            for frame in stack.iter() {
+                unsafe {
+                    let frame = &*frame.get();
+                    frame.get_references(roots);
+                }
+            }
+        }
+    }
 }
 
 impl ObjectAllocator for Heap {
@@ -261,13 +312,16 @@ impl ObjectAllocator for Heap {
             // todo: for the check above to make sense we need the request threads stop
             // while holding the lock for the allocator.
         };
-        // either we overallocated or we could not allocate a new tlab
-        self.gc_young_space(layout.size(), layout.align());
-        if let ptr @ Ptr(Some(_)) = self.thread_tlab.allocate(layout) {
-            return ptr;
-        }
-        // after gc can still not have enough space
-        self.allocate_in_old_space(layout)
+        Ptr::null()
+        // TODO:
+        // Old code for when the old space was planned
+        // // either we overallocated or we could not allocate a new tlab
+        // self.gc_young_space(layout.size(), layout.align());
+        // if let ptr @ Ptr(Some(_)) = self.thread_tlab.allocate(layout) {
+        //     return ptr;
+        // }
+        // // after gc can still not have enough space
+        // self.allocate_in_old_space(layout)
     }
 }
 

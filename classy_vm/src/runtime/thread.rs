@@ -23,7 +23,7 @@ use crate::{
     },
 };
 
-use super::{class::frame::Frame, thread_manager::StopRequetError};
+use super::class::frame::Frame;
 
 pub type Word = u64;
 
@@ -95,7 +95,7 @@ impl Thread {
 
     // returned instance type T must be valid with the given class.
     pub unsafe fn allocate_instance<T>(&mut self, cls: NonNullPtr<Class>) -> Ptr<T> {
-        unsafe { self.heap.allocate_instance(cls).cast() }
+        self.heap.allocate_instance(cls).cast()
     }
 
     pub unsafe fn create_handle<T>(&mut self, ptr: NonNullPtr<T>) -> Handle<T> {
@@ -116,7 +116,9 @@ impl Thread {
 
     pub fn interpert(&mut self) {
         let mut instr = 0;
-        let mut frames = vec![self.alloc_frame(Arc::new(self.code.clone()))];
+        let mut frames = vec![self
+            .alloc_frame(Arc::new(self.code.clone()))
+            .expect("Out of memory")];
         let code_end = self.code.instructions.len();
         macro_rules! read_word {
             () => {{
@@ -275,7 +277,15 @@ impl Thread {
                     let inst: Ptr<()> =
                         unsafe { self.allocate_instance(std::mem::transmute(class)) };
                     if inst.is_null() {
-                        panic!("out of memory")
+                        // we need to gc
+                        unsafe {
+                            self.heap.run_gc(std::mem::transmute(class), &mut frames);
+                        }
+                    }
+                    let inst: Ptr<()> =
+                        unsafe { self.allocate_instance(std::mem::transmute(class)) };
+                    if inst.is_null() {
+                        panic!("Out of memory");
                     }
                     push!(std::mem::transmute(inst));
                     instr += OpCode::AllocHeap.argument_size();
@@ -305,10 +315,10 @@ impl Thread {
         }
     }
 
-    pub fn alloc_frame(&mut self, code: Arc<Code>) -> NonNullPtr<Frame> {
+    pub fn alloc_frame(&mut self, code: Arc<Code>) -> Option<NonNullPtr<Frame>> {
         let frame = unsafe { self.allocate_instance::<Frame>(self.runtime.classes.frame) };
         if frame.is_null() {
-            panic!("out of memory")
+            return None;
         }
         unsafe {
             frame.inner().unwrap().as_ptr().write(Frame {
@@ -317,7 +327,7 @@ impl Thread {
                 code,
             });
         }
-        NonNullPtr::from_ptr(frame)
+        Some(NonNullPtr::from_ptr(frame))
     }
 
     fn log(&self, f: impl FnOnce() -> String) {
@@ -335,7 +345,6 @@ impl Thread {
         }
     }
 
-    #[inline]
     fn export_gc_data(&mut self, stack: &[NonNullPtr<Frame>]) {
         self.thread_manager
             .update_gc_data(std::thread::current().id(), stack.into());

@@ -34,6 +34,9 @@ pub trait ObjectAllocator {
             let size = size_of::<Header>() + el_size * length;
             let layout = Layout::from_size_align(size, align_of::<Header>()).unwrap();
             let allocation = self.try_allocate(layout);
+            if allocation.is_null() {
+                return ErasedPtr::null();
+            }
             let arr = self.initialise_array(allocation, array_cls, length, el_size);
             ErasedPtr::new(arr)
         }
@@ -51,6 +54,9 @@ pub trait ObjectAllocator {
             size_of::<Header>() + size_of::<Class>() + fields.len() * size_of::<class::Field>();
         let layout = Layout::from_size_align(size, align_of::<Header>()).unwrap();
         let allocation = self.try_allocate(layout);
+        if allocation.is_null() {
+            return Ptr::null();
+        }
         let cls = self.initialise_class(allocation, cls, fields, meta_class);
         Ptr::new(cls)
     }
@@ -65,6 +71,9 @@ pub trait ObjectAllocator {
         };
         let layout = Layout::from_size_align(size, align_of::<Header>()).unwrap();
         let allocation = self.try_allocate(layout);
+        if allocation.is_null() {
+            return ErasedPtr::null();
+        }
         let obj = self.initialize_instance(allocation, cls);
         ErasedPtr::new(obj)
     }
@@ -97,6 +106,9 @@ pub trait ObjectAllocator {
 
     fn allocate_static_string(&mut self, strcls: NonNullPtr<Class>, val: &str) -> Ptr<StringInst> {
         let buff = self.allocate_array(strcls, val.as_bytes().len());
+        if buff.is_null() {
+            return Ptr::null();
+        }
         unsafe {
             let Some(ptr) = buff.inner() else {
                 return buff.cast()

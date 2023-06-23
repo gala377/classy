@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-use classy_c::code::GcStackMapEntry;
 use thiserror::Error;
 
 use std::collections::HashMap;
@@ -251,6 +249,20 @@ impl ThreadManager {
         let mut state = self.state.lock().unwrap();
         let data = state.threads.get_mut(&thread_id).unwrap();
         data.stack = stack;
+    }
+
+    pub fn get_gc_data(&self) -> HashMap<ThreadId, Vec<NonNullPtr<Frame>>> {
+        let state = self.state.lock().unwrap();
+        state
+            .threads
+            .iter()
+            .map(|(id, data)| (*id, data.stack.clone()))
+            .collect()
+    }
+
+    pub fn get_gc_data_for_thread(&self, thread_id: ThreadId) -> Vec<NonNullPtr<Frame>> {
+        let state = self.state.lock().unwrap();
+        state.threads.get(&thread_id).unwrap().stack.clone()
     }
 }
 
