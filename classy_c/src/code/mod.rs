@@ -127,6 +127,10 @@ pub enum OpCode {
 
     /// Hach used to call a function defined in the vm by its symbol
     CallNative1,
+    /// Call a runtime function with a name given by the symbol following.
+    /// Args:
+    ///   - name: Symbol
+    RuntimeCall,
 
     /// Used as the marker for the last instruction
     LastMarker,
@@ -172,6 +176,7 @@ impl OpCode {
             OpCode::PushOffsetDeref => WORD,
             OpCode::SetOffset => WORD,
             OpCode::CallNative1 => WORD,
+            OpCode::RuntimeCall => WORD,
             OpCode::LastMarker => panic!(),
         }
     }

@@ -146,6 +146,16 @@ pub fn debug_print_code(instrs: &Vec<u8>, cp: &constant_pool::ConstantPool) {
                 ("set_offset", vec![i.to_string()])
             }
             OpCode::LastMarker => panic!("This instruction should have never been emitted"),
+            OpCode::RuntimeCall => {
+                index += 1;
+                let i = read_word!();
+                let value = cp.get::<String>(i).unwrap();
+                ("runtime_call", vec![value])
+            }
+            OpCode::CallNative1 => {
+                index += 1;
+                ("call_native1", vec![])
+            }
             _ => ("not implemented", vec![]),
         };
         println!(

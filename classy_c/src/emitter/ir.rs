@@ -11,6 +11,8 @@ use crate::{
 
 pub const LABEL_BACKPATCH_MASK: u64 = 0xFF00000000000000;
 
+static RUNTIME_FUNCTIONS: &[&str] = &["print"];
+
 pub struct FunctionEmitter<'ctx, 'pool> {
     current_line: usize,
     stack_map: Vec<bool>,
@@ -234,13 +236,26 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
                     match argc {
                         1 => {
                             self.push_address(&mut code, params[0].clone());
-                            self.push_address(&mut code, func.clone());
+                            let op = match func {
+                                ir::Address::Name(n) if RUNTIME_FUNCTIONS.contains(&n.as_str()) => {
+                                    let id = self.constant_pool.add_entry(n.clone().into());
+                                    self.emit_instr(&mut code, OpCode::RuntimeCall);
+                                    self.emit_word(&mut code, id as u64);
+                                    // Runtime functions should not be scanned
+                                    self.stack_map_add_value();
+                                    OpCode::CallNative1
+                                }
+                                _ => {
+                                    self.push_address(&mut code, func.clone());
+                                    OpCode::Call1
+                                }
+                            };
                             // We export stack map after we push the function so the code
                             // needs to remember that in case of the gc it needs to push
                             // the values popped again onto the stack in the reverse order
                             // of popping them
                             self.export_stack_map(&mut code);
-                            self.emit_instr(&mut code, OpCode::Call1);
+                            self.emit_instr(&mut code, op);
                             // we have a stack of [param, func]
                             // then we have a stack of [res]
                             // and then set address pops this and pops the stack map

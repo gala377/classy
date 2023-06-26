@@ -230,14 +230,21 @@ impl Thread {
                     safepoint!();
                     let func = pop!();
                     let arg = pop!();
-                    let func = unsafe {
-                        let ptr: NonNullPtr<StringInst> = std::mem::transmute(func);
-                        let name = class::string::as_rust_str(&ptr);
-                        self.native_functions.get(name).unwrap()
-                    };
+                    let func: fn(&mut Thread, &[u64]) -> u64 = unsafe { std::mem::transmute(func) };
                     let ret = func(self, &[arg]);
                     push!(ret);
                     instr += 1;
+                }
+                OpCode::RuntimeCall => {
+                    instr += 1;
+                    let name_ptr = read_word!();
+                    unsafe {
+                        let name_ptr: NonNullPtr<StringInst> = std::mem::transmute(name_ptr);
+                        let name = class::string::as_rust_str(&name_ptr);
+                        let func = *self.native_functions.get(name).unwrap();
+                        push!(std::mem::transmute(func));
+                    };
+                    instr += OpCode::RuntimeCall.argument_size();
                 }
                 OpCode::Call1 => {
                     // TODO:

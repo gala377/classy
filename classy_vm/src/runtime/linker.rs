@@ -210,6 +210,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
             instr += match opcode {
                 code::OpCode::ConstLoadString => self.replace_static_string_or_symbol(instr, code),
                 code::OpCode::LookUpGlobal => self.replace_symbol(instr, code),
+                code::OpCode::RuntimeCall => self.replace_static_string_or_symbol(instr, code),
                 code::OpCode::AllocHeap => self.replace_with_class_pointer(instr, code),
                 code::OpCode::ConstLoadFloat | code::OpCode::ConstLoadInteger => {
                     self.replace_numeric_constant(instr, code)
