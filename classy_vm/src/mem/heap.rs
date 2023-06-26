@@ -16,8 +16,9 @@ use crate::{
         ObjectAllocator,
     },
     runtime::{
+        class::{frame::Frame, Class},
         thread_manager::{StopRequetError, ThreadManager},
-        trace::Gc, class::{frame::Frame, Class},
+        trace::Gc,
     },
 };
 
@@ -245,7 +246,7 @@ impl Heap {
             let cls = &*for_class.get();
             cls.size_align()
         };
-        
+
         match self.stop_threads_for_gc() {
             ShouldPerformGc::ShouldWait => self.thread_manager.stop_for_gc().unwrap(),
             ShouldPerformGc::ShouldPerform => {
@@ -260,7 +261,6 @@ impl Heap {
         self.swap_semispaces(new_tlab_size, new_tlab_align);
     }
 
-
     fn scavenge_young_generation_with_stack(&mut self, stack: &mut [*mut NonNullPtr<Frame>]) {
         let mut roots = Vec::new();
         self.collect_roots(&mut roots, stack);
@@ -271,7 +271,11 @@ impl Heap {
         }
     }
 
-    fn collect_roots(&mut self, roots: &mut Vec<*mut ErasedPtr>, curr_thread_stack: &mut [*mut NonNullPtr<Frame>]) {
+    fn collect_roots(
+        &mut self,
+        roots: &mut Vec<*mut ErasedPtr>,
+        curr_thread_stack: &mut [*mut NonNullPtr<Frame>],
+    ) {
         let mut gc_thread_data = self.thread_manager.get_gc_data();
         gc_thread_data.remove(&std::thread::current().id());
         self.collect_handles_to_roots(roots);

@@ -3,7 +3,7 @@ use std::{collections::HashMap, mem::size_of};
 use crate::{
     code::{
         constant_pool::{self, ConstantPool},
-        Code, OpCode, GcStackMapEntry,
+        Code, GcStackMapEntry, OpCode,
     },
     ir::{self, emitter::IrFunction, instr::IsRef, Label},
     typecheck::type_context::TypCtx,
@@ -135,7 +135,7 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
         let mut code = Code::new();
         self.emit_instr(&mut code, OpCode::StackAlloc);
         // No need to allocate space for function args as those are allocated
-        // from by the caller 
+        // from by the caller
         self.emit_word(&mut code, (self.locals_stack_depth) as u64);
         let mut index = 0;
         while index < body.len() {
@@ -428,5 +428,5 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
         };
         println!("Exporting stack map {:?}", entry);
         code.stack_map.push(entry);
-    } 
+    }
 }

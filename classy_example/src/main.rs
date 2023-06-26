@@ -135,4 +135,3 @@ pub fn prepare_type_ctx(mut tctx: TypCtx, ast: &ast::Program) -> TypCtx {
     typecheck::dedup_trivially_eq_types(&mut tctx);
     tctx
 }
-

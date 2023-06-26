@@ -7,7 +7,7 @@ use classy_c::code::{self, Code};
 use classy_c::typecheck::r#type::Type;
 use classy_c::typecheck::type_context::TypCtx;
 
-use crate::mem::ptr::{ErasedPtr, NonNullPtr, ErasedNonNull};
+use crate::mem::ptr::{ErasedNonNull, ErasedPtr, NonNullPtr};
 
 use crate::runtime::class::{self, Class};
 use crate::vm::Vm;
@@ -23,9 +23,7 @@ pub struct Linker<'vm, 'pool> {
 }
 
 // Ugly hack for now
-static NATIVES: &[&str] = &[
-    "print"
-];
+static NATIVES: &[&str] = &["print"];
 
 impl<'vm, 'pool> Linker<'vm, 'pool> {
     pub fn new(vm: &'vm mut Vm, constant_pool: &'pool ConstantPool) -> Self {
@@ -42,7 +40,10 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
         self.vm.runtime.user_classes = Arc::new(user_classes);
     }
 
-    pub fn link_functions(&mut self, functions: &mut Vec<(String, Code)>) -> HashMap<String, ErasedNonNull> {
+    pub fn link_functions(
+        &mut self,
+        functions: &mut Vec<(String, Code)>,
+    ) -> HashMap<String, ErasedNonNull> {
         self.allocate_code_objects(functions);
         let codes = self.functions.values().cloned().collect::<Vec<_>>();
         for code in codes {
