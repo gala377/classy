@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::hash::Hash;
+
 use std::sync::Arc;
 
 use classy_c::code::constant_pool::ConstantPool;
@@ -7,7 +7,7 @@ use classy_c::code::{self, Code};
 use classy_c::typecheck::r#type::Type;
 use classy_c::typecheck::type_context::TypCtx;
 
-use crate::mem::ptr::{ErasedNonNull, ErasedPtr, NonNullPtr};
+use crate::mem::ptr::{ErasedNonNull, NonNullPtr};
 
 use crate::runtime::class::{self, Class};
 use crate::vm::Vm;
