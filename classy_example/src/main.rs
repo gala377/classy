@@ -1,4 +1,7 @@
-use std::{collections::HashMap, mem::size_of};
+use std::{
+    collections::{HashMap, HashSet},
+    mem::size_of,
+};
 
 use clap::{Parser, ValueEnum};
 
@@ -66,18 +69,19 @@ fn main() {
                     v: Int
                 }
 
-                print: (String) -> ()
+                @runtime print: (String) -> ()
                 print(s) = ()
+
+                print_twice: (String) -> ()
+                print_twice(s) {
+                    print(s)
+                    print(s)
+                }
 
                 main:()->()
                 main { 
                     print "Hello world1" 
-                    print "Hello world2" 
-                    print "Hello world3" 
-                    print "Hello world4" 
-                    print "Hello world5" 
-                    print "Hello world6" 
-                    print "Hello world7"
+                    print_twice "Hello macarena"
                     let a = type { a = "Hello"; b = 10 }
                     let b = Integer(v=10)
                     print a.a
@@ -106,14 +110,21 @@ fn compile(
 
     let mut constant_pool = ConstantPool::new();
     let mut functions = HashMap::new();
-
+    let mut gatherer =
+        classy_c::ast_passes::gather_runtime_functions::GatherRuntimeFunctions::new();
+    gatherer.visit(&res);
+    let runtime_functions: HashSet<String> = gatherer.res.into_iter().collect();
     for def in &res.items {
         if let ast::TopLevelItem::FunctionDefinition(fdef) = def {
             let emmiter = classy_c::ir::Emitter::new(&tctx, &tenv);
             let block = emmiter.emit_fn(fdef);
 
-            let compiled =
-                classy_c::emitter::compile_ir_function(&block, &tctx, &mut constant_pool);
+            let compiled = classy_c::emitter::compile_ir_function(
+                &block,
+                runtime_functions.clone(),
+                &tctx,
+                &mut constant_pool,
+            );
             println!("\n\n\nFunction definition {:#?}", fdef.name);
             classy_c::code::debug::debug_print_code(&compiled.instructions, &constant_pool);
             functions.insert(fdef.name.clone(), compiled);

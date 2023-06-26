@@ -1,4 +1,7 @@
-use std::{collections::HashMap, mem::size_of};
+use std::{
+    collections::{HashMap, HashSet},
+    mem::size_of,
+};
 
 use crate::{
     code::{
@@ -10,8 +13,6 @@ use crate::{
 };
 
 pub const LABEL_BACKPATCH_MASK: u64 = 0xFF00000000000000;
-
-static RUNTIME_FUNCTIONS: &[&str] = &["print"];
 
 pub struct FunctionEmitter<'ctx, 'pool> {
     current_line: usize,
@@ -29,10 +30,15 @@ pub struct FunctionEmitter<'ctx, 'pool> {
 
     type_ctx: &'ctx TypCtx,
     constant_pool: &'pool mut ConstantPool,
+    runtime_functions: HashSet<String>,
 }
 
 impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
-    pub fn new(type_ctx: &'ctx TypCtx, constant_pool: &'pool mut ConstantPool) -> Self {
+    pub fn new(
+        type_ctx: &'ctx TypCtx,
+        runtime_functions: HashSet<String>,
+        constant_pool: &'pool mut ConstantPool,
+    ) -> Self {
         Self {
             current_line: 0,
             stack_map: Vec::new(),
@@ -41,6 +47,7 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
             label_lines: HashMap::new(),
             type_ctx,
             constant_pool,
+            runtime_functions,
         }
     }
 
@@ -237,7 +244,7 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
                         1 => {
                             self.push_address(&mut code, params[0].clone());
                             let op = match func {
-                                ir::Address::Name(n) if RUNTIME_FUNCTIONS.contains(&n.as_str()) => {
+                                ir::Address::Name(n) if self.runtime_functions.contains(n) => {
                                     let id = self.constant_pool.add_entry(n.clone().into());
                                     self.emit_instr(&mut code, OpCode::RuntimeCall);
                                     self.emit_word(&mut code, id as u64);

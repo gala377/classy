@@ -82,6 +82,7 @@ pub struct FunctionDefinition {
     pub typ: Typ,
     pub parameters: Vec<String>,
     pub body: Expr,
+    pub attributes: Vec<String>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -287,6 +288,7 @@ impl Builder {
                     ret: Box::new(ret),
                 },
                 body,
+                attributes: Vec::new(),
             }));
         self
     }

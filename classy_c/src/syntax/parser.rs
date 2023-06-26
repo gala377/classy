@@ -161,8 +161,18 @@ impl<'source> Parser<'source> {
         Ok(type_vars)
     }
 
+    fn parse_attributes(&mut self) -> Vec<String> {
+        let mut attributes = Vec::new();
+        while let TokenType::Attribute(a) = self.lexer.current().typ.clone() {
+            attributes.push(a);
+            self.lexer.advance();
+        }
+        attributes
+    }
+
     fn parse_function_definition(&mut self) -> ParseRes<ast::FunctionDefinition> {
         let beg = self.curr_pos();
+        let attributes = self.parse_attributes();
         let name = self.parse_identifier()?;
         let _ = self.expect_token(TokenType::Colon);
         let typ = self.parse_fn_type()?;
@@ -195,6 +205,7 @@ impl<'source> Parser<'source> {
             typ,
             parameters,
             body,
+            attributes,
         })
     }
 

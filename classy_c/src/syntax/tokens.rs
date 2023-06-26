@@ -56,6 +56,8 @@ pub enum TokenType {
     True,
     #[token("false")]
     False,
+    #[regex(r"@[a-zA-Z]+", |lex| lex.slice()[1..lex.slice().len()].to_owned())]
+    Attribute(String),
 
     // Grouping
     #[token("{")]

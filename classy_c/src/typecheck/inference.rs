@@ -104,11 +104,15 @@ impl Inference {
                     name,
                     body,
                     parameters,
+                    attributes,
                     ..
                 } = fn_def;
                 let Type::Function { args, ret } = global_scope.borrow().type_of(name).expect("Expected type of function to exist") else {
                     panic!("Expected function to have a function type")
                 };
+                if attributes.contains(&"runtime".to_owned()) {
+                    continue;
+                }
                 let fn_actual_type = {
                     let fn_scope = Scope::empty_scope_with_parent(global_scope.clone());
                     inferer.in_scope(fn_scope.clone(), |scope| {

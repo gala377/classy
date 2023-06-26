@@ -132,6 +132,7 @@ fn read_package(pkg: &Package, tctx: &mut TypCtx) {
                 generics: Vec::new(),
             },
             parameters: pars.collect(),
+            attributes: Vec::new(),
         };
         let _id = tctx.add_fn_node(&node);
         let type_id = tctx.reserve_id();

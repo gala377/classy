@@ -156,7 +156,6 @@ pub fn debug_print_code(instrs: &Vec<u8>, cp: &constant_pool::ConstantPool) {
                 index += 1;
                 ("call_native1", vec![])
             }
-            _ => ("not implemented", vec![]),
         };
         println!(
             "{}| {:20} | {}",

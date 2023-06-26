@@ -133,6 +133,10 @@ pub trait Folder: Sized {
     fn fold_anon_type(&mut self, fields: Vec<(String, Expr)>) -> ExprKind {
         fold_anon_type(self, fields)
     }
+
+    fn fold_attributes(&mut self, attributes: Vec<String>) -> Vec<String> {
+        attributes
+    }
 }
 
 pub fn fold_program<F: Folder>(folder: &mut F, program: Program) -> Program {
@@ -163,6 +167,7 @@ pub fn fold_function_definition<F: Folder>(
         parameters: folder.fold_function_params(def.parameters),
         body: folder.fold_expr(def.body),
         typ: folder.fold_typ(def.typ),
+        attributes: folder.fold_attributes(def.attributes),
     }
 }
 

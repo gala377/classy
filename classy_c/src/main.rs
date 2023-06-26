@@ -1,7 +1,11 @@
+use std::collections::HashSet;
+
 use colored::*;
 
 use classy_c::{
-    ast_passes::{run_befor_type_context_passes, run_before_typechecking_passes},
+    ast_passes::{
+        gather_runtime_functions, run_befor_type_context_passes, run_before_typechecking_passes,
+    },
     code::constant_pool::ConstantPool,
     syntax::{ast, ast::Visitor, lexer::Lexer, parser::Parser},
     typecheck::{self, add_types::AddTypes, type_context::TypCtx},
@@ -59,6 +63,9 @@ fn compile(source: &str, packages: &[classy_c::package::Package]) -> TypCtx {
     let res = run_before_typechecking_passes(&tctx, res);
     let tenv = typecheck::run(&mut tctx, &res);
     let mut constant_pool = ConstantPool::new();
+    let mut gatherer = gather_runtime_functions::GatherRuntimeFunctions::new();
+    gatherer.visit(&res);
+    let runtime_functions: HashSet<String> = gatherer.res.into_iter().collect();
     for def in &res.items {
         if let ast::TopLevelItem::FunctionDefinition(fdef) = def {
             println!("\n\n\nFunction definition {:#?}", fdef.name);
@@ -68,8 +75,12 @@ fn compile(source: &str, packages: &[classy_c::package::Package]) -> TypCtx {
                 println!("{} {:?}", format!("{i:03}|").dimmed(), instr);
             }
             println!("\n\nCompiled:");
-            let compiled =
-                classy_c::emitter::compile_ir_function(&block, &tctx, &mut constant_pool);
+            let compiled = classy_c::emitter::compile_ir_function(
+                &block,
+                runtime_functions.clone(),
+                &tctx,
+                &mut constant_pool,
+            );
             classy_c::code::debug::debug_print_code(&compiled.instructions, &constant_pool);
         }
     }
