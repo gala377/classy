@@ -22,9 +22,6 @@ pub struct Linker<'vm, 'pool> {
     functions: HashMap<String, ErasedNonNull>,
 }
 
-// Ugly hack for now
-static NATIVES: &[&str] = &["print"];
-
 impl<'vm, 'pool> Linker<'vm, 'pool> {
     pub fn new(vm: &'vm mut Vm, constant_pool: &'pool ConstantPool) -> Self {
         Self {

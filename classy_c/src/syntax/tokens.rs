@@ -108,7 +108,7 @@ lazy_static! {
         use TokenType::*;
         let mut set = HashSet::new();
         macro_rules! add_tokens {
-            [$($name:ident),*$(,)?] => {
+            [$($name:expr),*$(,)?] => {
                 $(set.insert(discriminant(&$name)));*
             };
         }
@@ -121,6 +121,8 @@ lazy_static! {
             LBrace, LBracket, LParen,
             // Keywords
             Class, Where, End, Struct, Do, Else,
+
+            Attribute("a".to_owned()),
         ];
         set
     };
