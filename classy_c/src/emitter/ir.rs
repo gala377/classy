@@ -134,7 +134,9 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
 
         let mut code = Code::new();
         self.emit_instr(&mut code, OpCode::StackAlloc);
-        self.emit_word(&mut code, (self.args_len + self.locals_stack_depth) as u64);
+        // No need to allocate space for function args as those are allocated
+        // from by the caller 
+        self.emit_word(&mut code, (self.locals_stack_depth) as u64);
         let mut index = 0;
         while index < body.len() {
             let op = body[index].clone();
@@ -350,6 +352,7 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
                         OpCode::PushFalse
                     },
                 );
+                self.stack_map_add_value();
             }
             ir::Address::ConstantString(val) => {
                 let id = self
@@ -423,6 +426,7 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
             line: self.current_line,
             references: self.stack_map.iter().collect(),
         };
+        println!("Exporting stack map {:?}", entry);
         code.stack_map.push(entry);
     } 
 }

@@ -240,7 +240,7 @@ impl Heap {
         res
     }
 
-    pub fn run_gc(&mut self, for_class: NonNullPtr<Class>, stack: &mut [NonNullPtr<Frame>]) {
+    pub fn run_gc(&mut self, for_class: NonNullPtr<Class>, stack: &mut [*mut NonNullPtr<Frame>]) {
         let (new_tlab_size, new_tlab_align) = unsafe {
             let cls = &*for_class.get();
             cls.size_align()
@@ -261,7 +261,7 @@ impl Heap {
     }
 
 
-    fn scavenge_young_generation_with_stack(&mut self, stack: &mut [NonNullPtr<Frame>]) {
+    fn scavenge_young_generation_with_stack(&mut self, stack: &mut [*mut NonNullPtr<Frame>]) {
         let mut roots = Vec::new();
         self.collect_roots(&mut roots, stack);
         {
@@ -271,22 +271,16 @@ impl Heap {
         }
     }
 
-    fn collect_roots(&mut self, roots: &mut Vec<*mut ErasedPtr>, curr_thread_stack: &mut [NonNullPtr<Frame>]) {
+    fn collect_roots(&mut self, roots: &mut Vec<*mut ErasedPtr>, curr_thread_stack: &mut [*mut NonNullPtr<Frame>]) {
         let mut gc_thread_data = self.thread_manager.get_gc_data();
         gc_thread_data.remove(&std::thread::current().id());
         self.collect_handles_to_roots(roots);
-        for frame in curr_thread_stack.iter_mut() {
-            unsafe {
-                let frame = &*frame.get();
-                frame.get_references(roots);
-            }
+        for frame in curr_thread_stack {
+            roots.push(frame.cast())
         }
         for (_, stack) in gc_thread_data {
-            for frame in stack.iter() {
-                unsafe {
-                    let frame = &*frame.get();
-                    frame.get_references(roots);
-                }
+            for frame in stack {
+                roots.push(frame.cast())
             }
         }
     }

@@ -32,10 +32,16 @@ pub struct Thread {
     _permament_heap: Arc<Mutex<permament_heap::PermamentHeap>>,
     runtime: Runtime,
     thread_manager: Arc<ThreadManager>,
-    code: Code,
+    code: NonNullPtr<class::code::Code>,
     debug: bool,
     // todo: this is temporary
     native_functions: HashMap<String, fn(&mut Thread, &[Word]) -> Word>,
+}
+
+macro_rules! log {
+    ($on:expr, $fmt:literal, $($args:expr),*) => {
+        $on.log(|| format!($fmt, $($args),*))
+    };
 }
 
 impl Thread {
@@ -47,7 +53,7 @@ impl Thread {
         permament_heap: Arc<Mutex<permament_heap::PermamentHeap>>,
         initial_tlab_free_size: usize,
         max_young_space_size: usize,
-        code: Code,
+        code: NonNullPtr<class::code::Code>,
         debug: bool,
     ) -> Self {
         let id = std::thread::current().id();
@@ -116,13 +122,12 @@ impl Thread {
 
     pub fn interpert(&mut self) {
         let mut instr = 0;
-        let mut frames = vec![self
-            .alloc_frame(Arc::new(self.code.clone()))
-            .expect("Out of memory")];
-        let code_end = self.code.instructions.len();
+        let mut frames = vec![self.alloc_frame(self.code.clone()).expect("Out of memory")];
+        let code_end = unsafe { (*self.code.get()).code.instructions.len() };
+        let mut code = unsafe { &*self.code.get() };
         macro_rules! read_word {
             () => {{
-                let bytes = &self.code.instructions[instr..instr + size_of::<u64>()];
+                let bytes = &code.code.instructions[instr..instr + size_of::<u64>()];
                 assert!(bytes.len() == 8);
                 let mut address_bytes_array: [u8; 8] = [0; 8];
                 for i in 0..8 {
@@ -164,14 +169,15 @@ impl Thread {
             () => {
                 unsafe {
                     (*c_frame.get()).ip = instr;
-                    self.gc_safepoint(&frames);
+                    let frame_ptrs = frames.iter_mut().map(|f| f as *mut _).collect::<Vec<_>>();
+                    self.gc_safepoint(&frame_ptrs);
                 }
             };
         }
 
         while instr < code_end {
-            let opcode: OpCode = unsafe { (*c_frame.get()).code.instructions[instr].into() };
-            self.log(|| format!("{instr} => {opcode:?}"));
+            let opcode: OpCode = code.code.instructions[instr].into();
+            log!(self, "{} => {:?}", instr, opcode);
             match opcode {
                 OpCode::AddInteger => todo!(),
                 OpCode::AddFloat => todo!(),
@@ -203,21 +209,13 @@ impl Thread {
                     instr += OpCode::ConstLoadString.argument_size();
                 }
                 OpCode::LookUpGlobal => {
-                    // TODO: temporary so we just have something working
-                    // on the top of the stack is a pointer to string that we need to look up
                     instr += 1;
                     let address = read_word!();
-                    let name: NonNullPtr<StringInst> = unsafe { std::mem::transmute(address) };
-                    self.log(|| unsafe {
-                        let val = class::string::as_rust_str(&name);
-                        format!("vm: looking up global: {val}")
-                    });
-                    let name = unsafe { (*name.get()).as_rust_string() };
-                    let to_push = *self.native_functions.get(&name).expect("Unknown name");
-                    push!(to_push as *mut () as Word);
+                    push!(address);
                     instr += OpCode::LookUpGlobal.argument_size();
                 }
                 OpCode::Return => {
+                    log!(self, "{}", "Executing return");
                     let ret = pop!();
                     frames.pop();
                     if frames.is_empty() {
@@ -225,20 +223,69 @@ impl Thread {
                     }
                     c_frame = frames.last().unwrap().clone();
                     instr = unsafe { (*c_frame.get()).ip };
+                    code = unsafe { &*(*c_frame.get()).code.get() };
                     push!(ret);
                 }
-                OpCode::Call1 => {
-                    // TODO: temporary just so something works
-                    // Only calls rust functions now
+                OpCode::CallNative1 => {
                     safepoint!();
                     let func = pop!();
                     let arg = pop!();
-                    unsafe {
-                        let func: fn(&mut Thread, &[Word]) -> Word = std::mem::transmute(func);
-                        let res = func(self, &[arg]);
-                        push!(res);
-                    }
+                    let func = unsafe {
+                        let ptr: NonNullPtr<StringInst> = std::mem::transmute(func);
+                        let name = class::string::as_rust_str(&ptr);
+                        self.native_functions.get(name).unwrap()
+                    };
+                    let ret = func(self, &[arg]);
+                    push!(ret);
                     instr += 1;
+                }
+                OpCode::Call1 => {
+                    // TODO:
+                    // We need to figure something out for rust functions.
+                    // right now it can only write functions written by users.
+
+                    safepoint!();
+                    let func = pop!();
+                    let code_inst = unsafe {
+                        let code: Ptr<class::code::Code> = std::mem::transmute(func);
+                        if code.is_null() {
+                            panic!("Null pointer dereference");
+                        }
+                        NonNullPtr::from_ptr(code)
+                    };
+                    let mut new_frame = self.alloc_frame(code_inst);
+                    if let None = new_frame {
+                        // we need to gc
+                        log!(self, "{}", "RUNNING GC BECAUSE I CANNOT ALLOCATE THE FRAME");
+
+                        push!(func);
+                        let frame_cls = self.runtime.classes.frame.clone();
+                        unsafe { (*c_frame.get()).ip = instr };
+                        let mut frames = frames.iter_mut().map(|f| f as *mut _).collect::<Vec<_>>();
+                        self.heap.run_gc(frame_cls, &mut frames);
+                        new_frame = self.alloc_frame(code_inst);
+                        if let None = new_frame {
+                            panic!("Out of memory");
+                        }
+                        pop!();
+                    }
+                    let new_frame = new_frame.unwrap();
+                    let arg = pop!();
+                    unsafe {
+                        std::ptr::write(
+                            new_frame.get(),
+                            Frame {
+                                ip: 0,
+                                stack: vec![arg],
+                                code: code_inst,
+                            },
+                        )
+                    };
+                    unsafe { (*c_frame.get()).ip = instr + 1 };
+                    frames.push(new_frame);
+                    code = unsafe { &*code_inst.get() };
+                    instr = 0;
+                    c_frame = new_frame
                 }
                 OpCode::LastMarker => {
                     panic!("This instruction should have never been emitted")
@@ -253,7 +300,7 @@ impl Thread {
                     for _ in 0..size {
                         push!(0);
                     }
-                    self.log(|| format!("vm: allocated {size} words on the stack"));
+                    log!(self, "vm: allocated {} words on the stack", size);
                     instr += OpCode::AllocHeap.argument_size();
                 }
                 OpCode::StackAssign => {
@@ -278,6 +325,7 @@ impl Thread {
                         unsafe { self.allocate_instance(std::mem::transmute(class)) };
                     if inst.is_null() {
                         // we need to gc
+                        let mut frames = frames.iter_mut().map(|f| f as *mut _).collect::<Vec<_>>();
                         unsafe {
                             self.heap.run_gc(std::mem::transmute(class), &mut frames);
                         }
@@ -310,14 +358,23 @@ impl Thread {
                     push!(value);
                     instr += OpCode::PushOffsetDeref.argument_size();
                 }
+                OpCode::PushUnit => {
+                    push!(0);
+                    instr += 1;
+                }
                 i => todo!("Instruction not supported yet {i:?}"),
             }
         }
     }
 
-    pub fn alloc_frame(&mut self, code: Arc<Code>) -> Option<NonNullPtr<Frame>> {
+    pub fn alloc_frame(
+        &mut self,
+        code: NonNullPtr<class::code::Code>,
+    ) -> Option<NonNullPtr<Frame>> {
+        log!(self, "{}", "vm: Allocating frame");
         let frame = unsafe { self.allocate_instance::<Frame>(self.runtime.classes.frame) };
         if frame.is_null() {
+            log!(self, "{}", "COULD NOT ALLOCATE FRAME ITS NULL");
             return None;
         }
         unsafe {
@@ -338,14 +395,14 @@ impl Thread {
     }
 
     #[inline]
-    fn gc_safepoint(&mut self, stack: &[NonNullPtr<Frame>]) {
+    fn gc_safepoint(&mut self, stack: &[*mut NonNullPtr<Frame>]) {
         if self.thread_manager.should_stop_thread_for_gc() {
             self.export_gc_data(stack);
             self.thread_manager.stop_for_gc().unwrap();
         }
     }
 
-    fn export_gc_data(&mut self, stack: &[NonNullPtr<Frame>]) {
+    fn export_gc_data(&mut self, stack: &[*mut NonNullPtr<Frame>]) {
         self.thread_manager
             .update_gc_data(std::thread::current().id(), stack.into());
     }

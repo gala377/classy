@@ -146,6 +146,7 @@ pub fn debug_print_code(instrs: &Vec<u8>, cp: &constant_pool::ConstantPool) {
                 ("set_offset", vec![i.to_string()])
             }
             OpCode::LastMarker => panic!("This instruction should have never been emitted"),
+            _ => ("not implemented", vec![])
         };
         println!(
             "{}| {:20} | {}",

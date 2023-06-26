@@ -1,9 +1,7 @@
-use std::sync::Arc;
-
-use classy_c::code::{Code, GcStackMapEntry};
+use classy_c::code::GcStackMapEntry;
 
 use crate::{
-    mem::ptr::{ErasedPtr, Ptr},
+    mem::ptr::{ErasedPtr, NonNullPtr, Ptr},
     runtime::{thread::Word, trace::Tracer},
 };
 
@@ -13,7 +11,7 @@ use super::Class;
 pub struct Frame {
     pub ip: usize,
     pub stack: Vec<Word>,
-    pub code: Arc<Code>,
+    pub code: NonNullPtr<super::code::Code>,
 }
 
 impl Frame {
@@ -21,7 +19,8 @@ impl Frame {
         let ip = self.ip;
         let stack_map = {
             let mut stack_map = None;
-            for GcStackMapEntry { line, references } in self.code.stack_map.iter() {
+            let code = unsafe { &*self.code.get() };
+            for GcStackMapEntry { line, references } in code.code.stack_map.iter() {
                 if *line < ip {
                     stack_map = Some(references);
                 } else {
@@ -30,6 +29,7 @@ impl Frame {
             }
             stack_map.expect("no matching stack map")
         };
+        println!("Stack map found {:?}", stack_map);
         assert_eq!(
             self.stack.len(),
             stack_map.len(),
@@ -57,8 +57,10 @@ unsafe fn frame_trace(frame_inst: *mut (), tracer: &mut dyn Tracer) {
     let ip = frame.ip;
     let stack_map = {
         let mut stack_map = None;
-        for GcStackMapEntry { line, references } in (*frame).code.stack_map.iter() {
-            if *line < ip {
+        let code = &*frame.code.get();
+        for GcStackMapEntry { line, references } in code.code.stack_map.iter() {
+            println!("Line: {}, references: {:?}", line, references);
+            if *line <= ip {
                 stack_map = Some(references);
             } else {
                 break;
@@ -66,6 +68,9 @@ unsafe fn frame_trace(frame_inst: *mut (), tracer: &mut dyn Tracer) {
         }
         stack_map.expect("no matching stack map")
     };
+    println!("Current IP: {}", ip);
+    println!("Stack map found {:?}", stack_map);
+    println!("Stack is {:?}", frame.stack);
     assert_eq!(
         frame.stack.len(),
         stack_map.len(),

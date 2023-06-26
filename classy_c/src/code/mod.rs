@@ -125,6 +125,9 @@ pub enum OpCode {
     ///  - offset: Word
     SetOffset,
 
+    /// Hach used to call a function defined in the vm by its symbol
+    CallNative1,
+
     /// Used as the marker for the last instruction
     LastMarker,
 }
@@ -168,6 +171,7 @@ impl OpCode {
             OpCode::PushUnit => 0,
             OpCode::PushOffsetDeref => WORD,
             OpCode::SetOffset => WORD,
+            OpCode::CallNative1 => WORD,
             OpCode::LastMarker => panic!(),
         }
     }
@@ -176,7 +180,7 @@ impl OpCode {
 /// Entry for a gc stack map.
 /// Represents stack information about cells holding references
 /// to scan.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct GcStackMapEntry {
     // Line starting at which this map entry starts.
     pub line: usize,

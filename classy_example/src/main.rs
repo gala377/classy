@@ -4,16 +4,12 @@ use clap::{Parser, ValueEnum};
 
 use classy_c::{
     ast_passes::run_before_typechecking_passes,
-    code::{constant_pool::ConstantPool, Code},
+    code::constant_pool::ConstantPool,
     syntax::ast::{self, Visitor},
     typecheck::{self, add_types::AddTypes, type_context::TypCtx},
 };
 use classy_vm::{
-    mem::{
-        page::Page,
-        ptr::{NonNullPtr, Ptr},
-    },
-    runtime::thread_manager,
+    mem::{page::Page, ptr::NonNullPtr},
     vm::{self, Vm},
 };
 
@@ -64,13 +60,6 @@ fn main() {
         debug: args.debug,
     });
     match args.example {
-        Example::Allocation => {
-            for _ in 0..args.threads {
-                start_thread(&vm, &args);
-            }
-            wait_for_all_threads(vm);
-            println!("Done")
-        }
         Example::Print => {
             let source = r#"
                 type Integer {
@@ -82,26 +71,30 @@ fn main() {
 
                 main:()->()
                 main { 
-                    print "Hello world" 
-                    print "Hello world" 
-                    print "Hello world" 
-                    print "Hello world" 
-                    print "Hello world" 
-                    print "Hello world" 
-                    print "Hello world 2"
+                    print "Hello world1" 
+                    print "Hello world2" 
+                    print "Hello world3" 
+                    print "Hello world4" 
+                    print "Hello world5" 
+                    print "Hello world6" 
+                    print "Hello world7"
                     let a = type { a = "Hello"; b = 10 }
                     let b = Integer(v=10)
                     print a.a
                 }
             "#;
-            let (functions, constant_pool) = compile(&mut vm, source);
-            let mut thread = vm.create_evaluation_thread(functions["main"].clone(), &constant_pool);
+            let functions = compile(&mut vm, source);
+            let mut thread = vm.create_evaluation_thread(functions["main"].clone());
             thread.interpert();
         }
+        _ => panic!("Not implemented"),
     }
 }
 
-fn compile(vm: &mut Vm, source: &str) -> (HashMap<String, Code>, ConstantPool) {
+fn compile(
+    vm: &mut Vm,
+    source: &str,
+) -> HashMap<String, NonNullPtr<classy_vm::runtime::class::code::Code>> {
     let mut parser =
         classy_c::syntax::parser::Parser::new(classy_c::syntax::lexer::Lexer::new(source));
     let ast = parser.parse().unwrap();
@@ -127,7 +120,11 @@ fn compile(vm: &mut Vm, source: &str) -> (HashMap<String, Code>, ConstantPool) {
         }
     }
     vm.load_types(&tctx, &constant_pool);
-    (functions, constant_pool)
+    let mut functions_vec: Vec<_> = functions
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    vm.load_functions(&mut functions_vec, &constant_pool)
 }
 
 pub fn prepare_type_ctx(mut tctx: TypCtx, ast: &ast::Program) -> TypCtx {
@@ -139,51 +136,3 @@ pub fn prepare_type_ctx(mut tctx: TypCtx, ast: &ast::Program) -> TypCtx {
     tctx
 }
 
-fn wait_for_all_threads(vm: Vm) {
-    // we need to count that vm registers current thread
-    while vm.thread_manager().current_threads_count() > 1 {
-        if vm.thread_manager().should_stop_thread_for_gc() {
-            vm.thread_manager().stop_for_gc().unwrap()
-        } else {
-            std::thread::yield_now()
-        }
-    }
-}
-
-fn start_thread(vm: &Vm, args: &Args) {
-    let thread_manager = vm.thread_manager();
-    while let Err(thread_manager::StoppedForGc) =
-        thread_manager.new_thread(make_thread_loop(vm.clone(), args))
-    {
-        thread_manager.stop_for_gc().unwrap();
-    }
-}
-
-fn make_thread_loop(
-    mut vm: Vm,
-    Args {
-        allocate_integers,
-        create_handle_every,
-        ..
-    }: &Args,
-) -> impl FnOnce() + Send + 'static {
-    let allocate_integers = *allocate_integers;
-    let create_handle_every = *create_handle_every;
-    move || {
-        let mut thread =
-            vm.create_evaluation_thread(classy_c::code::Code::new(), &ConstantPool::new());
-        let runtime = vm.runtime();
-        let mut handles = Vec::new();
-        for i in 0..allocate_integers {
-            let Ptr(ptr) = unsafe { thread.allocate_instance::<isize>(runtime.classes.int) };
-            let ptr = ptr.expect("could not allocate");
-            let Some(modulo) = create_handle_every else {
-                continue;
-            };
-            if i % modulo == 0 {
-                //println!("Creating handle");
-                handles.push(unsafe { thread.create_handle(NonNullPtr::new(ptr)) });
-            }
-        }
-    }
-}

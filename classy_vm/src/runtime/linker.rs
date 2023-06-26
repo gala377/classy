@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::hash::Hash;
 use std::sync::Arc;
 
 use classy_c::code::constant_pool::ConstantPool;
@@ -5,7 +7,7 @@ use classy_c::code::{self, Code};
 use classy_c::typecheck::r#type::Type;
 use classy_c::typecheck::type_context::TypCtx;
 
-use crate::mem::ptr::NonNullPtr;
+use crate::mem::ptr::{ErasedPtr, NonNullPtr, ErasedNonNull};
 
 use crate::runtime::class::{self, Class};
 use crate::vm::Vm;
@@ -17,17 +19,61 @@ use super::UserClasses;
 pub struct Linker<'vm, 'pool> {
     vm: &'vm mut Vm,
     constant_pool: &'pool ConstantPool,
+    functions: HashMap<String, ErasedNonNull>,
 }
+
+// Ugly hack for now
+static NATIVES: &[&str] = &[
+    "print"
+];
 
 impl<'vm, 'pool> Linker<'vm, 'pool> {
     pub fn new(vm: &'vm mut Vm, constant_pool: &'pool ConstantPool) -> Self {
-        Self { vm, constant_pool }
+        Self {
+            vm,
+            constant_pool,
+            functions: HashMap::new(),
+        }
     }
 
     pub fn link_types(&mut self, tctx: &TypCtx) {
         let mut user_classes = self.allocate_user_classes_keep_symbolic_references(tctx);
         self.resolve_symbolic_references_in_classes(&mut user_classes);
         self.vm.runtime.user_classes = Arc::new(user_classes);
+    }
+
+    pub fn link_functions(&mut self, functions: &mut Vec<(String, Code)>) -> HashMap<String, ErasedNonNull> {
+        self.allocate_code_objects(functions);
+        let codes = self.functions.values().cloned().collect::<Vec<_>>();
+        for code in codes {
+            unsafe {
+                let mut code_ptr: NonNullPtr<class::code::Code> = code.clone().cast();
+                let code_inst = code_ptr.0.as_mut();
+                let code = &mut code_inst.code;
+                self.link_code(code);
+            }
+        }
+        self.functions.clone()
+    }
+
+    fn allocate_code_objects(&mut self, functions: &mut Vec<(String, Code)>) {
+        for (name, code) in functions {
+            let code_ptr = self
+                .vm
+                .permament_heap
+                .lock()
+                .unwrap()
+                .allocate_instance(self.vm.runtime.classes.code.clone());
+            let code_ptr = unsafe {
+                let code_ptr_non_null = NonNullPtr::from_ptr(code_ptr).cast::<class::code::Code>();
+                std::ptr::write(
+                    code_ptr_non_null.get(),
+                    class::code::Code { code: code.clone() },
+                );
+                code_ptr_non_null.cast()
+            };
+            self.functions.insert(name.clone(), code_ptr);
+        }
     }
 
     pub fn link_code(&mut self, code: &mut Code) {
@@ -161,13 +207,8 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
         while instr < end {
             let opcode = code::OpCode::from(code.instructions[instr]);
             instr += match opcode {
-                code::OpCode::ConstLoadString | code::OpCode::LookUpGlobal => {
-                    assert!(
-                        code::OpCode::ConstLoadString.argument_size()
-                            == code::OpCode::LookUpGlobal.argument_size()
-                    );
-                    self.replace_static_string_or_symbol(instr, code)
-                }
+                code::OpCode::ConstLoadString => self.replace_static_string_or_symbol(instr, code),
+                code::OpCode::LookUpGlobal => self.replace_symbol(instr, code),
                 code::OpCode::AllocHeap => self.replace_with_class_pointer(instr, code),
                 code::OpCode::ConstLoadFloat | code::OpCode::ConstLoadInteger => {
                     self.replace_numeric_constant(instr, code)
@@ -175,6 +216,33 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                 i => 1 + i.argument_size(),
             }
         }
+    }
+
+    fn replace_symbol(&mut self, mut instr: usize, code: &mut Code) -> usize {
+        instr += 1;
+        let index_bytes = &code.instructions[instr..instr + std::mem::size_of::<u64>()];
+        let mut index_bytes_array: [u8; 8] = [0; 8];
+        assert!(index_bytes.len() == 8);
+        for i in 0..8 {
+            index_bytes_array[i] = index_bytes[i];
+        }
+        let index = u64::from_le_bytes(index_bytes_array);
+        let function_name = self
+            .constant_pool
+            .get::<String>(index as usize)
+            .expect("checked by instruction");
+        let function_ptr = self
+            .functions
+            .get(&function_name)
+            .cloned()
+            .expect("all function should have been already allocated");
+        let fn_ptr_bytes = (function_ptr.get() as u64).to_le_bytes();
+        // overwrite the id with static pointer
+        assert!(fn_ptr_bytes.len() == std::mem::size_of::<u64>());
+        for i in 0..std::mem::size_of::<u64>() {
+            code.instructions[instr + i] = fn_ptr_bytes[i];
+        }
+        code::OpCode::LookUpGlobal.argument_size() + 1
     }
 
     fn replace_numeric_constant(&mut self, mut instr: usize, code: &mut Code) -> usize {

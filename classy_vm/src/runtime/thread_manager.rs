@@ -57,7 +57,7 @@ impl SyncBarrier {
 }
 
 pub struct ThreadGcData {
-    pub stack: Vec<NonNullPtr<Frame>>,
+    pub stack: Vec<*mut NonNullPtr<Frame>>,
     pub handle: Option<thread::JoinHandle<()>>,
 }
 
@@ -245,13 +245,13 @@ impl ThreadManager {
         Ok(())
     }
 
-    pub fn update_gc_data(&self, thread_id: ThreadId, stack: Vec<NonNullPtr<Frame>>) {
+    pub fn update_gc_data(&self, thread_id: ThreadId, stack: Vec<*mut NonNullPtr<Frame>>) {
         let mut state = self.state.lock().unwrap();
         let data = state.threads.get_mut(&thread_id).unwrap();
         data.stack = stack;
     }
 
-    pub fn get_gc_data(&self) -> HashMap<ThreadId, Vec<NonNullPtr<Frame>>> {
+    pub fn get_gc_data(&self) -> HashMap<ThreadId, Vec<*mut NonNullPtr<Frame>>> {
         let state = self.state.lock().unwrap();
         state
             .threads
@@ -260,7 +260,7 @@ impl ThreadManager {
             .collect()
     }
 
-    pub fn get_gc_data_for_thread(&self, thread_id: ThreadId) -> Vec<NonNullPtr<Frame>> {
+    pub fn get_gc_data_for_thread(&self, thread_id: ThreadId) -> Vec<*mut NonNullPtr<Frame>> {
         let state = self.state.lock().unwrap();
         state.threads.get(&thread_id).unwrap().stack.clone()
     }
