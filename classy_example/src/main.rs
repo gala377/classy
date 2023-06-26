@@ -69,9 +69,8 @@ fn main() {
                     v: Int
                 }
 
-                @runtime print: (String) -> ()
-                print(s) = ()
-
+                @runtime @empty print: (String) -> ()
+                
                 print_twice: (String) -> ()
                 print_twice(s) {
                     print(s)

@@ -177,6 +177,15 @@ impl<'source> Parser<'source> {
         let _ = self.expect_token(TokenType::Colon);
         let typ = self.parse_fn_type()?;
         let _ = self.expect_token(TokenType::Semicolon);
+        if attributes.contains(&"empty".to_owned()) {
+            return Ok(ast::FunctionDefinition {
+                name,
+                typ,
+                parameters: Vec::new(),
+                body: mk_expr(ast::ExprKind::Unit),
+                attributes,
+            });
+        }
         let name_repeated = self.parse_identifier().error(
             self,
             beg,
