@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use colored::*;
 
-use crate::typecheck::type_context::TypeId;
+use crate::typecheck::{type_context::TypeId, r#type::Type};
 
 #[derive(Clone, Debug)]
 pub enum IsRef {
@@ -137,7 +137,7 @@ pub enum Instruction {
         res: Address,
         elem_size: usize,
         count: Address,
-        typ: TypeId,
+        typ: Type,
     },
     // Return from a function
     Return(Address),

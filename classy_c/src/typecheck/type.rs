@@ -8,6 +8,7 @@ pub enum Type {
     String,
     Float,
     Unit,
+    Byte,
     Struct {
         def: TypeId,
         // maps fields to the TypeId of the type
@@ -44,9 +45,13 @@ pub enum Type {
 impl Type {
     pub fn is_ref(&self) -> Option<bool> {
         match self {
-            Type::Int | Type::UInt | Type::Bool | Type::Float | Type::Divergent | Type::Unit => {
-                Some(false)
-            }
+            Type::Int
+            | Type::UInt
+            | Type::Bool
+            | Type::Float
+            | Type::Divergent
+            | Type::Unit
+            | Type::Byte => Some(false),
 
             Type::String
             | Type::Struct { .. }
@@ -59,6 +64,17 @@ impl Type {
             Type::Fresh(_) | Type::Alias(_) | Type::ToInfere => None,
         }
     }
+
+    pub fn byte_size(&self) -> usize {
+        if self.is_ref().unwrap() {
+            return std::mem::size_of::<usize>();
+        }
+        match self {
+            Type::Bool => 1,
+            Type::Int | Type::UInt | Type::Float | Type::Unit => std::mem::size_of::<usize>(),
+            t => panic!("cannot get the size of the type {t:?}"),
+        }
+    }
 }
 
 pub trait TypeFolder: Sized {
@@ -68,6 +84,10 @@ pub trait TypeFolder: Sized {
 
     fn fold_int(&mut self) -> Type {
         Type::Int
+    }
+
+    fn fold_byte(&mut self) -> Type {
+        Type::Byte
     }
 
     fn fold_uint(&mut self) -> Type {
@@ -124,7 +144,6 @@ pub trait TypeFolder: Sized {
     }
 }
 
-
 pub fn fold_type(folder: &mut impl TypeFolder, typ: Type) -> Type {
     match typ {
         Type::Int => folder.fold_int(),
@@ -133,6 +152,7 @@ pub fn fold_type(folder: &mut impl TypeFolder, typ: Type) -> Type {
         Type::String => folder.fold_string(),
         Type::Float => folder.fold_float(),
         Type::Unit => folder.fold_unit(),
+        Type::Byte => folder.fold_byte(),
         Type::Struct { def, fields } => folder.fold_struct(def, fields),
         Type::ADT {
             def: _,

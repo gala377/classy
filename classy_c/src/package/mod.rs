@@ -222,5 +222,6 @@ fn serialize_type(tctx: &TypCtx, typ: &typecheck::r#type::Type, top_level: bool)
         typecheck::r#type::Type::Fresh(_) => {
             panic!("Fresh variables should not be present after type inference")
         }
+        _ => unimplemented!(),
     }
 }

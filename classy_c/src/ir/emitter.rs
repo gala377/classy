@@ -12,6 +12,7 @@ type Scope = HashMap<String, Address>;
 enum Lval {
     Address(Address),
     Indexed(Address, usize),
+    IndexedDynamic(Address, Address),
 }
 
 pub struct IrFunction {
@@ -136,6 +137,14 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                         self.current_block.push(Instruction::IndexSet {
                             base: addr.clone(),
                             offset: Address::ConstantInt(index as isize),
+                            value: rval,
+                        });
+                        Address::ConstantUnit
+                    }
+                    Lval::IndexedDynamic(addr, index) => {
+                        self.current_block.push(Instruction::IndexSet {
+                            base: addr.clone(),
+                            offset: index,
                             value: rval,
                         });
                         Address::ConstantUnit
@@ -312,10 +321,50 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 self.add_to_scope(name, res.clone());
                 res
             }
+            ast::ExprKind::IndexAccess { lhs, index } => {
+                let lhs_id = lhs.id;
+                let val = self.emit_expr(lhs);
+                let Type::Array(inner_t) = self.env.get(&lhs_id).unwrap() else {
+                    panic!("Should be a struct");
+                };
+                let index = self.emit_expr(index);
+                let res = self.new_temporary(match inner_t.is_ref() {
+                    None => panic!(),
+                    Some(true) => IsRef::Ref,
+                    Some(false) => IsRef::NoRef,
+                });
+                self.current_block.push(Instruction::IndexCopy {
+                    res: res.clone(),
+                    base: val,
+                    offset: index,
+                });
+                res
+            }
+            ast::ExprKind::ArrayLiteral { size, init, .. } => {
+                let Type::Array(inner_t) = self.env.get(id).unwrap() else {
+                    panic!("Should be an array");
+                };
+                let res = self.new_temporary(IsRef::Ref);
+                let size = self.emit_expr(size);
+                self.current_block.push(Instruction::AllocArray {
+                    res: res.clone(),
+                    elem_size: inner_t.byte_size(),
+                    count: size,
+                    typ: *inner_t.clone(),
+                });
+                for (i, expr) in init.iter().enumerate() {
+                    let expr_addr = self.emit_expr(expr);
+                    self.current_block.push(Instruction::IndexSet {
+                        base: res.clone(),
+                        offset: Address::ConstantInt(i as isize),
+                        value: expr_addr,
+                    })
+                }
+                res
+            }
             ast::ExprKind::AnonType { .. } => {
                 panic!("should not exist at this point")
             }
-            _ => panic!("Not implemented")
         }
     }
 
@@ -396,6 +445,15 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 };
                 let offset = fields.iter().position(|(name, _)| name == field).unwrap();
                 Lval::Indexed(val, offset)
+            }
+            ast::ExprKind::IndexAccess { lhs, index } => {
+                let lhs_id = lhs.id;
+                let lhs = self.emit_expr(lhs);
+                let Type::Array(_) = self.env.get(&lhs_id).unwrap() else {
+                    panic!("Should be an array");
+                };
+                let offset = self.emit_expr(index);
+                Lval::IndexedDynamic(lhs, offset)
             }
             _ => panic!("Not lval"),
         }

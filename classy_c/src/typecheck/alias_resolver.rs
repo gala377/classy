@@ -199,6 +199,7 @@ impl AliasResolver {
             | Type::Float
             | Type::String
             | Type::Unit
+            | Type::Byte
             | Type::ToInfere
             | Type::Generic(_)) => t.clone(),
             _ => unimplemented!(),

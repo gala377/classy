@@ -393,6 +393,7 @@ fn replace_aliases_with_map(typ: &Type, map: &HashMap<TypeId, TypeId>) -> Type {
     match typ {
         t @ (Type::UInt
         | Type::Int
+        | Type::Byte
         | Type::Bool
         | Type::Float
         | Type::String

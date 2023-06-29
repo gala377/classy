@@ -44,6 +44,8 @@ pub fn insert_primitive_types(ctx: &mut TypCtx) {
     ctx.add_type_name("String", id);
     let id = ctx.add_type(Type::Float);
     ctx.add_type_name("Float", id);
+    let id = ctx.add_type(Type::Byte);
+    ctx.add_type_name("Byte", id);
     let id = ctx.add_type(Type::Unit);
     ctx.unit_id = id;
     let id = ctx.add_type(Type::ToInfere);
