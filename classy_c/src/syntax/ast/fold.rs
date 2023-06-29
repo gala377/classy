@@ -138,7 +138,7 @@ pub trait Folder: Sized {
         attributes
     }
 
-    fn fold_array(&mut self, size: Option<Box<Expr>>, typ: Typ, init: Vec<Expr>) -> ExprKind {
+    fn fold_array(&mut self, size: Box<Expr>, typ: Typ, init: Vec<Expr>) -> ExprKind {
         fold_array(self, size, typ, init)
     }
 }
@@ -349,14 +349,11 @@ pub fn fold_anon_type(folder: &mut impl Folder, fields: Vec<(String, Expr)>) -> 
 
 pub fn fold_array(
     folder: &mut impl Folder,
-    size: Option<Box<Expr>>,
+    size: Box<Expr>,
     typ: Typ,
     init: Vec<Expr>,
 ) -> ExprKind {
-    let new_size = match size {
-        None => None,
-        Some(s) => Some(Box::new(folder.fold_expr(*s))),
-    };
+    let new_size = Box::new(folder.fold_expr(*size));
     let new_t = folder.fold_typ(typ);
     let new_init = init.into_iter().map(|e| folder.fold_expr(e)).collect();
     ExprKind::ArrayLiteral {

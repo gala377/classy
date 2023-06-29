@@ -797,9 +797,16 @@ impl<'source> Parser<'source> {
             }
             TokenType::Array => {
                 self.lexer.advance();
-                let _ = self.expect_token(TokenType::LBracket);
-                let size = self.parse_expr();
-                let _ = self.expect_token(TokenType::RBracket);
+                let size = if let Ok(_) = self.expect_token(TokenType::LBracket) {
+                    let size = self.parse_expr();
+                    let _ = self.expect_token(TokenType::RBracket);
+                    match size {
+                        Ok(e) => Some(Box::new(e)),
+                        Err(_) => None,
+                    }
+                } else {
+                    None
+                };
                 let t = self.parse_type();
                 let init = if let Ok(_) = self.match_token(TokenType::LBrace) {
                     let init = self.parse_delimited(Self::parse_expr, TokenType::Comma);
@@ -809,10 +816,9 @@ impl<'source> Parser<'source> {
                     vec![]
                 };
                 Ok(mk_expr(ast::ExprKind::ArrayLiteral {
-                    size: match size {
-                        Ok(e) => Some(Box::new(e)),
-                        Err(_) => None,
-                    },
+                    size: size.unwrap_or_else(|| {
+                        Box::new(mk_expr(ast::ExprKind::IntConst(init.len() as isize)))
+                    }),
                     typ: match t {
                         Ok(t) => t,
                         Err(_) => ast::Typ::ToInfere,

@@ -174,7 +174,7 @@ pub enum ExprKind {
     },
     ArrayLiteral {
         typ: Typ,
-        size: Option<Box<Expr>>,
+        size: Box<Expr>,
         init: Vec<Expr>,
     },
 }

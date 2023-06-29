@@ -357,10 +357,7 @@ impl Inference {
             ast::ExprKind::ArrayLiteral { typ, size, init } => {
                 let array_t = self.fresh_type();
                 self.env.insert(id, array_t.clone());
-                let size_t = match size {
-                    None => Type::Int,
-                    Some(size) => self.infer_in_expr(size),
-                };
+                let size_t = self.infer_in_expr(size);
                 self.constraints.push(Constraint::Eq(size_t, Type::Int));
                 let array_inner_t = match typ {
                     ast::Typ::ToInfere => self.fresh_type(),

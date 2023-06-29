@@ -100,7 +100,7 @@ pub trait Visitor<'ast>: Sized {
     fn visit_float_const(&mut self, _node: f64) {}
     fn visit_unit(&mut self) {}
 
-    fn visit_array(&mut self, size: &'ast Option<Box<ast::Expr>>, typ: &'ast ast::Typ, init: &'ast [ast::Expr]) {
+    fn visit_array(&mut self, size: &'ast Box<ast::Expr>, typ: &'ast ast::Typ, init: &'ast [ast::Expr]) {
         walk_array(self, size, typ, init)
     }
 }
@@ -307,12 +307,9 @@ pub fn walk_anon_type<'ast, V: Visitor<'ast>>(v: &mut V, fields: &'ast [(String,
     }
 }
 
-pub fn walk_array<'ast, V: Visitor<'ast>>(v: &mut V, size: &'ast Option<Box<ast::Expr>>, typ: &'ast ast::Typ, init: &'ast [ast::Expr]) {
+pub fn walk_array<'ast, V: Visitor<'ast>>(v: &mut V, size: &'ast Box<ast::Expr>, typ: &'ast ast::Typ, init: &'ast [ast::Expr]) {
     v.visit_typ(typ);
-    match size {
-        Some(size) => v.visit_expr(size),
-        None => {}
-    }
+    v.visit_expr(size);
     for expr in init {
         v.visit_expr(expr);
     }
