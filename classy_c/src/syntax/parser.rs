@@ -797,7 +797,7 @@ impl<'source> Parser<'source> {
             }
             TokenType::Array => {
                 self.lexer.advance();
-                let size = if let Ok(_) = self.expect_token(TokenType::LBracket) {
+                let size = if let Ok(_) = self.match_token(TokenType::LBracket) {
                     let size = self.parse_expr();
                     let _ = self.expect_token(TokenType::RBracket);
                     match size {

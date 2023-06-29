@@ -687,7 +687,7 @@ mod tests {
 
             main: () -> ()
             main {
-                let arr = array[0]{1, 2}
+                let arr = array{1, 2}
                 is_arr arr
             }
         "#;
