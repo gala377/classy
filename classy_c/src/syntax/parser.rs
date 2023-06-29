@@ -654,11 +654,11 @@ impl<'source> Parser<'source> {
         let mut lhs = self.parse_term()?;
         loop {
             if let Ok(_) = self.match_token(TokenType::LBracket) {
-                let index  =
-                    self.parse_expr()
-                        .error(self, beg, "Expected expression on access")?;
+                let index = self
+                    .parse_expr()
+                    .error(self, beg, "Expected expression on access")?;
                 let _ = self.expect_token(TokenType::RBracket);
-                lhs = mk_expr(ast::ExprKind::IndexAccess  {
+                lhs = mk_expr(ast::ExprKind::IndexAccess {
                     lhs: Box::new(lhs),
                     index: Box::new(index),
                 });
@@ -678,7 +678,6 @@ impl<'source> Parser<'source> {
         }
         Ok(lhs)
     }
-
 
     fn parse_term(&mut self) -> ParseRes<ast::Expr> {
         let beg = self.curr_pos();

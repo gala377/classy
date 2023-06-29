@@ -368,12 +368,7 @@ pub fn fold_array(
     }
 }
 
-
-pub fn fold_index_access(
-    folder: &mut impl Folder,
-    lhs: Expr,
-    index: Expr,
-) -> ExprKind {
+pub fn fold_index_access(folder: &mut impl Folder, lhs: Expr, index: Expr) -> ExprKind {
     let lhs = Box::new(folder.fold_expr(lhs));
     let index = Box::new(folder.fold_expr(index));
     ExprKind::IndexAccess { lhs, index }

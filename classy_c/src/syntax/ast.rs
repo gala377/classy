@@ -180,7 +180,7 @@ pub enum ExprKind {
     IndexAccess {
         lhs: Box<Expr>,
         index: Box<Expr>,
-    }
+    },
 }
 
 #[derive(Debug, Clone)]

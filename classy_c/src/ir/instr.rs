@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use colored::*;
 
-use crate::typecheck::{type_context::TypeId, r#type::Type};
+use crate::typecheck::{r#type::Type, type_context::TypeId};
 
 #[derive(Clone, Debug)]
 pub enum IsRef {
@@ -201,7 +201,11 @@ impl Debug for Instruction {
                 elem_size,
                 count,
                 typ,
-            } => write!(f, "{res:?} = {}[{count:?}; {elem_size}; {typ:?}]", "array".bold().green()),
+            } => write!(
+                f,
+                "{res:?} = {}[{count:?}; {elem_size}; {typ:?}]",
+                "array".bold().green()
+            ),
             Self::Return(arg0) => write!(f, "{} {arg0:?}", "return".bold().green()),
         }
     }

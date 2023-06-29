@@ -369,7 +369,8 @@ impl Inference {
                 ));
                 let init_types: Vec<_> = init.iter().map(|expr| self.infer_in_expr(expr)).collect();
                 for t in init_types {
-                    self.constraints.push(Constraint::Eq(t, array_inner_t.clone()));
+                    self.constraints
+                        .push(Constraint::Eq(t, array_inner_t.clone()));
                 }
                 array_t
             }
@@ -387,7 +388,7 @@ impl Inference {
                     Type::Array(Box::new(inner_t.clone())),
                 ));
                 inner_t
-            },
+            }
         }
     }
 
@@ -669,7 +670,6 @@ mod tests {
         "#;
         run_typechecker(source)
     }
-
 
     #[test]
     #[should_panic]

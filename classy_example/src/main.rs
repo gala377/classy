@@ -3,8 +3,8 @@ use std::{
     mem::size_of,
 };
 
-use colored::Colorize;
 use clap::{Parser, ValueEnum};
+use colored::Colorize;
 
 use classy_c::{
     ast_passes::run_before_typechecking_passes,
