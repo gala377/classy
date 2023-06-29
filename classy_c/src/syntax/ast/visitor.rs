@@ -99,6 +99,10 @@ pub trait Visitor<'ast>: Sized {
     fn visit_string_const(&mut self, _node: &'ast str) {}
     fn visit_float_const(&mut self, _node: f64) {}
     fn visit_unit(&mut self) {}
+
+    fn visit_array(&mut self, size: &'ast Option<Box<ast::Expr>>, typ: &'ast ast::Typ, init: &'ast [ast::Expr]) {
+        walk_array(self, size, typ, init)
+    }
 }
 
 pub fn walk_program<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::Program) {
@@ -177,6 +181,7 @@ pub fn walk_expr_kind<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::ExprKi
         }
         ast::ExprKind::BoolConst(val) => v.visit_bool_const(*val),
         ast::ExprKind::AnonType { fields } => v.visit_anon_type(fields),
+        ast::ExprKind::ArrayLiteral { typ, size, init } => v.visit_array(size, typ, init),
     }
 }
 
@@ -298,6 +303,17 @@ pub fn walk_function_def<'ast, V: Visitor<'ast>>(v: &mut V, def: &'ast ast::Func
 pub fn walk_anon_type<'ast, V: Visitor<'ast>>(v: &mut V, fields: &'ast [(String, ast::Expr)]) {
     for (name, expr) in fields {
         v.visit_name(name);
+        v.visit_expr(expr);
+    }
+}
+
+pub fn walk_array<'ast, V: Visitor<'ast>>(v: &mut V, size: &'ast Option<Box<ast::Expr>>, typ: &'ast ast::Typ, init: &'ast [ast::Expr]) {
+    v.visit_typ(typ);
+    match size {
+        Some(size) => v.visit_expr(size),
+        None => {}
+    }
+    for expr in init {
         v.visit_expr(expr);
     }
 }

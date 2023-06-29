@@ -172,6 +172,11 @@ pub enum ExprKind {
     AnonType {
         fields: Vec<(String, Expr)>,
     },
+    ArrayLiteral {
+        typ: Typ,
+        size: Option<Box<Expr>>,
+        init: Vec<Expr>,
+    },
 }
 
 #[derive(Debug, Clone)]
