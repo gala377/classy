@@ -141,6 +141,10 @@ pub trait Folder: Sized {
     fn fold_array(&mut self, size: Box<Expr>, typ: Typ, init: Vec<Expr>) -> ExprKind {
         fold_array(self, size, typ, init)
     }
+
+    fn fold_index_access(&mut self, lhs: Expr, index: Expr) -> ExprKind {
+        fold_index_access(self, lhs, index)
+    }
 }
 
 pub fn fold_program<F: Folder>(folder: &mut F, program: Program) -> Program {
@@ -222,6 +226,7 @@ pub fn fold_expr_kind(folder: &mut impl Folder, expr: ExprKind) -> ExprKind {
         ExprKind::BoolConst(val) => ExprKind::BoolConst(folder.fold_bool_const(val)),
         ExprKind::AnonType { fields } => folder.fold_anon_type(fields),
         ExprKind::ArrayLiteral { typ, size, init } => folder.fold_array(size, typ, init),
+        ExprKind::IndexAccess { lhs, index } => folder.fold_index_access(*lhs, *index),
     }
 }
 
@@ -361,4 +366,15 @@ pub fn fold_array(
         size: new_size,
         init: new_init,
     }
+}
+
+
+pub fn fold_index_access(
+    folder: &mut impl Folder,
+    lhs: Expr,
+    index: Expr,
+) -> ExprKind {
+    let lhs = Box::new(folder.fold_expr(lhs));
+    let index = Box::new(folder.fold_expr(index));
+    ExprKind::IndexAccess { lhs, index }
 }

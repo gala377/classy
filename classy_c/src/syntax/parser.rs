@@ -412,7 +412,7 @@ impl<'source> Parser<'source> {
 
     fn parse_fn_call(&mut self) -> ParseRes<ast::Expr> {
         let beg = self.curr_pos();
-        let func = self.parse_access()?;
+        let func = self.parse_postfix_operators()?;
         let args: Vec<ast::Expr> = if let Ok(_) = self.match_token(TokenType::LParen) {
             // this is a function call with arguments passed in parentheses
             // or a function call in a special form:
@@ -526,7 +526,7 @@ impl<'source> Parser<'source> {
             // form of func arg
             // if there is no name, rbrace following then its just a normal expression
             let mut check_for_trailing_lambda = false;
-            let mut args = match self.parse_access().map(|e| e.kind) {
+            let mut args = match self.parse_postfix_operators().map(|e| e.kind) {
                 // no name or brace following, just a normal expression
                 Err(ParseErr::WrongRule) => return Ok(func),
                 Err(e) => return Err(e),
@@ -649,20 +649,36 @@ impl<'source> Parser<'source> {
         }))
     }
 
-    fn parse_access(&mut self) -> ParseRes<ast::Expr> {
+    fn parse_postfix_operators(&mut self) -> ParseRes<ast::Expr> {
         let beg = self.curr_pos();
         let mut lhs = self.parse_term()?;
-        while let Ok(_) = self.match_token(TokenType::Dot) {
-            let field =
-                self.parse_identifier()
-                    .error(self, beg, "A field has to be an indentifier")?;
-            lhs = mk_expr(ast::ExprKind::Access {
-                val: Box::new(lhs),
-                field,
-            });
+        loop {
+            if let Ok(_) = self.match_token(TokenType::LBracket) {
+                let index  =
+                    self.parse_expr()
+                        .error(self, beg, "Expected expression on access")?;
+                let _ = self.expect_token(TokenType::RBracket);
+                lhs = mk_expr(ast::ExprKind::IndexAccess  {
+                    lhs: Box::new(lhs),
+                    index: Box::new(index),
+                });
+                continue;
+            }
+            if let Ok(_) = self.match_token(TokenType::Dot) {
+                let field =
+                    self.parse_identifier()
+                        .error(self, beg, "A field has to be an indentifier")?;
+                lhs = mk_expr(ast::ExprKind::Access {
+                    val: Box::new(lhs),
+                    field,
+                });
+                continue;
+            }
+            break;
         }
         Ok(lhs)
     }
+
 
     fn parse_term(&mut self) -> ParseRes<ast::Expr> {
         let beg = self.curr_pos();

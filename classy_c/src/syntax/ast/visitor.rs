@@ -91,6 +91,14 @@ pub trait Visitor<'ast>: Sized {
         walk_anon_type(self, fields);
     }
 
+    fn visit_array(&mut self, size: &'ast Box<ast::Expr>, typ: &'ast ast::Typ, init: &'ast [ast::Expr]) {
+        walk_array(self, size, typ, init)
+    }
+
+    fn visit_index_access(&mut self, lhs: &'ast ast::Expr, index: &'ast ast::Expr) {
+        walk_index_access(self, lhs, index)
+    }
+
     // leaf nodes
     fn visit_typ(&mut self, _node: &'ast ast::Typ) {}
     fn visit_name(&mut self, _node: &'ast str) {}
@@ -100,9 +108,6 @@ pub trait Visitor<'ast>: Sized {
     fn visit_float_const(&mut self, _node: f64) {}
     fn visit_unit(&mut self) {}
 
-    fn visit_array(&mut self, size: &'ast Box<ast::Expr>, typ: &'ast ast::Typ, init: &'ast [ast::Expr]) {
-        walk_array(self, size, typ, init)
-    }
 }
 
 pub fn walk_program<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::Program) {
@@ -182,6 +187,7 @@ pub fn walk_expr_kind<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::ExprKi
         ast::ExprKind::BoolConst(val) => v.visit_bool_const(*val),
         ast::ExprKind::AnonType { fields } => v.visit_anon_type(fields),
         ast::ExprKind::ArrayLiteral { typ, size, init } => v.visit_array(size, typ, init),
+        ast::ExprKind::IndexAccess { lhs, index } => v.visit_index_access(lhs, index),
     }
 }
 
@@ -313,4 +319,9 @@ pub fn walk_array<'ast, V: Visitor<'ast>>(v: &mut V, size: &'ast Box<ast::Expr>,
     for expr in init {
         v.visit_expr(expr);
     }
+}
+
+pub fn walk_index_access<'ast, V: Visitor<'ast>>(v: &mut V, lhs: &'ast ast::Expr, index: &'ast ast::Expr) {
+    v.visit_expr(lhs);
+    v.visit_expr(index);
 }

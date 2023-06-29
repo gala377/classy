@@ -376,6 +376,18 @@ impl Inference {
             ast::ExprKind::AnonType { .. } => {
                 panic!("There should be no anon types when type checking")
             }
+            ast::ExprKind::IndexAccess { lhs, index } => {
+                let inner_t = self.fresh_type();
+                self.env.insert(id, inner_t.clone());
+                let lhs_t = self.infer_in_expr(lhs);
+                let index_t = self.infer_in_expr(index);
+                self.constraints.push(Constraint::Eq(index_t, Type::Int));
+                self.constraints.push(Constraint::Eq(
+                    lhs_t,
+                    Type::Array(Box::new(inner_t.clone())),
+                ));
+                inner_t
+            },
         }
     }
 
@@ -689,6 +701,54 @@ mod tests {
             main {
                 let arr = array{1, 2}
                 is_arr arr
+            }
+        "#;
+        run_typechecker(source)
+    }
+
+    #[test]
+    fn infer_type_based_on_access_call() {
+        let source = r#"
+            is_int: (Int) -> ()
+            is_int i = ()
+
+            main: () -> ()
+            main {
+                let arr = array[1]
+                is_int arr[0]
+            }
+        "#;
+        run_typechecker(source)
+    }
+
+    #[test]
+    #[should_panic]
+    fn infer_type_based_on_access_assign_rhs() {
+        let source = r#"
+            is_int: (Int) -> ()
+            is_int i = ()
+
+            main: () -> ()
+            main {
+                let arr = array[1]
+                let a: String = arr[0]
+                is_int arr[0]
+            }
+        "#;
+        run_typechecker(source)
+    }
+
+    #[test]
+    fn infer_type_based_on_access_assign_lhs() {
+        let source = r#"
+            is_int: (Int) -> ()
+            is_int i = ()
+
+            main: () -> ()
+            main {
+                let arr = array[1]
+                arr[0] = 1
+                is_int arr[0]
             }
         "#;
         run_typechecker(source)

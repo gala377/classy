@@ -9,6 +9,7 @@ impl VerifyLvalues {
             ast::ExprKind::Name(_) => (),
             ast::ExprKind::Access { .. } => (),
             ast::ExprKind::TypedExpr { expr, .. } => self.verify_lvalues(&expr.kind),
+            ast::ExprKind::IndexAccess { .. } => (),
             e => panic!("Cannot assign to {e:?}"),
         };
     }

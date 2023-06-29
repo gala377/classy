@@ -177,6 +177,10 @@ pub enum ExprKind {
         size: Box<Expr>,
         init: Vec<Expr>,
     },
+    IndexAccess {
+        lhs: Box<Expr>,
+        index: Box<Expr>,
+    }
 }
 
 #[derive(Debug, Clone)]
