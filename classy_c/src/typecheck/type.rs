@@ -118,7 +118,12 @@ pub trait TypeFolder: Sized {
     fn fold_struct(&mut self, def: usize, fields: Vec<(String, Type)>) -> Type {
         fold_struct(self, def, fields)
     }
+
+    fn fold_array(&mut self, arr_t: Type) -> Type {
+        fold_array(self, arr_t)
+    }
 }
+
 
 pub fn fold_type(folder: &mut impl TypeFolder, typ: Type) -> Type {
     match typ {
@@ -135,7 +140,7 @@ pub fn fold_type(folder: &mut impl TypeFolder, typ: Type) -> Type {
         } => todo!(),
         Type::Function { args, ret } => folder.fold_function(args, *ret),
         Type::Tuple(types) => folder.fold_tuple(types),
-        Type::Array(_) => todo!(),
+        Type::Array(inner) => folder.fold_array(*inner),
         Type::Alias(for_type) => folder.fold_alias(for_type),
         Type::Divergent => folder.fold_divergent(),
         Type::ToInfere => folder.fold_to_infere(),
@@ -165,4 +170,8 @@ pub fn fold_struct(folder: &mut impl TypeFolder, def: usize, fields: Vec<(String
         .map(|(name, t)| (name, folder.fold_type(t)))
         .collect();
     Type::Struct { def, fields }
+}
+
+pub fn fold_array(folder: &mut impl TypeFolder, arr_t: Type) -> Type {
+    Type::Array(Box::new(folder.fold_type(arr_t)))
 }

@@ -241,6 +241,21 @@ fn resolve_type(
         ast::Typ::ToInfere => Type::Alias(to_infere_id),
         // todo: for other types like a function or an array, we actually
         // need to create them first.
+        ast::Typ::Array(inner) => {
+            let resolved = resolve_type(
+                names,
+                definitions,
+                next_id,
+                unit_id,
+                to_infere_id,
+                prefex,
+                inner,
+            );
+            let id = *next_id;
+            *next_id += 1;
+            definitions.insert(id, Type::Array(Box::new(resolved)));
+            Type::Alias(id)
+        }
         _ => unimplemented!(),
     }
 }
@@ -416,6 +431,7 @@ fn replace_aliases_with_map(typ: &Type, map: &HashMap<TypeId, TypeId>) -> Type {
             prefex: prefex.clone(),
             typ: Box::new(replace_aliases_with_map(typ, map)),
         },
+        Type::Array(inner) => Type::Array(Box::new(replace_aliases_with_map(inner, map))),
         _ => unimplemented!(),
     }
 }

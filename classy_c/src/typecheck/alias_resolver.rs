@@ -192,6 +192,7 @@ impl AliasResolver {
                 prefex: prefex.clone(),
                 typ: Box::new(self.resolve_shallow_aliases_in_type(ctx, typ)),
             },
+            Type::Array(t) => Type::Array(Box::new(self.resolve_shallow_aliases_in_type(ctx, t))),
             t @ (Type::UInt
             | Type::Int
             | Type::Bool

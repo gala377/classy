@@ -354,6 +354,28 @@ impl Inference {
                 self.scope.borrow_mut().add_variable(name, let_t.clone());
                 Type::Unit
             }
+            ast::ExprKind::ArrayLiteral { typ, size, init } => {
+                let array_t = self.fresh_type();
+                self.env.insert(id, array_t.clone());
+                let size_t = match size {
+                    None => Type::Int,
+                    Some(size) => self.infer_in_expr(size),
+                };
+                self.constraints.push(Constraint::Eq(size_t, Type::Int));
+                let array_inner_t = match typ {
+                    ast::Typ::ToInfere => self.fresh_type(),
+                    t => self.ast_type_to_type(&self.scope.borrow(), t),
+                };
+                self.constraints.push(Constraint::Eq(
+                    array_t.clone(),
+                    Type::Array(Box::new(array_inner_t.clone())),
+                ));
+                let init_types: Vec<_> = init.iter().map(|expr| self.infer_in_expr(expr)).collect();
+                for t in init_types {
+                    self.constraints.push(Constraint::Eq(t, array_inner_t.clone()));
+                }
+                array_t
+            }
             ast::ExprKind::AnonType { .. } => {
                 panic!("There should be no anon types when type checking")
             }
@@ -604,6 +626,72 @@ mod tests {
             main {
                 let anon = type { a = type { b = type { c = "Hello" } } }
                 is_string anon.a.b.c
+            }
+        "#;
+        run_typechecker(source)
+    }
+
+    #[test]
+    fn check_typechecking_arrays_with_externally_provided_type() {
+        let source = r#"
+            is_arr: ([Int]) -> ()
+            is_arr a = ()
+
+            main: () -> ()
+            main {
+                let arr = array[0]Int
+                is_arr arr
+            }
+        "#;
+        run_typechecker(source)
+    }
+
+    #[test]
+    fn check_typechecking_arrays_with_type_inferred_by_call() {
+        let source = r#"
+            is_arr: ([Int]) -> ()
+            is_arr a = ()
+
+            main: () -> ()
+            main {
+                let arr = array[0]
+                is_arr arr
+            }
+        "#;
+        run_typechecker(source)
+    }
+
+
+    #[test]
+    #[should_panic]
+    fn check_typechecking_fails_arrays_with_assigned_typed() {
+        let source = r#"
+            is_arr: ([Int]) -> ()
+            is_arr a = ()
+
+            is_arr_2: ([String]) -> ()
+            is_arr_2 a = ()
+
+            main: () -> ()
+            main {
+                let arr = array[0]
+                is_arr arr
+                is_arr_2 arr 
+            }
+        "#;
+        run_typechecker(source)
+    }
+
+    #[test]
+    fn check_array_with_type_by_elements() {
+        let source = r#"
+            is_arr: ([Int]) -> ()
+            is_arr a = ()
+
+            main: () -> ()
+            main {
+                let arr = array[0]{1, 2}
+                is_arr arr
             }
         "#;
         run_typechecker(source)

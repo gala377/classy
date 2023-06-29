@@ -315,6 +315,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
             ast::ExprKind::AnonType { .. } => {
                 panic!("should not exist at this point")
             }
+            _ => panic!("Not implemented")
         }
     }
 

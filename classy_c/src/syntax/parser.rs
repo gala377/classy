@@ -309,6 +309,12 @@ impl<'source> Parser<'source> {
                 self.lexer.advance();
                 Ok(ast::Typ::Name(name))
             }
+            TokenType::LBracket => {
+                self.lexer.advance();
+                let inner_t = self.parse_type()?;
+                self.expect_token(TokenType::RBracket)?;
+                Ok(ast::Typ::Array(Box::new(inner_t)))
+            }
             TokenType::LParen => {
                 self.lexer.advance();
                 let inner_t = match self.parse_type() {
@@ -795,9 +801,9 @@ impl<'source> Parser<'source> {
                 let size = self.parse_expr();
                 let _ = self.expect_token(TokenType::RBracket);
                 let t = self.parse_type();
-                let init = if let Ok(_) = self.match_token(TokenType::LParen) {
+                let init = if let Ok(_) = self.match_token(TokenType::LBrace) {
                     let init = self.parse_delimited(Self::parse_expr, TokenType::Comma);
-                    let _ = self.expect_token(TokenType::RParen);
+                    let _ = self.expect_token(TokenType::RBrace);
                     init
                 } else {
                     vec![]

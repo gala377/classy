@@ -95,6 +95,9 @@ impl<'ctx> ConstraintSolver<'ctx> {
                     constraints.push(Constraint::Eq(a1.clone(), a2.clone()));
                 }
             }
+            Constraint::Eq(Type::Array(t_1), Type::Array(t_2)) => {
+                constraints.push(Constraint::Eq(*t_1, *t_2));
+            }
             Constraint::HasField { t, field, of_type } => match t {
                 Type::Struct { fields, .. } => {
                     let f = fields
