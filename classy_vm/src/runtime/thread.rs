@@ -25,6 +25,8 @@ use crate::{
 
 use super::class::frame::Frame;
 
+type RuntimeFn = fn(&mut Thread, &mut [NonNullPtr<Frame>], &[Word]) -> Word;
+
 pub type Word = u64;
 
 pub struct Thread {
@@ -35,7 +37,7 @@ pub struct Thread {
     code: NonNullPtr<class::code::Code>,
     debug: bool,
     // todo: this is temporary
-    native_functions: HashMap<String, fn(&mut Thread, &[Word]) -> Word>,
+    native_functions: HashMap<String, RuntimeFn>,
 }
 
 macro_rules! log {
@@ -75,7 +77,11 @@ impl Thread {
             debug,
             native_functions: {
                 let mut m = HashMap::new();
-                fn native_print(_: &mut Thread, args: &[Word]) -> Word {
+                fn native_print(
+                    _: &mut Thread,
+                    _: &mut [NonNullPtr<Frame>],
+                    args: &[Word],
+                ) -> Word {
                     if args.len() != 1 {
                         panic!("print accepts only one argument");
                     }
@@ -86,10 +92,40 @@ impl Thread {
                     }
                     return 0;
                 }
-                m.insert(
-                    "print".to_owned(),
-                    native_print as fn(&mut Thread, &[Word]) -> Word,
-                );
+                fn concat_string(
+                    t: &mut Thread,
+                    stack: &mut [NonNullPtr<Frame>],
+                    args: &[Word],
+                ) -> Word {
+                    assert_eq!(args.len(), 2);
+                    let str1_ptr: NonNullPtr<StringInst> = unsafe { std::mem::transmute(args[0]) };
+                    let str2_ptr: NonNullPtr<StringInst> = unsafe { std::mem::transmute(args[1]) };
+                    let s1_len = unsafe { (*str1_ptr.header().as_ptr()).data };
+                    let s2_len = unsafe { (*str2_ptr.header().as_ptr()).data };
+                    let mut res = t.allocate_string(s1_len + s2_len);
+                    if res.is_none() {
+                        let mut frames = stack.iter_mut().map(|f| f as *mut _).collect::<Vec<_>>();
+                        t.heap.run_gc(t.runtime.classes.string.class(), &mut frames);
+                        res = t.allocate_string(s1_len + s2_len);
+                        if res.is_none() {
+                            panic!("out of memory")
+                        }
+                    }
+                    let Some(res) = res else {
+                        panic!("unreachable");
+                    };
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(str1_ptr.get(), res.get(), s1_len);
+                        std::ptr::copy_nonoverlapping(
+                            str2_ptr.get(),
+                            res.get().add(s1_len),
+                            s2_len,
+                        );
+                        std::mem::transmute(res)
+                    }
+                }
+                m.insert("print".to_owned(), native_print as RuntimeFn);
+                m.insert("concat_str".to_owned(), concat_string as RuntimeFn);
                 m
             },
         }
@@ -230,8 +266,8 @@ impl Thread {
                     safepoint!();
                     let func = pop!();
                     let arg = pop!();
-                    let func: fn(&mut Thread, &[u64]) -> u64 = unsafe { std::mem::transmute(func) };
-                    let ret = func(self, &[arg]);
+                    let func: RuntimeFn = unsafe { std::mem::transmute(func) };
+                    let ret = func(self, &mut frames, &[arg]);
                     push!(ret);
                     instr += 1;
                 }
@@ -372,6 +408,14 @@ impl Thread {
                 i => todo!("Instruction not supported yet {i:?}"),
             }
         }
+    }
+
+    pub fn allocate_string(&mut self, size: usize) -> Option<NonNullPtr<StringInst>> {
+        let s = self.heap.allocate_array(self.runtime.classes.byte, size);
+        if s.is_null() {
+            return None;
+        }
+        Some(NonNullPtr::from_ptr(unsafe { s.cast() }))
     }
 
     pub fn alloc_frame(
