@@ -172,6 +172,7 @@ dependencies = [
  "clap",
  "classy_c",
  "classy_vm",
+ "colored",
 ]
 
 [[package]]

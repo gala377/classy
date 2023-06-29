@@ -3,6 +3,7 @@ use std::{
     mem::size_of,
 };
 
+use colored::Colorize;
 use clap::{Parser, ValueEnum};
 
 use classy_c::{
@@ -85,7 +86,8 @@ fn main() {
                     print_twice "Hello macarena"
                     let a = type { a = "Hello"; b = 10 }
                     let b = Integer(v=10)
-                    print a.a
+                    let arr = array{"a", "b", "c", "d"}
+                    print arr[0]
                 }
             "#;
             let functions = compile(&mut vm, source);
@@ -119,14 +121,17 @@ fn compile(
         if let ast::TopLevelItem::FunctionDefinition(fdef) = def {
             let emmiter = classy_c::ir::Emitter::new(&tctx, &tenv);
             let block = emmiter.emit_fn(fdef);
-
+            println!("\n\n\nFunction definition {:#?}", fdef.name);
+            for (i, instr) in block.body.iter().enumerate() {
+                println!("{} {:?}", format!("{i:03}|").dimmed(), instr);
+            }
             let compiled = classy_c::emitter::compile_ir_function(
                 &block,
                 runtime_functions.clone(),
                 &tctx,
                 &mut constant_pool,
             );
-            println!("\n\n\nFunction definition {:#?}", fdef.name);
+            println!("\n");
             classy_c::code::debug::debug_print_code(&compiled.instructions, &constant_pool);
             functions.insert(fdef.name.clone(), compiled);
         }

@@ -201,13 +201,7 @@ impl Debug for Instruction {
                 elem_size,
                 count,
                 typ,
-            } => f
-                .debug_struct("AllocArray")
-                .field("res", res)
-                .field("elem_size", elem_size)
-                .field("count", count)
-                .field("typ", typ)
-                .finish(),
+            } => write!(f, "{res:?} = {}[{count:?}; {elem_size}; {typ:?}]", "array".bold().green()),
             Self::Return(arg0) => write!(f, "{} {arg0:?}", "return".bold().green()),
         }
     }
