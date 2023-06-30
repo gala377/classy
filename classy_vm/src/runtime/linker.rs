@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
 use std::sync::Arc;
-use std::thread::panicking;
+
 
 use classy_c::code::constant_pool::ConstantPool;
 use classy_c::code::{self, Code};
-use classy_c::ir::Op;
+
 use classy_c::typecheck::r#type::Type;
 use classy_c::typecheck::type_context::TypCtx;
 
@@ -16,7 +16,7 @@ use crate::vm::Vm;
 
 use crate::mem::ObjectAllocator;
 
-use super::class::array::mk_array_cls;
+
 use super::UserClasses;
 
 pub struct Linker<'vm, 'pool> {

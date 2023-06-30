@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use colored::*;
 
-use crate::typecheck::{r#type::Type, type_context::TypeId};
+use crate::typecheck::{type_context::TypeId};
 
 #[derive(Clone, Debug)]
 pub enum IsRef {
