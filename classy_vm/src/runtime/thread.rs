@@ -11,7 +11,7 @@ use classy_c::code::OpCode;
 use crate::{
     mem::{
         handle::Handle,
-        heap::{self, Heap, Options, SemiSpace},
+        heap::{self, Heap, SemiSpace},
         permament_heap,
         ptr::{NonNullPtr, Ptr},
         ObjectAllocator,
