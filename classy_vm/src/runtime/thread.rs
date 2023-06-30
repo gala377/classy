@@ -241,8 +241,6 @@ impl Thread {
             let opcode: OpCode = code.code.instructions[instr].into();
             log!(self, "{} => {:?}", instr, opcode);
             match opcode {
-                OpCode::AddInteger => todo!(),
-                OpCode::AddFloat => todo!(),
                 OpCode::ConstLoadFloat => {
                     instr += 1;
                     let word = read_word!();
