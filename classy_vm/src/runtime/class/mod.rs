@@ -42,13 +42,6 @@ impl Class {
         (self.instance_size, self.instance_align)
     }
 
-    pub fn array_element_type(&self) -> NonNullPtr<Class> {
-        if let Kind::Array { ref element_type } = self.kind {
-            return element_type.clone();
-        }
-        panic!("Class is not an array");
-    }
-
     pub fn is_reference_class(&self) -> bool {
         use Kind::*;
         match self.kind {
@@ -57,15 +50,18 @@ impl Class {
         }
     }
 
+    pub fn is_array_of_ref(&self) -> bool {
+        use Kind::*;
+        match self.kind {
+            Array { is_ref, .. } => is_ref,
+            _ => false,
+        }
+    }
+
     pub fn array_element_size(&self) -> usize {
-        let el_ty = self.array_element_type().get();
-        unsafe {
-            if (*el_ty).is_reference_class() {
-                size_of::<*mut ()>()
-            } else {
-                // non reference types cannot be variable sized
-                (*el_ty).instance_size
-            }
+        match self.kind {
+            Kind::Array { element_size, .. } => element_size,
+            _ => panic!("not an array class"),
         }
     }
 
@@ -175,7 +171,11 @@ pub enum Kind {
     Byte,
     Usize,
     Char,
-    Array { element_type: NonNullPtr<Class> },
+    Array {
+        element_size: usize,
+        element_align: usize,
+        is_ref: bool,
+    },
 }
 
 macro_rules! trivial_kind_predicate {
@@ -250,12 +250,6 @@ pub unsafe fn class_trace(obj: *mut (), tracer: &mut dyn Tracer) {
                 let name = tracer.trace_nonnull_pointer(field.name.as_untyped());
                 field.name = NonNullPtr::new_unchecked(name as *mut StringInst);
             }
-        }
-        Kind::Array { element_type } => {
-            let forward = tracer.trace_nonnull_pointer(element_type.erase()) as *mut Class;
-            (*this).kind = Kind::Array {
-                element_type: NonNullPtr::new_unchecked(forward),
-            };
         }
         // Other class kinds don't have anything to scan.
         _ => (),

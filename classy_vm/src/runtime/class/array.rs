@@ -25,10 +25,6 @@ impl<T> Array<T> {
     pub fn class(&self) -> NonNullPtr<Class> {
         self.ptr.class()
     }
-
-    pub fn element_class(&self) -> NonNullPtr<Class> {
-        unsafe { (*self.class().get()).array_element_type() }
-    }
 }
 
 impl<T> std::ops::Index<usize> for Array<T> {
@@ -73,10 +69,10 @@ pub unsafe fn trace(arr: *mut (), tracer: &mut dyn Tracer) {
     let cls = arr.class();
 
     // trace elements
-    let el_type = (*cls.get()).array_element_type();
     let size = (*arr.header().as_ptr()).data;
+    let is_ref = (*cls.get()).is_array_of_ref();
     let el_size = (*cls.get()).array_element_size();
-    if (*el_type.get()).is_reference_class() {
+    if is_ref {
         for i in 0..size {
             let offset = i * el_size;
             let pointer_to_element = (arr.get() as *mut u8).add(offset) as *mut ErasedPtr;
@@ -84,14 +80,7 @@ pub unsafe fn trace(arr: *mut (), tracer: &mut dyn Tracer) {
             let forward = tracer.trace_pointer(element);
             pointer_to_element.write(ErasedPtr::new(forward));
         }
-    } else {
-        let el_trace = (*el_type.get()).trace;
-        for i in 0..size {
-            let offset = i * el_size;
-            let obj = (arr.get() as *mut u8).add(offset) as *mut ();
-            el_trace(obj, tracer);
-        }
-    };
+    }
 }
 
 pub unsafe fn actual_size(arr: *const ()) -> usize {

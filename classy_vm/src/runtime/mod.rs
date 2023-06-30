@@ -56,7 +56,7 @@ impl RuntimeClasses {
     pub fn init_runtime_classes<Heap: ObjectAllocator>(heap: &mut Heap) -> RuntimeClasses {
         let klass = setup_klass(heap);
         let byte = setup_byte_class(heap, klass);
-        let string = setup_string_class(heap, klass, byte);
+        let string = setup_string_class(heap, klass);
         fill_in_class_names(heap, klass, byte, string);
         let int = setup_class(
             heap,
@@ -145,7 +145,6 @@ fn setup_byte_class<Heap: ObjectAllocator>(
 pub fn setup_string_class<Heap: ObjectAllocator>(
     heap: &mut Heap,
     klass: NonNullPtr<Class>,
-    bytes: NonNullPtr<Class>,
 ) -> NonNullPtr<Class> {
     unsafe {
         let size = size_of::<Header>() + size_of::<Class>();
@@ -164,7 +163,7 @@ pub fn setup_string_class<Heap: ObjectAllocator>(
             },
         );
         let class_ptr = header_ptr.add(1) as *mut Class;
-        std::ptr::write(class_ptr, class::string::make_string_class(bytes));
+        std::ptr::write(class_ptr, class::string::make_string_class());
         NonNullPtr::new_unchecked(class_ptr)
     }
 }

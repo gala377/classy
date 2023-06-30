@@ -7,14 +7,16 @@ use crate::{
 
 use super::{array, Class, Kind};
 
-pub fn make_string_class(bytes: NonNullPtr<Class>) -> Class {
+pub fn make_string_class() -> Class {
     Class {
         name: Ptr::null(),
         instance_size: 0,
         instance_align: align_of::<u8>(),
         drop: None,
         kind: Kind::Array {
-            element_type: bytes,
+            element_size: 1,
+            element_align: 1,
+            is_ref: false,
         },
         actual_instance_size: Some(array::actual_size),
         trace: array::trace,
