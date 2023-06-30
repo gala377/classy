@@ -156,6 +156,11 @@ pub fn debug_print_code(instrs: &Vec<u8>, cp: &constant_pool::ConstantPool) {
                 index += 1;
                 ("call_native1", vec![])
             }
+            OpCode::CallNative => {
+                index += 1;
+                let arg = read_word!();
+                ("call_native", vec![arg.to_string()])
+            }
             OpCode::AllocArray => {
                 index += 1;
                 let size = read_word!();

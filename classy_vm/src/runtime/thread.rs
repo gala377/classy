@@ -11,7 +11,7 @@ use classy_c::code::OpCode;
 use crate::{
     mem::{
         handle::Handle,
-        heap::{self, Heap, SemiSpace},
+        heap::{self, Heap, Options, SemiSpace},
         permament_heap,
         ptr::{NonNullPtr, Ptr},
         ObjectAllocator,
@@ -128,9 +128,30 @@ impl Thread {
                         (*arr_ptr.header().as_ptr()).data as Word
                     }
                 }
+                fn print_n_times(
+                    _: &mut Thread,
+                    _: &mut [NonNullPtr<Frame>],
+                    args: &[Word],
+                ) -> Word {
+                    if args.len() != 2 {
+                        panic!("print_n_times accepts only two arguments");
+                    }
+                    let str_ptr = args[0];
+                    let times = args[1];
+                    // safety: type checking ensures its safe
+                    unsafe {
+                        let str_ptr: NonNullPtr<StringInst> = std::mem::transmute(str_ptr);
+                        let str = (*str_ptr.get()).as_rust_str();
+                        for _ in 0..times {
+                            println!("{}", str);
+                        }
+                    }
+                    return 0;
+                }
                 m.insert("print".to_owned(), native_print as RuntimeFn);
                 m.insert("header_data".to_owned(), header_data as RuntimeFn);
                 m.insert("itos".to_owned(), itos as RuntimeFn);
+                m.insert("print_n_times".to_owned(), print_n_times as RuntimeFn);
                 m
             },
         }
@@ -276,6 +297,24 @@ impl Thread {
                     push!(ret);
                     instr += 1;
                 }
+                OpCode::CallNative => {
+                    safepoint!();
+                    instr += 1;
+                    let n = read_word!();
+                    let func = pop!();
+                    let mut args = Vec::new();
+                    for _ in 0..n {
+                        args.push(pop!());
+                    }
+                    let func: RuntimeFn = unsafe { std::mem::transmute(func) };
+                    let ret = func(
+                        self,
+                        &mut frames,
+                        &args.into_iter().rev().collect::<Vec<_>>(),
+                    );
+                    push!(ret);
+                    instr += OpCode::CallNative1.argument_size();
+                }
                 OpCode::RuntimeCall => {
                     instr += 1;
                     let name_ptr = read_word!();
@@ -287,11 +326,50 @@ impl Thread {
                     };
                     instr += OpCode::RuntimeCall.argument_size();
                 }
-                OpCode::Call1 => {
-                    // TODO:
-                    // We need to figure something out for rust functions.
-                    // right now it can only write functions written by users.
+                OpCode::Call0 => {
+                    safepoint!();
+                    let func = pop!();
+                    let code_inst = unsafe {
+                        let code: Ptr<class::code::Code> = std::mem::transmute(func);
+                        if code.is_null() {
+                            panic!("Null pointer dereference");
+                        }
+                        NonNullPtr::from_ptr(code)
+                    };
+                    let mut new_frame = self.alloc_frame(code_inst);
+                    if let None = new_frame {
+                        // we need to gc
+                        log!(self, "{}", "RUNNING GC BECAUSE I CANNOT ALLOCATE THE FRAME");
 
+                        push!(func);
+                        let frame_cls = self.runtime.classes.frame.clone();
+                        unsafe { (*c_frame.get()).ip = instr };
+                        let mut frames = frames.iter_mut().map(|f| f as *mut _).collect::<Vec<_>>();
+                        self.heap.run_gc(frame_cls, &mut frames);
+                        new_frame = self.alloc_frame(code_inst);
+                        if let None = new_frame {
+                            panic!("Out of memory");
+                        }
+                        pop!();
+                    }
+                    let new_frame = new_frame.unwrap();
+                    unsafe {
+                        std::ptr::write(
+                            new_frame.get(),
+                            Frame {
+                                ip: 0,
+                                stack: vec![],
+                                code: code_inst,
+                            },
+                        )
+                    };
+                    unsafe { (*c_frame.get()).ip = instr + 1 };
+                    frames.push(new_frame);
+                    code = unsafe { &*code_inst.get() };
+                    instr = 0;
+                    c_frame = new_frame
+                }
+                OpCode::Call1 => {
                     safepoint!();
                     let func = pop!();
                     let code_inst = unsafe {
@@ -330,6 +408,56 @@ impl Thread {
                         )
                     };
                     unsafe { (*c_frame.get()).ip = instr + 1 };
+                    frames.push(new_frame);
+                    code = unsafe { &*code_inst.get() };
+                    instr = 0;
+                    c_frame = new_frame
+                }
+                OpCode::CallN => {
+                    safepoint!();
+                    instr += 1;
+                    let func = pop!();
+                    let code_inst = unsafe {
+                        let code: Ptr<class::code::Code> = std::mem::transmute(func);
+                        if code.is_null() {
+                            panic!("Null pointer dereference");
+                        }
+                        NonNullPtr::from_ptr(code)
+                    };
+                    let mut new_frame = self.alloc_frame(code_inst);
+                    if let None = new_frame {
+                        // we need to gc
+                        log!(self, "{}", "RUNNING GC BECAUSE I CANNOT ALLOCATE THE FRAME");
+
+                        push!(func);
+                        let frame_cls = self.runtime.classes.frame.clone();
+                        unsafe { (*c_frame.get()).ip = instr };
+                        let mut frames = frames.iter_mut().map(|f| f as *mut _).collect::<Vec<_>>();
+                        self.heap.run_gc(frame_cls, &mut frames);
+                        new_frame = self.alloc_frame(code_inst);
+                        if let None = new_frame {
+                            panic!("Out of memory");
+                        }
+                        pop!();
+                    }
+                    let new_frame = new_frame.unwrap();
+                    let n = read_word!();
+                    let mut args = Vec::new();
+                    for _ in 0..n {
+                        args.push(pop!());
+                    }
+                    args.reverse();
+                    unsafe {
+                        std::ptr::write(
+                            new_frame.get(),
+                            Frame {
+                                ip: 0,
+                                stack: args,
+                                code: code_inst,
+                            },
+                        )
+                    };
+                    unsafe { (*c_frame.get()).ip = instr + OpCode::CallN.argument_size() };
                     frames.push(new_frame);
                     code = unsafe { &*code_inst.get() };
                     instr = 0;

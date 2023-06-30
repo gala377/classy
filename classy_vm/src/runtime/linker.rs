@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use std::sync::Arc;
 
-
 use classy_c::code::constant_pool::ConstantPool;
 use classy_c::code::{self, Code};
 
@@ -15,7 +14,6 @@ use crate::runtime::class::{self, Class};
 use crate::vm::Vm;
 
 use crate::mem::ObjectAllocator;
-
 
 use super::UserClasses;
 

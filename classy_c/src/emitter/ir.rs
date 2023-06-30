@@ -240,7 +240,7 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
                         panic!("Expected call instruction");
                     };
                     assert_eq!(params.len(), *argc);
-                    match argc {
+                    match *argc {
                         1 => {
                             self.push_address(&mut code, params[0].clone());
                             let op = match func {
@@ -276,14 +276,27 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
                             for param in &params {
                                 self.push_address(&mut code, param.clone());
                             }
-                            self.push_address(&mut code, func.clone());
+                            let op = match func {
+                                ir::Address::Name(n) if self.runtime_functions.contains(n) => {
+                                    let id = self.constant_pool.add_entry(n.clone().into());
+                                    self.emit_instr(&mut code, OpCode::RuntimeCall);
+                                    self.emit_word(&mut code, id as u64);
+                                    // Runtime functions should not be scanned
+                                    self.stack_map_add_value();
+                                    OpCode::CallNative
+                                }
+                                _ => {
+                                    self.push_address(&mut code, func.clone());
+                                    OpCode::CallN
+                                }
+                            };
                             // We export stack map after we push the function so the code
                             // needs to remember that in case of the gc it needs to push
                             // the values popped again onto the stack in the reverse order
                             // of popping them
                             self.export_stack_map(&mut code);
-                            self.emit_instr(&mut code, OpCode::CallN);
-                            self.emit_word(&mut code, *n as u64);
+                            self.emit_instr(&mut code, op);
+                            self.emit_word(&mut code, n as u64);
                             for _ in &params {
                                 self.stack_map_pop();
                             }

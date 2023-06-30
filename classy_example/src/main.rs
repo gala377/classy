@@ -80,6 +80,19 @@ fn main() {
                 @runtime @empty
                 itos: (Int) -> String
 
+                @runtime @empty
+                print_n_times: (String, Int) -> ()
+
+                print_2: (String, Int) -> ()
+                print_2(s, i) {
+                    print_n_times(s, i)
+                }
+
+                print_constant: () -> ()
+                print_constant() {
+                    print_2("Hello world", 10)
+                }
+
                 print_twice: (String) -> ()
                 print_twice(s) {
                     print(s)
@@ -95,6 +108,8 @@ fn main() {
                     let arr = array{"a", "b", "c", "d"}
                     print(itos(header_data(arr[0])))
                     print(itos(header_data(a.a)))
+                    print_n_times("test", 10)
+                    print_constant()
                 }
             "#;
             let functions = compile(&mut vm, source);

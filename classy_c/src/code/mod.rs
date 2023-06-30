@@ -127,6 +127,7 @@ pub enum OpCode {
 
     /// Hach used to call a function defined in the vm by its symbol
     CallNative1,
+    CallNative,
     /// Call a runtime function with a name given by the symbol following.
     /// Args:
     ///   - name: Symbol
@@ -187,6 +188,7 @@ impl OpCode {
             OpCode::CallNative1 => WORD,
             OpCode::RuntimeCall => WORD,
             OpCode::AllocArray => WORD * 3,
+            OpCode::CallNative => WORD,
             OpCode::LastMarker => panic!(),
         }
     }
