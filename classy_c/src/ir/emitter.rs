@@ -348,9 +348,10 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 let size = self.emit_expr(size);
                 self.current_block.push(Instruction::AllocArray {
                     res: res.clone(),
+                    is_elem_ref: inner_t.is_ref().unwrap(),
                     elem_size: inner_t.byte_size(),
+                    elem_align: inner_t.align(),
                     count: size,
-                    typ: *inner_t.clone(),
                 });
                 for (i, expr) in init.iter().enumerate() {
                     let expr_addr = self.emit_expr(expr);

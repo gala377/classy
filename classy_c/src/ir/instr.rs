@@ -136,8 +136,9 @@ pub enum Instruction {
     AllocArray {
         res: Address,
         elem_size: usize,
+        elem_align: usize,
+        is_elem_ref: bool,
         count: Address,
-        typ: Type,
     },
     // Return from a function
     Return(Address),
@@ -199,11 +200,12 @@ impl Debug for Instruction {
             Self::AllocArray {
                 res,
                 elem_size,
+                elem_align,
+                is_elem_ref,
                 count,
-                typ,
             } => write!(
                 f,
-                "{res:?} = {}[{count:?}; {elem_size}; {typ:?}]",
+                "{res:?} = {}[count={count:?}; is_ref={is_elem_ref}, elem_size={elem_size}; elem_align={elem_align}]",
                 "array".bold().green()
             ),
             Self::Return(arg0) => write!(f, "{} {arg0:?}", "return".bold().green()),

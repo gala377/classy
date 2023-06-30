@@ -64,6 +64,16 @@ impl Type {
             Type::Fresh(_) | Type::Alias(_) | Type::ToInfere => None,
         }
     }
+    pub fn align(&self) -> usize {
+        if self.is_ref().unwrap() {
+            return std::mem::align_of::<usize>();
+        }
+        match self {
+            Type::Bool | Type::Byte => 1,
+            Type::Int | Type::UInt | Type::Float | Type::Unit => std::mem::align_of::<usize>(),
+            t => panic!("cannot get the alignment of the type {t:?}"),
+        }
+    }
 
     pub fn byte_size(&self) -> usize {
         if self.is_ref().unwrap() {
