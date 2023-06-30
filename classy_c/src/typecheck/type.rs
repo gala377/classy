@@ -80,7 +80,7 @@ impl Type {
             return std::mem::size_of::<usize>();
         }
         match self {
-            Type::Bool => 1,
+            Type::Bool | Type::Byte => 1,
             Type::Int | Type::UInt | Type::Float | Type::Unit => std::mem::size_of::<usize>(),
             t => panic!("cannot get the size of the type {t:?}"),
         }

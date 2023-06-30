@@ -158,6 +158,7 @@ impl AliasResolver {
                     | Type::Float
                     | Type::String
                     | Type::Unit
+                    | Type::Byte
                     | Type::ToInfere
                     | Type::Generic(_)) => t.clone(),
                     // Do not resolve this types as they migh create reference cycles.
@@ -167,7 +168,7 @@ impl AliasResolver {
                     Type::ADT { .. } => Type::Alias(*for_type),
                     Type::Array { .. } => Type::Alias(*for_type),
                     Type::Scheme { .. } => Type::Alias(*for_type),
-                    _ => unreachable!("other types should not be visible here"),
+                    t => unreachable!("other types should not be visible here {t:?}"),
                 }
             }
             Type::Tuple(fields) => {

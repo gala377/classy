@@ -88,6 +88,30 @@ fn main() {
                     print_n_times(s, i)
                 }
 
+
+                @runtime @empty
+                byte_copy: (String, [Byte], Int, Int) -> ()
+
+
+                @runtime @empty
+                add: (Int, Int) -> Int
+
+                @runtime @empty
+                str_from_bytes: ([Byte]) -> String
+
+
+                concat_strings: (String, String) -> String
+                concat_strings(s1, s2) {
+                    let len1 = header_data s1
+                    let len2 = header_data s2
+                    let len = add(len1, len2)
+                    let res = array[len]Byte
+                    byte_copy(s1, res, 0, len1)
+                    byte_copy(s2, res, len1, len2)
+                    str_from_bytes res
+                }
+
+
                 print_constant: () -> ()
                 print_constant() {
                     print_2("Hello world", 10)
@@ -109,7 +133,7 @@ fn main() {
                     print(itos(header_data(arr[0])))
                     print(itos(header_data(a.a)))
                     print_n_times("test", 10)
-                    print_constant()
+                    print(concat_strings("Hello", " world"))
                 }
             "#;
             let functions = compile(&mut vm, source);

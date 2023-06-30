@@ -118,7 +118,36 @@ impl Thread {
                         std::mem::transmute(s)
                     }
                 }
-
+                fn byte_copy(_: &mut Thread, _: &mut [NonNullPtr<Frame>], args: &[Word]) -> Word {
+                    let [source, dest, offset, len] = args else {
+                        panic!("byte_copy accepts only four arguments");
+                    };
+                    unsafe {
+                        let source: NonNullPtr<u8> = std::mem::transmute(*source);
+                        let dest: NonNullPtr<u8> = std::mem::transmute(*dest);
+                        let offset = *offset;
+                        let len = *len;
+                        std::ptr::copy(
+                            source.0.as_ptr(),
+                            dest.0.as_ptr().add(offset as usize),
+                            len as usize,
+                        );
+                    }
+                    0
+                }
+                fn str_from_bytes(
+                    _: &mut Thread,
+                    _: &mut [NonNullPtr<Frame>],
+                    args: &[Word],
+                ) -> Word {
+                    args[0]
+                }
+                fn add(_: &mut Thread, _: &mut [NonNullPtr<Frame>], args: &[Word]) -> Word {
+                    if args.len() != 2 {
+                        panic!("add accepts only two arguments");
+                    }
+                    args[0] + args[1]
+                }
                 fn header_data(_: &mut Thread, _: &mut [NonNullPtr<Frame>], args: &[Word]) -> Word {
                     if args.len() != 1 {
                         panic!("array_len accepts only one argument");
@@ -152,6 +181,9 @@ impl Thread {
                 m.insert("header_data".to_owned(), header_data as RuntimeFn);
                 m.insert("itos".to_owned(), itos as RuntimeFn);
                 m.insert("print_n_times".to_owned(), print_n_times as RuntimeFn);
+                m.insert("byte_copy".to_owned(), byte_copy as RuntimeFn);
+                m.insert("add".to_owned(), add);
+                m.insert("str_from_bytes".to_owned(), str_from_bytes);
                 m
             },
         }

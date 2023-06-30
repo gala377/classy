@@ -49,6 +49,7 @@ impl<'ctx> ConstraintSolver<'ctx> {
             Constraint::Eq(Type::Bool, Type::Bool)
             | Constraint::Eq(Type::Int, Type::Int)
             | Constraint::Eq(Type::UInt, Type::UInt)
+            | Constraint::Eq(Type::Byte, Type::Byte)
             | Constraint::Eq(Type::Float, Type::Float)
             | Constraint::Eq(Type::String, Type::String)
             | Constraint::Eq(Type::Unit, Type::Unit)
