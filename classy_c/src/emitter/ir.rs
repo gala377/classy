@@ -321,7 +321,24 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
                         .map_err(|e| format!("line {index}, {debug_op:?} => {e}"))
                         .unwrap();
                 }
-                ir::Instruction::AllocArray { .. } => todo!(),
+                ir::Instruction::AllocArray {
+                    res,
+                    elem_size,
+                    elem_align,
+                    is_elem_ref,
+                    count,
+                } => {
+                    self.push_address(&mut code, count);
+                    self.stack_map_pop();
+                    self.export_stack_map(&mut code);
+                    self.emit_instr(&mut code, OpCode::AllocArray);
+                    self.emit_word(&mut code, elem_size as u64);
+                    self.emit_word(&mut code, elem_align as u64);
+                    self.emit_word(&mut code, if is_elem_ref { 1 } else { 0 } as u64);
+                    self.set_address(&mut code, res)
+                        .map_err(|e| format!("line {index}, {debug_op:?} => {e}"))
+                        .unwrap();
+                }
                 ir::Instruction::Return(v) => {
                     self.push_address(&mut code, v);
                     self.emit_instr(&mut code, OpCode::Return);

@@ -132,6 +132,15 @@ pub enum OpCode {
     ///   - name: Symbol
     RuntimeCall,
 
+    /// Allocate an array on the the heap
+    /// The arguments following are the size, align of the element and if the element is a reference.
+    /// The top of the stack holds the number of elements.
+    /// Args:
+    ///  - size: Word
+    ///  - align: Word
+    ///  - is_ref: Word
+    AllocArray,
+
     /// Used as the marker for the last instruction
     LastMarker,
 }
@@ -177,6 +186,7 @@ impl OpCode {
             OpCode::SetOffset => WORD,
             OpCode::CallNative1 => WORD,
             OpCode::RuntimeCall => WORD,
+            OpCode::AllocArray => WORD * 3,
             OpCode::LastMarker => panic!(),
         }
     }

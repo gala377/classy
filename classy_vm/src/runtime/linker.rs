@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 
 use std::sync::Arc;
+use std::thread::panicking;
 
 use classy_c::code::constant_pool::ConstantPool;
 use classy_c::code::{self, Code};
+use classy_c::ir::Op;
 use classy_c::typecheck::r#type::Type;
 use classy_c::typecheck::type_context::TypCtx;
 
@@ -14,12 +16,14 @@ use crate::vm::Vm;
 
 use crate::mem::ObjectAllocator;
 
+use super::class::array::mk_array_cls;
 use super::UserClasses;
 
 pub struct Linker<'vm, 'pool> {
     vm: &'vm mut Vm,
     constant_pool: &'pool ConstantPool,
     functions: HashMap<String, ErasedNonNull>,
+    array_classes: HashMap<String, NonNullPtr<Class>>,
 }
 
 impl<'vm, 'pool> Linker<'vm, 'pool> {
@@ -28,6 +32,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
             vm,
             constant_pool,
             functions: HashMap::new(),
+            array_classes: HashMap::new(),
         }
     }
 
@@ -212,20 +217,70 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                 code::OpCode::ConstLoadFloat | code::OpCode::ConstLoadInteger => {
                     self.replace_numeric_constant(instr, code)
                 }
+                code::OpCode::AllocArray => self.alloc_array_class_and_replace_args(instr, code),
                 i => 1 + i.argument_size(),
             }
         }
     }
+    fn read_word(&self, instr: usize, code: &Code) -> u64 {
+        let bytes = &code.instructions[instr..instr + std::mem::size_of::<u64>()];
+        let mut bytes_array: [u8; 8] = [0; 8];
+        assert!(bytes.len() == 8);
+        for i in 0..8 {
+            bytes_array[i] = bytes[i];
+        }
+        u64::from_le_bytes(bytes_array)
+    }
+
+    fn alloc_array_class_and_replace_args(&mut self, mut instr: usize, code: &mut Code) -> usize {
+        instr += 1;
+        let elem_size = self.read_word(instr, code);
+        let elem_align = self.read_word(instr + std::mem::size_of::<usize>(), code);
+        let is_ref = self.read_word(instr + std::mem::size_of::<u64>() * 2, code);
+        let name = format!("[{elem_size};{elem_align};{is_ref}");
+        let array_cls_ptr = match self.array_classes.get(&name).cloned() {
+            Some(cls) => cls,
+            None => {
+                let klass = self.vm.runtime.classes.klass.clone();
+                let fields = &[];
+                let array_cls = self.vm.permament_heap.lock().unwrap().allocate_class(
+                    class::array::mk_array_cls(
+                        elem_size as usize,
+                        elem_align as usize,
+                        is_ref == 1,
+                    ),
+                    fields,
+                    klass,
+                );
+                let array_cls = NonNullPtr::from_ptr(array_cls);
+                let name_ptr = self
+                    .vm
+                    .permament_heap
+                    .lock()
+                    .unwrap()
+                    .allocate_static_string(self.vm.runtime.classes.string.clone(), &name);
+                self.array_classes.insert(name, array_cls);
+                unsafe {
+                    if name_ptr.is_null() {
+                        panic!("Out of memeory");
+                    }
+                    let name_ptr = name_ptr.cast::<class::string::StringInst>();
+                    (*array_cls.get()).name = name_ptr;
+                }
+                array_cls
+            }
+        };
+        let array_cls_ptr_bytes = (array_cls_ptr.get() as u64).to_le_bytes();
+        assert!(array_cls_ptr_bytes.len() == std::mem::size_of::<u64>());
+        for i in 0..std::mem::size_of::<u64>() {
+            code.instructions[instr + i] = array_cls_ptr_bytes[i];
+        }
+        code::OpCode::AllocArray.argument_size() + 1
+    }
 
     fn replace_symbol(&mut self, mut instr: usize, code: &mut Code) -> usize {
         instr += 1;
-        let index_bytes = &code.instructions[instr..instr + std::mem::size_of::<u64>()];
-        let mut index_bytes_array: [u8; 8] = [0; 8];
-        assert!(index_bytes.len() == 8);
-        for i in 0..8 {
-            index_bytes_array[i] = index_bytes[i];
-        }
-        let index = u64::from_le_bytes(index_bytes_array);
+        let index = self.read_word(instr, code);
         let function_name = self
             .constant_pool
             .get::<String>(index as usize)
@@ -246,13 +301,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
 
     fn replace_numeric_constant(&mut self, mut instr: usize, code: &mut Code) -> usize {
         instr += 1;
-        let index_bytes = &code.instructions[instr..instr + std::mem::size_of::<u64>()];
-        let mut index_bytes_array: [u8; 8] = [0; 8];
-        assert!(index_bytes.len() == 8);
-        for i in 0..8 {
-            index_bytes_array[i] = index_bytes[i];
-        }
-        let index = u64::from_le_bytes(index_bytes_array);
+        let index = self.read_word(instr, code);
         let val = self.constant_pool.get_raw(index as usize);
         let val_bytes = val.to_le_bytes();
         // overwrite the id with static pointer
@@ -265,13 +314,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
 
     fn replace_with_class_pointer(&mut self, mut instr: usize, code: &mut Code) -> usize {
         instr += 1;
-        let index_bytes = &code.instructions[instr..instr + std::mem::size_of::<u64>()];
-        let mut index_bytes_array: [u8; 8] = [0; 8];
-        assert!(index_bytes.len() == 8);
-        for i in 0..8 {
-            index_bytes_array[i] = index_bytes[i];
-        }
-        let index = u64::from_le_bytes(index_bytes_array);
+        let index = self.read_word(instr, code);
         let str = self
             .constant_pool
             .get::<String>(index as usize)
@@ -297,13 +340,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
 
     fn replace_static_string_or_symbol(&mut self, mut instr: usize, code: &mut Code) -> usize {
         instr += 1;
-        let index_bytes = &code.instructions[instr..instr + std::mem::size_of::<u64>()];
-        let mut index_bytes_array: [u8; 8] = [0; 8];
-        assert!(index_bytes.len() == 8);
-        for i in 0..8 {
-            index_bytes_array[i] = index_bytes[i];
-        }
-        let index = u64::from_le_bytes(index_bytes_array);
+        let index = self.read_word(instr, code);
         let cp_str_val = self
             .constant_pool
             .get::<String>(index as usize)

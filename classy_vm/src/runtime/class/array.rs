@@ -1,8 +1,10 @@
 use crate::{
-    mem::ptr::{ErasedNonNull, ErasedPtr, NonNullPtr},
+    mem::ptr::{ErasedNonNull, ErasedPtr, NonNullPtr, Ptr},
     runtime::class::{header::Header, Class},
     runtime::trace::Tracer,
 };
+
+use super::Kind;
 
 #[repr(transparent)]
 pub struct Array<T> {
@@ -90,6 +92,22 @@ pub unsafe fn actual_size(arr: *const ()) -> usize {
     assert!((*cls.get()).kind.is_array(), "has to be");
     let el_size = (*cls.get()).array_element_size();
     el_size * size
+}
+
+pub fn mk_array_cls(size: usize, align: usize, is_ref: bool) -> Class {
+    Class {
+        name: Ptr::null(),
+        drop: None,
+        trace: trace,
+        instance_size: 0,
+        instance_align: std::mem::align_of::<usize>(),
+        actual_instance_size: Some(actual_size),
+        kind: Kind::Array {
+            element_size: size,
+            element_align: align,
+            is_ref,
+        },
+    }
 }
 
 // pub fn array_class_for(heap: &mut Heap, class: TypedPtr<Class>) -> Class {

@@ -381,6 +381,27 @@ impl Thread {
                     push!(std::mem::transmute(inst));
                     instr += OpCode::AllocHeap.argument_size();
                 }
+                OpCode::AllocArray => {
+                    safepoint!();
+                    instr += 1;
+                    let array_cls = read_word!();
+                    let size = pop!();
+                    let array_cls: NonNullPtr<Class> = unsafe { std::mem::transmute(array_cls) };
+                    let arr = self.heap.allocate_array(array_cls, size as usize);
+                    if arr.is_null() {
+                        let mut frames = frames.iter_mut().map(|f| f as *mut _).collect::<Vec<_>>();
+                        unsafe {
+                            self.heap
+                                .run_gc(std::mem::transmute(array_cls), &mut frames);
+                        }
+                    }
+                    let arr = self.heap.allocate_array(array_cls, size as usize);
+                    if arr.is_null() {
+                        panic!("Out of memory");
+                    }
+                    push!(std::mem::transmute(arr));
+                    instr += OpCode::AllocArray.argument_size();
+                }
                 OpCode::SetOffset => {
                     instr += 1;
                     let offset = read_word!();
