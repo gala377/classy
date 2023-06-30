@@ -92,40 +92,45 @@ impl Thread {
                     }
                     return 0;
                 }
-                fn concat_string(
-                    t: &mut Thread,
-                    stack: &mut [NonNullPtr<Frame>],
-                    args: &[Word],
-                ) -> Word {
-                    assert_eq!(args.len(), 2);
-                    let str1_ptr: NonNullPtr<StringInst> = unsafe { std::mem::transmute(args[0]) };
-                    let str2_ptr: NonNullPtr<StringInst> = unsafe { std::mem::transmute(args[1]) };
-                    let s1_len = unsafe { (*str1_ptr.header().as_ptr()).data };
-                    let s2_len = unsafe { (*str2_ptr.header().as_ptr()).data };
-                    let mut res = t.allocate_string(s1_len + s2_len);
-                    if res.is_none() {
-                        let mut frames = stack.iter_mut().map(|f| f as *mut _).collect::<Vec<_>>();
-                        t.heap.run_gc(t.runtime.classes.string.class(), &mut frames);
-                        res = t.allocate_string(s1_len + s2_len);
-                        if res.is_none() {
-                            panic!("out of memory")
-                        }
+                fn itos(t: &mut Thread, stack: &mut [NonNullPtr<Frame>], args: &[Word]) -> Word {
+                    if args.len() != 1 {
+                        panic!("parse_int accepts only one argument");
                     }
-                    let Some(res) = res else {
-                        panic!("unreachable");
-                    };
+                    // safety: type checking ensures its safe
                     unsafe {
-                        std::ptr::copy_nonoverlapping(str1_ptr.get(), res.get(), s1_len);
+                        let as_s = args[0].to_string();
+                        let mut s = t.allocate_string(as_s.len());
+                        if s.is_none() {
+                            let mut frames =
+                                stack.iter_mut().map(|f| f as *mut _).collect::<Vec<_>>();
+                            t.heap.run_gc(t.runtime.classes.string, &mut frames);
+                            s = t.allocate_string(as_s.len());
+                            if s.is_none() {
+                                panic!("out of memory")
+                            }
+                        }
+                        let s = s.unwrap();
                         std::ptr::copy_nonoverlapping(
-                            str2_ptr.get(),
-                            res.get().add(s1_len),
-                            s2_len,
+                            as_s.as_ptr(),
+                            s.0.as_ptr() as *mut u8,
+                            as_s.len(),
                         );
-                        std::mem::transmute(res)
+                        std::mem::transmute(s)
+                    }
+                }
+
+                fn header_data(_: &mut Thread, _: &mut [NonNullPtr<Frame>], args: &[Word]) -> Word {
+                    if args.len() != 1 {
+                        panic!("array_len accepts only one argument");
+                    }
+                    unsafe {
+                        let arr_ptr: NonNullPtr<()> = std::mem::transmute(args[0]);
+                        (*arr_ptr.header().as_ptr()).data as Word
                     }
                 }
                 m.insert("print".to_owned(), native_print as RuntimeFn);
-                m.insert("concat_str".to_owned(), concat_string as RuntimeFn);
+                m.insert("header_data".to_owned(), header_data as RuntimeFn);
+                m.insert("itos".to_owned(), itos as RuntimeFn);
                 m
             },
         }
@@ -364,7 +369,7 @@ impl Thread {
                     safepoint!();
                     instr += 1;
                     let class = read_word!();
-                    let inst: Ptr<()> =
+                    let mut inst: Ptr<()> =
                         unsafe { self.allocate_instance(std::mem::transmute(class)) };
                     if inst.is_null() {
                         // we need to gc
@@ -372,11 +377,10 @@ impl Thread {
                         unsafe {
                             self.heap.run_gc(std::mem::transmute(class), &mut frames);
                         }
-                    }
-                    let inst: Ptr<()> =
-                        unsafe { self.allocate_instance(std::mem::transmute(class)) };
-                    if inst.is_null() {
-                        panic!("Out of memory");
+                        inst = unsafe { self.allocate_instance(std::mem::transmute(class)) };
+                        if inst.is_null() {
+                            panic!("Out of memory");
+                        }
                     }
                     push!(std::mem::transmute(inst));
                     instr += OpCode::AllocHeap.argument_size();
@@ -387,17 +391,17 @@ impl Thread {
                     let array_cls = read_word!();
                     let size = pop!();
                     let array_cls: NonNullPtr<Class> = unsafe { std::mem::transmute(array_cls) };
-                    let arr = self.heap.allocate_array(array_cls, size as usize);
+                    let mut arr = self.heap.allocate_array(array_cls, size as usize);
                     if arr.is_null() {
                         let mut frames = frames.iter_mut().map(|f| f as *mut _).collect::<Vec<_>>();
                         unsafe {
                             self.heap
                                 .run_gc(std::mem::transmute(array_cls), &mut frames);
                         }
-                    }
-                    let arr = self.heap.allocate_array(array_cls, size as usize);
-                    if arr.is_null() {
-                        panic!("Out of memory");
+                        arr = self.heap.allocate_array(array_cls, size as usize);
+                        if arr.is_null() {
+                            panic!("Out of memory");
+                        }
                     }
                     push!(std::mem::transmute(arr));
                     instr += OpCode::AllocArray.argument_size();
@@ -432,7 +436,7 @@ impl Thread {
     }
 
     pub fn allocate_string(&mut self, size: usize) -> Option<NonNullPtr<StringInst>> {
-        let s = self.heap.allocate_array(self.runtime.classes.byte, size);
+        let s = self.heap.allocate_array(self.runtime.classes.string, size);
         if s.is_null() {
             return None;
         }

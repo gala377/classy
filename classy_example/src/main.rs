@@ -74,6 +74,12 @@ fn main() {
                 @empty 
                 print: (String) -> ()
                 
+                @runtime @empty
+                header_data: (String) -> Int
+
+                @runtime @empty
+                itos: (Int) -> String
+
                 print_twice: (String) -> ()
                 print_twice(s) {
                     print(s)
@@ -87,7 +93,8 @@ fn main() {
                     let a = type { a = "Hello"; b = 10 }
                     let b = Integer(v=10)
                     let arr = array{"a", "b", "c", "d"}
-                    print arr[0]
+                    print(itos(header_data(arr[0])))
+                    print(itos(header_data(a.a)))
                 }
             "#;
             let functions = compile(&mut vm, source);
