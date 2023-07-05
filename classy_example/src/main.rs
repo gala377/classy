@@ -113,7 +113,6 @@ fn main() {
 
                 type Integer { value: Int }
 
-                print_integer: (Integer) -> ()
                 print_integer i {
                     print(itos(i.value))
                 }

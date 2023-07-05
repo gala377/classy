@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use crate::typecheck::{
     inference::Constraint,
     r#type::{Type, TypeFolder},
@@ -35,7 +37,8 @@ impl<'ctx> ConstraintSolver<'ctx> {
 
     pub fn solve(&mut self, mut constraints: Vec<Constraint>) {
         constraints.reverse();
-        while let Some(con) = constraints.pop() {
+        let mut constraints: VecDeque<_> = constraints.into();
+        while let Some(con) = constraints.pop_back() {
             self.solve_constraint(con, &mut constraints);
         }
         println!("CONSTRAINS LEFT {}", constraints.len());
@@ -44,7 +47,7 @@ impl<'ctx> ConstraintSolver<'ctx> {
         }
     }
 
-    fn solve_constraint(&mut self, cons: Constraint, constraints: &mut Vec<Constraint>) {
+    fn solve_constraint(&mut self, cons: Constraint, constraints: &mut VecDeque<Constraint>) {
         match cons {
             Constraint::Eq(Type::Bool, Type::Bool)
             | Constraint::Eq(Type::Int, Type::Int)
@@ -59,18 +62,18 @@ impl<'ctx> ConstraintSolver<'ctx> {
             Constraint::Eq(Type::Alias(id1), Type::Alias(id2)) if id1 == id2 => {}
             Constraint::Eq(Type::Alias(id), t) => {
                 let resolved = self.tctx.resolve_alias(id);
-                constraints.push(Constraint::Eq(resolved, t));
+                constraints.push_back(Constraint::Eq(resolved, t));
             }
             Constraint::Eq(t, Type::Alias(id)) => {
                 let resolved = self.tctx.resolve_alias(id);
-                constraints.push(Constraint::Eq(t, resolved));
+                constraints.push_back(Constraint::Eq(t, resolved));
             }
             Constraint::Eq(Type::Fresh(id1), Type::Fresh(id2)) if id1 == id2 => {}
             Constraint::Eq(Type::Struct { def: def_1, .. }, Type::Struct { def: def_2, .. })
                 if def_1 == def_2 => {}
             Constraint::Eq(Type::Tuple(t_1), Type::Tuple(t_2)) => {
                 for (t1, t2) in t_1.iter().zip(t_2.iter()) {
-                    constraints.push(Constraint::Eq(t1.clone(), t2.clone()));
+                    constraints.push_back(Constraint::Eq(t1.clone(), t2.clone()));
                 }
             }
             Constraint::Eq(Type::Fresh(id1), other) => {
@@ -91,13 +94,13 @@ impl<'ctx> ConstraintSolver<'ctx> {
                     ret: ret_2,
                 },
             ) => {
-                constraints.push(Constraint::Eq(*ret_1, *ret_2));
+                constraints.push_back(Constraint::Eq(*ret_1, *ret_2));
                 for (a1, a2) in args_1.iter().zip(args_2.iter()) {
-                    constraints.push(Constraint::Eq(a1.clone(), a2.clone()));
+                    constraints.push_back(Constraint::Eq(a1.clone(), a2.clone()));
                 }
             }
             Constraint::Eq(Type::Array(t_1), Type::Array(t_2)) => {
-                constraints.push(Constraint::Eq(*t_1, *t_2));
+                constraints.push_back(Constraint::Eq(*t_1, *t_2));
             }
             Constraint::HasField { t, field, of_type } => match t {
                 Type::Struct { fields, .. } => {
@@ -105,7 +108,7 @@ impl<'ctx> ConstraintSolver<'ctx> {
                         .iter()
                         .find(|(f, _)| f == &field)
                         .expect("this field does not exists, constraint not met");
-                    constraints.push(Constraint::Eq(f.1.clone(), of_type));
+                    constraints.push_back(Constraint::Eq(f.1.clone(), of_type));
                 }
                 Type::Alias(id) => {
                     let Type::Struct { fields, .. } = self.tctx.resolve_alias(id) else {
@@ -115,16 +118,40 @@ impl<'ctx> ConstraintSolver<'ctx> {
                         .iter()
                         .find(|(f, _)| f == &field)
                         .expect("this field does not exists, constraint not met");
-                    constraints.push(Constraint::Eq(f.1.clone(), of_type));
+                    constraints.push_back(Constraint::Eq(f.1.clone(), of_type));
                 }
-                _ => panic!("Expected a struct type got {t:?}"),
+                _ => constraints.push_front(Constraint::HasFieldDeferred {
+                    t: t.clone(),
+                    field,
+                    of_type,
+                }),
+            },
+            Constraint::HasFieldDeferred { t, field, of_type } => match t {
+                Type::Struct { fields, .. } => {
+                    let f = fields
+                        .iter()
+                        .find(|(f, _)| f == &field)
+                        .expect("this field does not exists, constraint not met");
+                    constraints.push_back(Constraint::Eq(f.1.clone(), of_type));
+                }
+                Type::Alias(id) => {
+                    let Type::Struct { fields, .. } = self.tctx.resolve_alias(id) else {
+                        panic!("Expected a struct type got {t:?}");
+                    };
+                    let f = fields
+                        .iter()
+                        .find(|(f, _)| f == &field)
+                        .expect("this field does not exists, constraint not met");
+                    constraints.push_back(Constraint::Eq(f.1.clone(), of_type));
+                }
+                _ => panic!("Expected a struct type got {t:?}, required type annotation"),
             },
             c => panic!("Cannot unify constraint {c:?}"),
         }
     }
 }
 
-fn replace_in_constraints(id: usize, for_t: Type, cons: &mut [Constraint]) {
+fn replace_in_constraints(id: usize, for_t: Type, cons: &mut VecDeque<Constraint>) {
     let mut replacer = TypeReplacer {
         fresh_type_id: id,
         for_type: for_t.clone(),
@@ -136,6 +163,11 @@ fn replace_in_constraints(id: usize, for_t: Type, cons: &mut [Constraint]) {
                 replacer.fold_type(t2.clone()),
             ),
             Constraint::HasField { t, field, of_type } => Constraint::HasField {
+                t: replacer.fold_type(t.clone()),
+                field: field.clone(),
+                of_type: replacer.fold_type(of_type.clone()),
+            },
+            Constraint::HasFieldDeferred { t, field, of_type } => Constraint::HasFieldDeferred {
                 t: replacer.fold_type(t.clone()),
                 field: field.clone(),
                 of_type: replacer.fold_type(of_type.clone()),

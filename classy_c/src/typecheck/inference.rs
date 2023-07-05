@@ -21,6 +21,13 @@ pub(super) enum Constraint {
         field: String,
         of_type: Type,
     },
+    /// Same as HasField but deferred during solving to get
+    /// more information about the type of `t` based on usage
+    HasFieldDeferred {
+        t: Type,
+        field: String,
+        of_type: Type,
+    }
 }
 
 /// Maps unique node id in the ast with its type.
