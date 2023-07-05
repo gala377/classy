@@ -174,9 +174,14 @@ impl<'source> Parser<'source> {
         let beg = self.curr_pos();
         let attributes = self.parse_attributes();
         let name = self.parse_identifier()?;
-        let _ = self.expect_token(TokenType::Colon);
-        let typ = self.parse_fn_type()?;
-        let _ = self.expect_token(TokenType::Semicolon);
+        let typ = match self.match_token(TokenType::Colon) {
+            Ok(_) => {
+                let typ = self.parse_fn_type()?;
+                let _ = self.expect_token(TokenType::Semicolon);
+                typ
+            }
+            Err(_) => ast::Typ::ToInfere,
+        };
         if attributes.contains(&"empty".to_owned()) {
             return Ok(ast::FunctionDefinition {
                 name,
@@ -186,16 +191,18 @@ impl<'source> Parser<'source> {
                 attributes,
             });
         }
-        let name_repeated = self.parse_identifier().error(
-            self,
-            beg,
-            "Expected a function definition following its declaration",
-        )?;
-        if name != name_repeated {
-            return Err(self.error(
-                beg..self.curr_pos(),
-                "The name in the function's declaration and definition have to be the same",
-            ));
+        if typ != ast::Typ::ToInfere {
+            let name_repeated = self.parse_identifier().error(
+                self,
+                beg,
+                "Expected a function definition following its declaration",
+            )?;
+            if name != name_repeated {
+                return Err(self.error(
+                    beg..self.curr_pos(),
+                    "The name in the function's declaration and definition have to be the same",
+                ));
+            }
         }
         let parameters = self.parse_argument_list()?;
         let body = if self.lexer.current().typ != TokenType::LBrace {

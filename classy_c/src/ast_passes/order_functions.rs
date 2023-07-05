@@ -16,7 +16,9 @@ impl Default for Mode {
 pub struct FunctionsOrderer {
     /// Top level function names
     /// Also information if it has type annotation
-    functions: HashMap<String, (usize, bool)>,
+    /// and the count of arguments (annotation not needed if only return type has
+    /// has to be inferred)
+    functions: HashMap<String, (usize, bool, usize)>,
     /// Variables defined within the current function
     variables: HashSet<String>,
     order: Vec<String>,
@@ -77,7 +79,7 @@ impl FunctionsOrderer {
     }
 
     fn error_for_annotations(&self, cycles: &Vec<usize>) {
-        let roots = self
+        let mut roots = self
             .graph
             .iter()
             .map(|v| v.is_empty())
@@ -85,10 +87,14 @@ impl FunctionsOrderer {
             .filter(|(_, b)| *b)
             .map(|(i, _)| i)
             .collect::<Vec<_>>();
+        roots.retain(|f| {
+            let (_, _, argc) = self.functions[&self.order[*f]];
+            argc != 0
+        });
         let all = Vec::from_iter(cycles.iter().chain(roots.iter()));
         for i in all {
             let name = self.order[*i].clone();
-            let (_, annotation) = self.functions[&name];
+            let (_, annotation, _) = self.functions[&name];
             if !annotation {
                 panic!("Function {name} requires type annotation");
             }
@@ -115,13 +121,15 @@ impl<'ast> ast::Visitor<'ast> for FunctionsOrderer {
                     ast::Typ::ToInfere => false,
                     _ => true,
                 };
-                self.functions.insert(def.name.clone(), (id, annotation));
+                let argc = def.parameters.len();
+                self.functions
+                    .insert(def.name.clone(), (id, annotation, argc));
                 self.order.push(def.name.clone());
                 self.graph.push(Vec::new());
             }
             Mode::BuildGraph => {
                 self.variables.clear();
-                (self.curr_id, _) = self.functions[&def.name];
+                (self.curr_id, _, _) = self.functions[&def.name];
                 for arg in &def.parameters {
                     self.variables.insert(arg.clone());
                 }
@@ -140,7 +148,7 @@ impl<'ast> ast::Visitor<'ast> for FunctionsOrderer {
             return;
         }
         if self.functions.contains_key(node) {
-            let (id, _) = self.functions[node];
+            let (id, _, _) = self.functions[node];
             self.graph[self.curr_id].push(id);
         }
     }
@@ -344,5 +352,20 @@ mod tests {
         orderer.visit(&ast);
         let order = orderer.order();
         assert_eq!(order, vec!["g", "main", "f"]);
+    }
+
+    #[test]
+    fn order_inferrable_functions() {
+        let ast = mk_ast(
+            "
+            a = b()
+            b = c()
+            c = ()
+        ",
+        );
+        let mut orderer = super::FunctionsOrderer::new();
+        orderer.visit(&ast);
+        let order = orderer.order();
+        assert_eq!(order, vec!["c", "b", "a"]);
     }
 }
