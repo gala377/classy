@@ -105,7 +105,6 @@ fn main() {
                     print_n_times(s, i)
                 }
 
-
                 print_twice s {
                     print(s)
                     print(s)
@@ -127,6 +126,7 @@ fn main() {
                     print_n_times("test", 10)
                     print(concat_strings("Hello", " world"))
                     print_integer(Integer(value=10))
+                    print_inf "hello"
                 }
             "#;
             let functions = compile(&mut vm, source);

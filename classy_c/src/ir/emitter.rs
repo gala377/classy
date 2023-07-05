@@ -84,9 +84,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
             .zip(args.iter())
             .map(|(param, arg_t)| {
                 let arg_t = match arg_t {
-                    Type::Alias(for_type) => {
-                        self.tctx.resolve_alias(*for_type)
-                    }
+                    Type::Alias(for_type) => self.tctx.resolve_alias(*for_type),
                     t => t.clone(),
                 };
                 let is_ref = match arg_t.is_ref() {

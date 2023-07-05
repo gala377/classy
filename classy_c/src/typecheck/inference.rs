@@ -27,7 +27,7 @@ pub(super) enum Constraint {
         t: Type,
         field: String,
         of_type: Type,
-    }
+    },
 }
 
 /// Maps unique node id in the ast with its type.

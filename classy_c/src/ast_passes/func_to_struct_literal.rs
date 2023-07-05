@@ -33,12 +33,12 @@ impl<'ctx> ast::fold::Folder for PromoteCallToStructLiteral<'ctx> {
         let Some(mut typ) = self.tctx.get_type(&name) else {
             println!("Function call is not a known name, so no struct");
             return ast::fold::fold_function_call(
-                self, 
-                ast::Expr { 
+                self,
+                ast::Expr {
                     id: func.id,
                     kind: ast::ExprKind::Name(name)
-                }, 
-                args, 
+                },
+                args,
                 kwargs,
             );
         };
@@ -49,12 +49,12 @@ impl<'ctx> ast::fold::Folder for PromoteCallToStructLiteral<'ctx> {
         let Type::Struct { fields, .. } = typ else {
             println!("Function call is not a struct, so no struct");
             return ast::fold::fold_function_call(
-                self, 
-                ast::Expr { 
+                self,
+                ast::Expr {
                     id: func.id,
                     kind: ast::ExprKind::Name(name)
-                }, 
-                args, 
+                },
+                args,
                 kwargs,
             );
         };
