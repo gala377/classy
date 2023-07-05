@@ -1,6 +1,7 @@
 use crate::{syntax::ast, typecheck::type_context::TypCtx};
 
 pub mod assign_expr_id;
+pub mod order_functions;
 pub mod func_to_struct_literal;
 pub mod gather_runtime_functions;
 pub mod promote_local_types;
