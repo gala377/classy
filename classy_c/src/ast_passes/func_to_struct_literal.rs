@@ -28,14 +28,19 @@ impl<'ctx> ast::fold::Folder for PromoteCallToStructLiteral<'ctx> {
     ) -> ast::ExprKind {
         let ast::ExprKind::Name(name) = func.kind else {
             println!("Functiona call is not a name, so no struct");
-            return ast::ExprKind::FunctionCall { func: Box::new(func), args, kwargs };
+            return ast::fold::fold_function_call(self, func, args, kwargs);
         };
         let Some(mut typ) = self.tctx.get_type(&name) else {
             println!("Function call is not a known name, so no struct");
-            return ast::ExprKind::FunctionCall { func: Box::new(ast::Expr {
-                id: func.id,
-                kind: ast::ExprKind::Name(name.clone()),
-        }), args, kwargs };
+            return ast::fold::fold_function_call(
+                self, 
+                ast::Expr { 
+                    id: func.id,
+                    kind: ast::ExprKind::Name(name)
+                }, 
+                args, 
+                kwargs,
+            );
         };
         if let Type::Alias(for_t) = typ {
             println!("Function call is an alias, so resolving");
@@ -43,14 +48,15 @@ impl<'ctx> ast::fold::Folder for PromoteCallToStructLiteral<'ctx> {
         }
         let Type::Struct { fields, .. } = typ else {
             println!("Function call is not a struct, so no struct");
-            return ast::ExprKind::FunctionCall {
-                func: Box::new(ast::Expr {
+            return ast::fold::fold_function_call(
+                self, 
+                ast::Expr { 
                     id: func.id,
-                    kind: ast::ExprKind::Name(name.clone()),
-                }),
-                args,
+                    kind: ast::ExprKind::Name(name)
+                }, 
+                args, 
                 kwargs,
-            };
+            );
         };
         if fields.len() != kwargs.len() {
             panic!("Not all fields on a struct literal were filled in")
@@ -63,6 +69,7 @@ impl<'ctx> ast::fold::Folder for PromoteCallToStructLiteral<'ctx> {
                 panic!("Struct literal missing field: {}", field)
             }
         }
+        println!("Function call is a struct, so promoting");
         ast::fold::fold_struct_literal(self, ast::Path(vec![name]), kwargs)
     }
 }

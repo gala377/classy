@@ -107,6 +107,16 @@ impl<'ctx> ConstraintSolver<'ctx> {
                         .expect("this field does not exists, constraint not met");
                     constraints.push(Constraint::Eq(f.1.clone(), of_type));
                 }
+                Type::Alias(id) => {
+                    let Type::Struct { fields, .. } = self.tctx.resolve_alias(id) else {
+                        panic!("Expected a struct type got {t:?}");
+                    };
+                    let f = fields
+                        .iter()
+                        .find(|(f, _)| f == &field)
+                        .expect("this field does not exists, constraint not met");
+                    constraints.push(Constraint::Eq(f.1.clone(), of_type));
+                }
                 _ => panic!("Expected a struct type got {t:?}"),
             },
             c => panic!("Cannot unify constraint {c:?}"),

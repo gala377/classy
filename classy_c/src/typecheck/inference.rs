@@ -242,6 +242,7 @@ impl Inference {
             ast::ExprKind::Name(name) => {
                 let typ = {
                     let scope = self.scope.borrow();
+                    println!("CHECKING TYPE OF {name}");
                     scope.type_of(name).unwrap()
                 };
                 self.env.insert(id, typ.clone());

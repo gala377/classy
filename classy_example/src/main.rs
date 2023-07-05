@@ -111,6 +111,13 @@ fn main() {
                     print(s)
                 }
 
+                type Integer { value: Int }
+
+                print_integer: (Integer) -> ()
+                print_integer i {
+                    print(itos(i.value))
+                }
+
                 main { 
                     print "Hello world1" 
                     print_twice "Hello macarena"
@@ -120,6 +127,7 @@ fn main() {
                     print(itos(header_data(a.a)))
                     print_n_times("test", 10)
                     print(concat_strings("Hello", " world"))
+                    print_integer(Integer(value=10))
                 }
             "#;
             let functions = compile(&mut vm, source);
@@ -140,7 +148,9 @@ fn compile(
     let ast = classy_c::ast_passes::run_befor_type_context_passes(ast);
     let tctx = classy_c::typecheck::type_context::TypCtx::new();
     let mut tctx = prepare_type_ctx(tctx, &ast);
+    println!("Type ctxt: {}", tctx.debug_string());
     let res = run_before_typechecking_passes(&tctx, ast);
+    //println!("AST: {:#?}", res);
     let tenv = typecheck::run(&mut tctx, &res);
 
     let mut constant_pool = ConstantPool::new();

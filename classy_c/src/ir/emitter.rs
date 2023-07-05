@@ -84,7 +84,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
             .zip(args.iter())
             .map(|(param, arg_t)| {
                 let is_ref = match arg_t.is_ref() {
-                    None => panic!("Should not be any of these types"),
+                    None => panic!("Should not be any of these types {arg_t:?}"),
                     Some(true) => IsRef::Ref,
                     Some(false) => IsRef::NoRef,
                 };
