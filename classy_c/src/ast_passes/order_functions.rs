@@ -82,6 +82,7 @@ impl<'ast> ast::Visitor<'ast> for FunctionsOrderer {
                 };
                 self.functions.insert(def.name.clone(), (id, annotation));
                 self.order.push(def.name.clone());
+                self.graph.push(Vec::new());
             }
             Mode::BuildGraph => {
                 self.variables.clear();
@@ -149,5 +150,50 @@ impl<'g> CycleFinder<'g> {
             self.dfs(*child, stack, cycles);
         }
         stack.remove(&node);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::syntax::ast::{self, Visitor};
+
+    fn mk_ast(source: &str) -> ast::Program {
+        let lexer = crate::syntax::lexer::Lexer::new(source);
+        let mut parser = crate::syntax::parser::Parser::new(lexer);
+        parser.parse().unwrap()
+    }
+
+    #[test]
+    fn does_not_panic_on_empty_program() {
+        let ast = mk_ast("");
+        let mut orderer = super::FunctionsOrderer::new();
+        orderer.visit(&ast);
+        orderer.order();
+    }
+
+    #[test]
+    fn does_not_panic_on_function_without_dependencies() {
+        let ast = mk_ast("main: () ->();main() = ();");
+        let mut orderer = super::FunctionsOrderer::new();
+        orderer.visit(&ast);
+        orderer.order();
+    }
+
+    #[test]
+    fn does_not_panic_ontwo_functions_with_dependencies_with_annotations() {
+        let ast = mk_ast(
+            "
+            main: () -> ();
+            main() {
+                f()
+            }
+            f: () -> ();
+            f() = ()
+
+            ",
+        );
+        let mut orderer = super::FunctionsOrderer::new();
+        orderer.visit(&ast);
+        orderer.order();
     }
 }
