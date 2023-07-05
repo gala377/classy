@@ -216,6 +216,20 @@ impl<'source> Parser<'source> {
             self.parse_expr_sequence()?
         };
         let _ = self.expect_token(TokenType::Semicolon);
+        let typ = match typ {
+            ast::Typ::ToInfere => {
+                let args = parameters
+                    .iter()
+                    .map(|_| ast::Typ::ToInfere)
+                    .collect::<Vec<_>>();
+                ast::Typ::Function {
+                    generics: Vec::new(),
+                    args,
+                    ret: Box::new(ast::Typ::ToInfere),
+                }
+            }
+            t => t,
+        };
         Ok(ast::FunctionDefinition {
             name,
             typ,

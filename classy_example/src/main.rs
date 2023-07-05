@@ -99,8 +99,6 @@ fn main() {
                 @runtime @empty
                 str_from_bytes: ([Byte]) -> String
 
-
-                concat_strings: (String, String) -> String
                 concat_strings(s1, s2) {
                     let len1 = header_data s1
                     let len2 = header_data s2

@@ -16,11 +16,26 @@ pub fn fix_types_after_inference(
     fix_types_in_env(substitutions, env);
 }
 
-pub fn fix_types_in_env(substitutions: &HashMap<usize, Type>, env: &mut HashMap<usize, Type>) {
-    for (_, typ) in env {
-        if let &mut Type::Fresh(id) = typ {
-            *typ = substitutions.get(&id).unwrap().clone();
+struct FreshFixer<'a> {
+    substitutions: &'a HashMap<usize, Type>,
+}
+
+impl<'a> TypeFolder for FreshFixer<'a> {
+    fn fold_fresh(&mut self, id: usize) -> Type {
+        if let Some(typ) = self.substitutions.get(&id) {
+            return typ.clone()
         }
+        panic!("Fresh type not found in substitutions")
+    }
+}
+
+
+pub fn fix_types_in_env(substitutions: &HashMap<usize, Type>, env: &mut HashMap<usize, Type>) {
+    let mut replacer = FreshFixer {
+        substitutions: &substitutions,
+    };
+    for (_, typ) in env {
+        *typ = replacer.fold_type(typ.clone());
     }
 }
 
