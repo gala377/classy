@@ -290,7 +290,7 @@ fn types_eq(ctx: &TypCtx, t1: &Type, t2: &Type) -> bool {
         (Type::String, Type::String) => true,
         (Type::Float, Type::Float) => true,
         (Type::Unit, Type::Unit) => true,
-        (Type::ToInfere, Type::ToInfere) => true,
+        (Type::ToInfere, Type::ToInfere) => false,
         (Type::Divergent, _) => true,
         (_, Type::Divergent) => true,
         (Type::Struct { def: def1, .. }, Type::Struct { def: def2, .. }) => def1 == def2,

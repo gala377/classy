@@ -66,12 +66,7 @@ fn main() {
     match args.example {
         Example::Print => {
             let source = r#"
-                type Integer {
-                    v: Int
-                }
-
-                @runtime 
-                @empty 
+                @runtime @empty 
                 print: (String) -> ()
                 
                 @runtime @empty
@@ -83,15 +78,8 @@ fn main() {
                 @runtime @empty
                 print_n_times: (String, Int) -> ()
 
-                print_2: (String, Int) -> ()
-                print_2(s, i) {
-                    print_n_times(s, i)
-                }
-
-
                 @runtime @empty
                 byte_copy: (String, [Byte], Int, Int) -> ()
-
 
                 @runtime @empty
                 add: (Int, Int) -> Int
@@ -109,24 +97,24 @@ fn main() {
                     str_from_bytes res
                 }
 
-
-                print_constant: () -> ()
-                print_constant() {
+                print_constant {
                     print_2("Hello world", 10)
                 }
 
-                print_twice: (String) -> ()
-                print_twice(s) {
+                print_2(s, i) {
+                    print_n_times(s, i)
+                }
+
+
+                print_twice s {
                     print(s)
                     print(s)
                 }
 
-                main:()->()
                 main { 
                     print "Hello world1" 
                     print_twice "Hello macarena"
                     let a = type { a = "Hello"; b = 10 }
-                    let b = Integer(v=10)
                     let arr = array{"a", "b", "c", "d"}
                     print(itos(header_data(arr[0])))
                     print(itos(header_data(a.a)))

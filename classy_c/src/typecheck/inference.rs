@@ -1,7 +1,8 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
-    syntax::ast,
+    ast_passes,
+    syntax::ast::{self, Visitor},
     typecheck::{
         constrait_solver::ConstraintSolver,
         fix_fresh,
@@ -98,35 +99,52 @@ impl Inference {
         let global_scope = Rc::new(RefCell::new(Scope::from_type_ctx(tctx)));
         let mut inferer = Inference::new(global_scope.clone());
         inferer.next_var = next_id;
-        for item in &ast.items {
-            if let ast::TopLevelItem::FunctionDefinition(fn_def) = item {
-                let ast::FunctionDefinition {
-                    name,
-                    body,
-                    parameters,
-                    attributes,
-                    ..
-                } = fn_def;
-                let Type::Function { args, ret } = global_scope.borrow().type_of(name).expect("Expected type of function to exist") else {
+        let mut order = ast_passes::order_functions::FunctionsOrderer::new();
+        order.visit(ast);
+        let function_check_order = order.order();
+        let items_mapping = ast
+            .items
+            .iter()
+            .enumerate()
+            .filter_map(|(i, item)| match item {
+                ast::TopLevelItem::FunctionDefinition(fn_def) => {
+                    let ast::FunctionDefinition { name, .. } = fn_def;
+                    Some((name.clone(), i))
+                }
+                _ => None,
+            })
+            .collect::<HashMap<_, _>>();
+        for name in &function_check_order {
+            let index = items_mapping.get(name).expect("Expected function to exist");
+            let ast::TopLevelItem::FunctionDefinition(fn_def) = &ast.items[*index] else {
+                panic!("unexpected");
+            };
+            let ast::FunctionDefinition {
+                name,
+                body,
+                parameters,
+                attributes,
+                ..
+            } = fn_def;
+            let Type::Function { args, ret } = global_scope.borrow().type_of(name).expect("Expected type of function to exist") else {
                     panic!("Expected function to have a function type")
                 };
-                if attributes.contains(&"runtime".to_owned()) {
-                    continue;
-                }
-                let fn_actual_type = {
-                    let fn_scope = Scope::empty_scope_with_parent(global_scope.clone());
-                    inferer.in_scope(fn_scope.clone(), |scope| {
-                        scope.set_ret_t(Some(*(ret.clone())));
-                        for (param, typ) in parameters.iter().zip(&args) {
-                            fn_scope.borrow_mut().add_variable(&param, typ.clone());
-                        }
-                        scope.infer_in_expr(body)
-                    })
-                };
-                inferer
-                    .constraints
-                    .push(Constraint::Eq(fn_actual_type, *ret));
+            if attributes.contains(&"runtime".to_owned()) {
+                continue;
             }
+            let fn_actual_type = {
+                let fn_scope = Scope::empty_scope_with_parent(global_scope.clone());
+                inferer.in_scope(fn_scope.clone(), |scope| {
+                    scope.set_ret_t(Some(*(ret.clone())));
+                    for (param, typ) in parameters.iter().zip(&args) {
+                        fn_scope.borrow_mut().add_variable(&param, typ.clone());
+                    }
+                    scope.infer_in_expr(body)
+                })
+            };
+            inferer
+                .constraints
+                .push(Constraint::Eq(fn_actual_type, *ret));
         }
         println!("CONSTRAINTS: \n");
         for constraint in &inferer.constraints {
