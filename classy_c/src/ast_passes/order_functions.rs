@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    hash::Hash,
-};
+use std::collections::{HashMap, HashSet};
 
 use crate::syntax::ast;
 
@@ -40,8 +37,46 @@ impl FunctionsOrderer {
         self.order.len()
     }
 
-    pub fn order(&mut self) {
+    pub fn order(&mut self) -> Vec<String> {
         let cycles = CycleFinder::new(&self.graph).find_cycles();
+        self.error_for_annotations(&cycles);
+        let sorted = self.topological_sort(&cycles);
+        sorted.into_iter().map(|i| self.order[i].clone()).collect()
+    }
+
+    fn topological_sort(&mut self, cycles: &Vec<usize>) -> Vec<usize> {
+        let mut roots = self
+            .graph
+            .iter()
+            .map(|v| v.is_empty())
+            .enumerate()
+            .filter(|(_, b)| *b)
+            .map(|(i, _)| i)
+            .collect::<Vec<_>>();
+        roots.extend(cycles);
+        println!("Functions: {:?}", self.functions);
+        println!("Cycles: {:?}", cycles);
+        println!("Roots: {:?}", roots);
+        let mut sorted = Vec::new();
+        while let Some(root) = roots.pop() {
+            println!("Checking function {}", self.order[root]);
+            sorted.push(root);
+            for i in 0..self.graph.len() {
+                if self.graph[i].contains(&root) {
+                    self.graph[i].retain(|&x| x != root);
+                    if self.graph[i].is_empty() {
+                        roots.push(i);
+                    }
+                }
+            }
+        }
+        sorted.dedup();
+        sorted.retain(|x| !cycles.contains(x));
+        sorted.extend(cycles);
+        sorted
+    }
+
+    fn error_for_annotations(&self, cycles: &Vec<usize>) {
         let roots = self
             .graph
             .iter()
@@ -126,25 +161,29 @@ impl<'g> CycleFinder<'g> {
 
     pub fn find_cycles(&mut self) -> Vec<usize> {
         let mut cycles = Vec::new();
+        println!("Graph: {:?}", self.graph);
         for i in 0..self.graph.len() {
             if self.visited.contains(&i) {
                 continue;
             }
             let mut stack = HashSet::new();
+            println!("Running dfs from {}", i);
             self.dfs(i, &mut stack, &mut cycles);
         }
         cycles
     }
 
     fn dfs(&mut self, node: usize, stack: &mut HashSet<usize>, cycles: &mut Vec<usize>) {
+        println!("Visiting {}", node);
         if stack.contains(&node) {
+            println!("Found cycle, stack {stack:?}");
             cycles.push(node);
             return;
         }
-        stack.insert(node);
         if self.visited.contains(&node) {
             return;
         }
+        stack.insert(node);
         self.visited.insert(node);
         for child in &self.graph[node] {
             self.dfs(*child, stack, cycles);
@@ -195,5 +234,115 @@ mod tests {
         let mut orderer = super::FunctionsOrderer::new();
         orderer.visit(&ast);
         orderer.order();
+    }
+
+    #[test]
+    fn check_order_for_simple_non_recursive_chain() {
+        let ast = mk_ast(
+            "
+            main: () -> ();
+            main() {
+                f()
+            }
+            f: () -> ();
+            f = g()
+
+            g: () -> ()
+            g() = ()
+
+            ",
+        );
+        let mut orderer = super::FunctionsOrderer::new();
+        orderer.visit(&ast);
+        let order = orderer.order();
+        assert_eq!(order, vec!["g", "f", "main"]);
+    }
+
+    #[test]
+    fn check_order_with_recursive_function() {
+        let ast = mk_ast(
+            "
+            main: () -> ();
+            main() {
+                f()
+            }
+            f: () -> ();
+            f = f();
+            ",
+        );
+        let mut orderer = super::FunctionsOrderer::new();
+        orderer.visit(&ast);
+        let order = orderer.order();
+        assert_eq!(order, vec!["main", "f"]);
+    }
+
+    #[test]
+    fn check_recursive_function_with_dependencies() {
+        let ast = mk_ast(
+            "
+            main: () -> ();
+            main() = ();
+
+            f: () -> ();
+            f = {
+                main()
+                g()
+                f()
+            }
+
+            g: () -> ();
+            g = ();
+            ",
+        );
+        let mut orderer = super::FunctionsOrderer::new();
+        orderer.visit(&ast);
+        let order = orderer.order();
+        assert_eq!(order, vec!["g", "main", "f"]);
+    }
+
+    #[test]
+    fn check_some_other_tree() {
+        let ast = mk_ast(
+            "
+            main: () -> ();
+            main() = ();
+
+            f: () -> ();
+            f = {
+                main()
+                g()
+                f()
+            }
+
+            g: () -> ();
+            g = main();
+            ",
+        );
+        let mut orderer = super::FunctionsOrderer::new();
+        orderer.visit(&ast);
+        let order = orderer.order();
+        assert_eq!(order, vec!["main", "g", "f"]);
+    }
+
+    #[test]
+    fn check_mutaul_recursion() {
+        let ast = mk_ast(
+            "
+            main: () -> ();
+            main() = f();
+
+            f: () -> ();
+            f = {
+                g()
+            }
+
+            g: () -> ();
+            g = f();
+            ",
+        );
+        let mut orderer = super::FunctionsOrderer::new();
+        orderer.visit(&ast);
+        let order = orderer.order();
+        assert_eq!(order, vec!["g", "main", "f"]);
     }
 }
