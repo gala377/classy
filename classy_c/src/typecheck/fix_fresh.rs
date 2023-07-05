@@ -23,12 +23,11 @@ struct FreshFixer<'a> {
 impl<'a> TypeFolder for FreshFixer<'a> {
     fn fold_fresh(&mut self, id: usize) -> Type {
         if let Some(typ) = self.substitutions.get(&id) {
-            return typ.clone()
+            return typ.clone();
         }
         panic!("Fresh type not found in substitutions")
     }
 }
-
 
 pub fn fix_types_in_env(substitutions: &HashMap<usize, Type>, env: &mut HashMap<usize, Type>) {
     let mut replacer = FreshFixer {

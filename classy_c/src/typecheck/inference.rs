@@ -1,8 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
-    ast_passes,
-    syntax::ast::{self, Visitor},
+    syntax::ast::{self},
     typecheck::{
         constrait_solver::ConstraintSolver,
         fix_fresh,
