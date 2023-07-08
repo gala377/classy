@@ -87,46 +87,8 @@ fn main() {
                 @runtime @empty
                 str_from_bytes: ([Byte]) -> String
 
-                concat_strings(s1, s2) {
-                    let len1 = header_data s1
-                    let len2 = header_data s2
-                    let len = add(len1, len2)
-                    let res = array[len]Byte
-                    byte_copy(s1, res, 0, len1)
-                    byte_copy(s2, res, len1, len2)
-                    str_from_bytes res
-                }
+                get(i, arr) = arr[i]
 
-                print_constant {
-                    print_2("Hello world", 10)
-                }
-
-                print_2(s, i) {
-                    print_n_times(s, i)
-                }
-
-                print_twice s {
-                    print(s)
-                    print(s)
-                }
-
-                type Integer { value: Int }
-
-                print_integer: (Integer) -> ()
-                print_integer i {
-                    print(itos(i.value))
-                }
-
-                id: forall a => (a) -> a
-                id x = x
-
-                id2 x = x
-
-                main { 
-                    print_integer(Integer(value=10))
-                    id2(1)
-                    id2("String")
-                }
             "#;
             let functions = compile(&mut vm, source);
             let mut thread = vm.create_evaluation_thread(functions["main"].clone());

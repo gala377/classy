@@ -1,9 +1,10 @@
-use std::{collections::HashMap, rc::Rc, cell::RefCell};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use super::{
-    constrait_solver::TypeReplacer,
+    constrait_solver::FreshTypeReplacer,
     r#type::{Type, TypeFolder},
-    type_context::TypCtx, scope::Scope,
+    scope::Scope,
+    type_context::TypCtx,
 };
 
 pub fn fix_types_after_inference(
@@ -13,17 +14,37 @@ pub fn fix_types_after_inference(
     env: &mut HashMap<usize, Type>,
     global_scope: Rc<RefCell<Scope>>,
 ) {
-    fix_fresh_vars_in_substitutions(substitutions, tctx);
-    fix_nested_types(substitutions, tctx);
-    fix_types_in_env(substitutions, env);
+
     let new_t = tctx.variables.get(name).unwrap().clone();
-    tctx
-        .definitions
-        .iter_mut()
-        .filter(|(id, _)| **id == new_t)
-        .for_each(|(_, t)| *t = GeneralizerHelper::generalize(t.clone()));
+
+
+    let t = tctx.definitions.get_mut(&new_t).unwrap();
+    println!("{name} => {t:?}");
+    fix_types_in_env(substitutions, env);
+
+    println!("{name} => {t:?}");
+    fix_fresh_vars_in_substitutions(substitutions, tctx);
+ 
+    let t = tctx.definitions.get_mut(&new_t).unwrap();
+    println!("{name} => {t:?}");
+    fix_nested_types(substitutions, tctx);
+    
+    // Generalize and update type in typ ctx
+    let mut generalizer = GeneralizerHelper {
+        bindings: HashMap::new(),
+        current_id: 0,
+    };
+    let t = tctx.definitions.get_mut(&new_t).unwrap();
+    *t = generalizer.generalize(t.clone());
     let new_t = tctx.definitions.get(&new_t).unwrap().clone();
     global_scope.borrow_mut().add_variable(name, new_t);
+    // Update generalized type in env
+    fix_types_in_env(&generalizer.bindings, env);
+
+    let new_t = tctx.variables.get(name).unwrap().clone();
+    let t = tctx.definitions.get_mut(&new_t).unwrap();
+    println!("{name} => {t:?}");
+
 }
 
 struct FreshFixer<'a> {
@@ -49,24 +70,23 @@ pub fn fix_types_in_env(substitutions: &HashMap<usize, Type>, env: &mut HashMap<
 }
 
 fn fix_fresh_vars_in_substitutions(substitutions: &mut HashMap<usize, Type>, tctx: &mut TypCtx) {
-    let mut replacers = Vec::new();
+    println!("SUBS: {:?}", substitutions);
+    let mut replacer = FreshTypeReplacer {
+        substitutions: HashMap::new(),
+    };
     for (id, typ) in substitutions.iter() {
         let for_type = match typ {
             Type::Struct { def, .. } => Type::Alias(tctx.def_id_to_typ_id(*def)),
             Type::ADT { def, .. } => Type::Alias(tctx.def_id_to_typ_id(*def)),
             t => t.clone(),
         };
-        replacers.push(TypeReplacer {
-            fresh_type_id: *id,
-            for_type,
-        });
+        replacer.substitutions.insert(*id, for_type.clone());
     }
-    for replacer in &mut replacers {
-        for (_, typ) in substitutions.iter_mut() {
-            *typ = replacer.fold_type(typ.clone());
-        }
-        tctx.fold_types(replacer)
+    for (_, typ) in substitutions.iter_mut() {
+        *typ = replacer.fold_type(typ.clone());
     }
+    tctx.fold_types(&mut replacer);
+    println!("SUBS: {:?}", substitutions);
 }
 
 struct ReplaceStructsWithAliases<'ctx> {
@@ -98,54 +118,19 @@ fn fix_nested_types(substitutions: &mut HashMap<usize, Type>, tctx: &TypCtx) {
     }
 }
 
-struct TypeGeneralizer;
-
-impl TypeFolder for TypeGeneralizer {
-    fn fold_function(&mut self, args: Vec<Type>, ret: Type) -> Type {
-        let mut helper = GeneralizerHelper {
-            bindings: HashMap::new(),
-            current_id: 0,
-        };
-        let args = args.into_iter().map(|t| helper.fold_type(t)).collect();
-        let ret = helper.fold_type(ret);
-        if helper.bindings.is_empty() {
-            Type::Function {
-                args,
-                ret: Box::new(ret),
-            }
-        } else {
-            let mut prefex = Vec::new();
-            for i in 0..helper.current_id {
-                prefex.push(PREFEX_NAMES[i % PREFEX_NAMES.len()].to_owned());
-            }
-            Type::Scheme {
-                prefex,
-                typ: Box::new(Type::Function {
-                    args,
-                    ret: Box::new(ret),
-                }),
-            }
-        }
-    }
-}
-
 struct GeneralizerHelper {
     bindings: HashMap<usize, Type>,
     current_id: usize,
 }
 
 impl GeneralizerHelper {
-    pub fn generalize(t: Type) -> Type {
-        let mut helper = GeneralizerHelper {
-            bindings: HashMap::new(),
-            current_id: 0,
-        };
-        let t = helper.fold_type(t);
-        if helper.bindings.is_empty() {
+    pub fn generalize(&mut self, t: Type) -> Type {
+        let t = self.fold_type(t);
+        if self.bindings.is_empty() {
             t
         } else {
             let mut prefex = Vec::new();
-            for i in 0..helper.current_id {
+            for i in 0..self.current_id {
                 prefex.push(PREFEX_NAMES[i % PREFEX_NAMES.len()].to_owned());
             }
             Type::Scheme {

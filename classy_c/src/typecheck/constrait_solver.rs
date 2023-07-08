@@ -1,23 +1,21 @@
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
 use crate::typecheck::{
     constraints::Constraint,
     r#type::{Type, TypeFolder},
 };
 
-use super::type_context::{TypCtx, DefId};
+use super::type_context::{DefId, TypCtx};
 
-pub(super) struct TypeReplacer {
-    pub fresh_type_id: usize,
-    pub for_type: Type,
+pub(super) struct FreshTypeReplacer {
+    pub substitutions: HashMap<usize, Type>,
 }
 
-impl TypeFolder for TypeReplacer {
+impl TypeFolder for FreshTypeReplacer {
     fn fold_fresh(&mut self, id: usize) -> Type {
-        if id == self.fresh_type_id {
-            self.for_type.clone()
-        } else {
-            Type::Fresh(id)
+        match self.substitutions.get(&id) {
+            Some(t) => self.fold_type(t.clone()),
+            None => Type::Fresh(id),
         }
     }
 }
@@ -39,6 +37,11 @@ impl<'ctx> ConstraintSolver<'ctx> {
         constraints.reverse();
         let mut constraints: VecDeque<_> = constraints.into();
         while let Some(con) = constraints.pop_back() {
+            println!("\nSOLVING {}\n", constraints.len() + 1);
+            println!(" -> {:?}", con);
+            for c in constraints.iter() {
+                println!("{:?}", c);
+            }
             self.solve_constraint(con, &mut constraints);
         }
         println!("CONSTRAINS LEFT {}", constraints.len());
@@ -99,7 +102,7 @@ impl<'ctx> ConstraintSolver<'ctx> {
                     constraints.push_back(Constraint::Eq(a1.clone(), a2.clone()));
                 }
             }
-            Constraint::Eq(app @ Type::App {..}, t) => {
+            Constraint::Eq(app @ Type::App { .. }, t) => {
                 constraints.push_back(Constraint::Eq(t, app));
             }
             Constraint::Eq(t, Type::App { typ: app_t, args }) => {
@@ -111,11 +114,11 @@ impl<'ctx> ConstraintSolver<'ctx> {
                     let mut replacer = Instatiator {
                         for_gen: i,
                         instatiated: t,
+                        tctx: self.tctx,
                     };
                     replacer.fold_type(acc)
                 });
                 constraints.push_back(Constraint::Eq(t, instantiated));
-
             }
             Constraint::Eq(Type::Array(t_1), Type::Array(t_2)) => {
                 constraints.push_back(Constraint::Eq(*t_1, *t_2));
@@ -148,9 +151,12 @@ impl<'ctx> ConstraintSolver<'ctx> {
 }
 
 fn replace_in_constraints(id: usize, for_t: Type, cons: &mut VecDeque<Constraint>) {
-    let mut replacer = TypeReplacer {
-        fresh_type_id: id,
-        for_type: for_t.clone(),
+    let mut replacer = FreshTypeReplacer {
+        substitutions: {
+            let mut m = HashMap::new();
+            m.insert(id, for_t.clone());
+            m
+        },
     };
     for c in cons {
         *c = match c {
@@ -171,17 +177,23 @@ fn replace_in_constraints(id: usize, for_t: Type, cons: &mut VecDeque<Constraint
 /// For now we are ignoring definition ids
 /// And that will become a problem when we get to the methods
 /// for generic types
-struct Instatiator {
+struct Instatiator<'tctx> {
     for_gen: usize,
     instatiated: Type,
+    tctx: &'tctx TypCtx,
 }
 
-impl TypeFolder for Instatiator {
+impl<'ctx> TypeFolder for Instatiator<'ctx> {
     fn fold_generic(&mut self, def: DefId, id: usize) -> Type {
         if self.for_gen == id {
             self.instatiated.clone()
         } else {
             Type::Generic(def, id)
         }
+    }
+
+    fn fold_alias(&mut self, for_type: usize) -> Type {
+        let resolved = self.tctx.resolve_alias(for_type);
+        self.fold_type(resolved)
     }
 }

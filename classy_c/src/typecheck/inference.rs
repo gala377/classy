@@ -117,6 +117,9 @@ impl Inference {
             let ast::TopLevelItem::FunctionDefinition(fn_def) = &ast.items[*index] else {
                 panic!("unexpected");
             };
+            if fn_def.attributes.contains(&"runtime".to_owned()) {
+                continue;
+            }
             inferer.generate_constrains_for_function(global_scope.clone(), fn_def);
 
             let mut solver = ConstraintSolver::new(tctx);
@@ -131,14 +134,22 @@ impl Inference {
                 println!("{:?}", c);
             }
             solver.solve(constraints);
-
+            let mut substitutions = solver.substitutions.into_iter().collect();
             fix_fresh::fix_types_after_inference(
                 name,
-                &mut solver.substitutions.into_iter().collect(),
+                &mut substitutions,
                 tctx,
                 &mut inferer.env,
                 global_scope.clone(),
             );
+            println!("SUBSTITUTIONS");
+            for (id, typ) in substitutions {
+                println!("{} -> {:?}", id, typ);
+            }
+            println!("\n\n\nENV IS");
+            for (id, typ) in inferer.env.iter() {
+                println!("{} -> {:?}", id, typ);
+            }
         }
         inferer
     }
