@@ -370,7 +370,6 @@ mod tests {
         assert_eq!(order, vec!["c", "b", "a"]);
     }
 
-
     #[test]
     fn simple_polymorphic_funcion_with_no_annotation1() {
         let ast = mk_ast(

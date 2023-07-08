@@ -14,22 +14,20 @@ pub fn fix_types_after_inference(
     env: &mut HashMap<usize, Type>,
     global_scope: Rc<RefCell<Scope>>,
 ) {
-
-    let new_t = tctx.variables.get(name).unwrap().clone();
-
-
-    let t = tctx.definitions.get_mut(&new_t).unwrap();
-    println!("{name} => {t:?}");
     fix_types_in_env(substitutions, env);
-
-    println!("{name} => {t:?}");
     fix_fresh_vars_in_substitutions(substitutions, tctx);
- 
-    let t = tctx.definitions.get_mut(&new_t).unwrap();
-    println!("{name} => {t:?}");
     fix_nested_types(substitutions, tctx);
-    
+    generalize_types(tctx, name, global_scope, env);
+}
+
+fn generalize_types(
+    tctx: &mut TypCtx,
+    name: &str,
+    global_scope: Rc<RefCell<Scope>>,
+    env: &mut HashMap<usize, Type>,
+) {
     // Generalize and update type in typ ctx
+    let new_t = tctx.variables.get(name).unwrap().clone();
     let mut generalizer = GeneralizerHelper {
         bindings: HashMap::new(),
         current_id: 0,
@@ -40,29 +38,11 @@ pub fn fix_types_after_inference(
     global_scope.borrow_mut().add_variable(name, new_t);
     // Update generalized type in env
     fix_types_in_env(&generalizer.bindings, env);
-
-    let new_t = tctx.variables.get(name).unwrap().clone();
-    let t = tctx.definitions.get_mut(&new_t).unwrap();
-    println!("{name} => {t:?}");
-
-}
-
-struct FreshFixer<'a> {
-    substitutions: &'a HashMap<usize, Type>,
-}
-
-impl<'a> TypeFolder for FreshFixer<'a> {
-    fn fold_fresh(&mut self, id: usize) -> Type {
-        if let Some(typ) = self.substitutions.get(&id) {
-            return typ.clone();
-        }
-        Type::Fresh(id)
-    }
 }
 
 pub fn fix_types_in_env(substitutions: &HashMap<usize, Type>, env: &mut HashMap<usize, Type>) {
-    let mut replacer = FreshFixer {
-        substitutions: &substitutions,
+    let mut replacer = FreshTypeReplacer {
+        substitutions: substitutions.clone(),
     };
     for (_, typ) in env {
         *typ = replacer.fold_type(typ.clone());
@@ -70,7 +50,6 @@ pub fn fix_types_in_env(substitutions: &HashMap<usize, Type>, env: &mut HashMap<
 }
 
 fn fix_fresh_vars_in_substitutions(substitutions: &mut HashMap<usize, Type>, tctx: &mut TypCtx) {
-    println!("SUBS: {:?}", substitutions);
     let mut replacer = FreshTypeReplacer {
         substitutions: HashMap::new(),
     };
@@ -86,7 +65,6 @@ fn fix_fresh_vars_in_substitutions(substitutions: &mut HashMap<usize, Type>, tct
         *typ = replacer.fold_type(typ.clone());
     }
     tctx.fold_types(&mut replacer);
-    println!("SUBS: {:?}", substitutions);
 }
 
 struct ReplaceStructsWithAliases<'ctx> {

@@ -40,8 +40,11 @@ pub enum Type {
     },
     /// An apliication of types to a Scheme or some other type in which case
     /// the arguments should be empty
-    App { typ: Box<Type>, args: Vec<Type> },
-    
+    App {
+        typ: Box<Type>,
+        args: Vec<Type>,
+    },
+
     /// Reference to the generic type under index `isize` in the definition
     /// with def id (defid, index)
     Generic(DefId, usize),
