@@ -1,3 +1,4 @@
+use core::panic;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
@@ -18,24 +19,28 @@ pub type TypeEnv = HashMap<usize, Type>;
 
 pub fn run(tctx: &mut TypCtx, ast: &ast::Program) -> TypeEnv {
     tctx.remove_to_infere_type();
-    let cons = Inference::generate_constraints(tctx, ast);
+    let cons = Inference::infer_types(tctx, ast);
 
     println!("{}", tctx.debug_string());
-    let mut solver = ConstraintSolver::new(tctx);
-    solver.solve(cons.constraints);
-    let mut substs = solver.substitutions.iter().cloned().collect();
-    let mut env = cons.env;
-    fix_fresh::fix_types_after_inference(&mut substs, tctx, &mut env);
+    // let mut substs = HashMap::new();
+    // let mut env = cons.env;
+    // for (name, constraints) in cons.all_constraints {
+    //     println!("Solving constraints for {}", name);
+    //     let mut solver = ConstraintSolver::new(tctx);
+    //     solver.solve(constraints);
+    //     substs.extend(solver.substitutions);
+    //     fix_fresh::fix_types_after_inference(&mut substs, tctx, &mut env);
+    // }
+    // for (id, typ) in substs.iter() {
+    //     println!("{} -> {:?}", id, typ);
+    // }
     println!("SUBSTITUTIONS");
-    for (id, typ) in substs.iter() {
-        println!("{} -> {:?}", id, typ);
-    }
     println!("{}", tctx.debug_string());
     println!("ENV IS:");
-    for (id, typ) in env.iter() {
+    for (id, typ) in cons.env.iter() {
         println!("{} -> {:?}", id, typ);
     }
-    env
+    cons.env
 }
 
 pub(super) struct Inference {
@@ -83,7 +88,7 @@ impl Inference {
         ret
     }
 
-    pub fn generate_constraints(tctx: &mut TypCtx, ast: &ast::Program) -> Self {
+    pub fn infer_types(tctx: &mut TypCtx, ast: &ast::Program) -> Self {
         // create fresh variables for anonymous types
         let replace_to_infere = &mut ReplaceInferTypes::default();
         tctx.fold_types(replace_to_infere);
@@ -113,10 +118,27 @@ impl Inference {
                 panic!("unexpected");
             };
             inferer.generate_constrains_for_function(global_scope.clone(), fn_def);
-        }
-        println!("CONSTRAINTS: \n");
-        for constraint in &inferer.constraints {
-            println!("{constraint:?}");
+
+            let mut solver = ConstraintSolver::new(tctx);
+            let constraints = inferer
+                .all_constraints
+                .last()
+                .map(|(_, c)| c)
+                .unwrap()
+                .clone();
+            println!("\n\nCONSTRAINTS FOR {name}\n\n");
+            for c in &constraints {
+                println!("{:?}", c);
+            }
+            solver.solve(constraints);
+
+            fix_fresh::fix_types_after_inference(
+                name,
+                &mut solver.substitutions.into_iter().collect(),
+                tctx,
+                &mut inferer.env,
+                global_scope.clone(),
+            );
         }
         inferer
     }
@@ -132,16 +154,21 @@ impl Inference {
             ..
         }: &ast::FunctionDefinition,
     ) {
-        let Type::Function { args, ret } = global_scope
-            .borrow()
-            .type_of(name)
-            .expect("Expected type of function to exist") 
-            else {
-                panic!("Expected function to have a function type")
-        };
         if attributes.contains(&"runtime".to_owned()) {
             return;
         }
+        let t = global_scope
+            .borrow()
+            .type_of(name)
+            .expect("Expected type of function to exist");
+        let (args, ret) = match t {
+            Type::Function { args, ret } => (args, ret),
+            Type::Scheme { typ, .. } => match *typ {
+                Type::Function { args, ret } => (args, ret),
+                _ => panic!("Expected function type"),
+            },
+            _ => panic!("Expected function type"),
+        };
         let fn_actual_type = {
             let fn_scope = Scope::empty_scope_with_parent(global_scope.clone());
             self.in_scope(fn_scope.clone(), |scope| {
@@ -152,10 +179,9 @@ impl Inference {
                 scope.infer_in_expr(body)
             })
         };
-        self
-            .constraints
-            .push(Constraint::Eq(fn_actual_type, *ret));
-        self.all_constraints.push((name.clone(), self.constraints.clone()));
+        self.constraints.push(Constraint::Eq(fn_actual_type, *ret));
+        self.all_constraints
+            .push((name.clone(), self.constraints.clone()));
         self.constraints.clear();
     }
 
@@ -213,8 +239,6 @@ impl Inference {
                         .type_of(name)
                         .expect(format!("Unknown variable {name}").as_str())
                 };
-                let typ = self.instance_type(typ);
-                println!("INSTANCING {name} to {typ:?}", name = name, typ = typ);
                 self.env.insert(id, typ.clone());
                 typ
             }
@@ -229,6 +253,16 @@ impl Inference {
                 if kwargs.len() > 0 {
                     todo!("kwargs not implemented yet")
                 }
+                let f_t = match f_t {
+                    Type::Scheme { prefex, typ } => {
+                        let args = prefex.iter().map(|_| self.fresh_type()).collect();
+                        Type::App {
+                            typ: Box::new(Type::Scheme { prefex, typ }),
+                            args,
+                        }
+                    }
+                    t => t,
+                };
                 self.constraints.push(Constraint::Eq(
                     f_t,
                     Type::Function {
@@ -459,29 +493,6 @@ impl Inference {
             }
             ast::Typ::ToInfere => panic!("ToInfer types should not be present when typechecking"),
         }
-    }
-
-    fn instance_type(&mut self, typ: Type) -> Type {
-        match typ {
-            Type::Scheme { prefex, typ } => {
-                let mut bindings = HashMap::new();
-                for (i, _) in prefex.iter().enumerate() {
-                    bindings.insert(i, self.fresh_type());
-                }
-                GenericReplacer { generics: bindings }.fold_type(*typ)
-            }
-            t => t,
-        }
-    }
-}
-
-struct GenericReplacer {
-    generics: HashMap<usize, Type>,
-}
-
-impl TypeFolder for GenericReplacer {
-    fn fold_generic(&mut self, _: usize, id: usize) -> Type {
-        self.generics.get(&id).unwrap().clone()
     }
 }
 

@@ -5,7 +5,7 @@ use crate::typecheck::{
     r#type::{Type, TypeFolder},
 };
 
-use super::type_context::TypCtx;
+use super::type_context::{TypCtx, DefId};
 
 pub(super) struct TypeReplacer {
     pub fresh_type_id: usize,
@@ -99,6 +99,24 @@ impl<'ctx> ConstraintSolver<'ctx> {
                     constraints.push_back(Constraint::Eq(a1.clone(), a2.clone()));
                 }
             }
+            Constraint::Eq(app @ Type::App {..}, t) => {
+                constraints.push_back(Constraint::Eq(t, app));
+            }
+            Constraint::Eq(t, Type::App { typ: app_t, args }) => {
+                let Type::Scheme { prefex, typ: scheme_t } = *app_t else {
+                    panic!("Expected a scheme type got {app_t:?}");
+                };
+                assert!(prefex.len() == args.len());
+                let instantiated = args.into_iter().enumerate().fold(*scheme_t, |acc, (i, t)| {
+                    let mut replacer = Instatiator {
+                        for_gen: i,
+                        instatiated: t,
+                    };
+                    replacer.fold_type(acc)
+                });
+                constraints.push_back(Constraint::Eq(t, instantiated));
+
+            }
             Constraint::Eq(Type::Array(t_1), Type::Array(t_2)) => {
                 constraints.push_back(Constraint::Eq(*t_1, *t_2));
             }
@@ -145,6 +163,25 @@ fn replace_in_constraints(id: usize, for_t: Type, cons: &mut VecDeque<Constraint
                 field: field.clone(),
                 of_type: replacer.fold_type(of_type.clone()),
             },
+        }
+    }
+}
+
+/// TODO:
+/// For now we are ignoring definition ids
+/// And that will become a problem when we get to the methods
+/// for generic types
+struct Instatiator {
+    for_gen: usize,
+    instatiated: Type,
+}
+
+impl TypeFolder for Instatiator {
+    fn fold_generic(&mut self, def: DefId, id: usize) -> Type {
+        if self.for_gen == id {
+            self.instatiated.clone()
+        } else {
+            Type::Generic(def, id)
         }
     }
 }

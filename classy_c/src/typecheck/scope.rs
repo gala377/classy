@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use super::{r#type::Type, type_context::TypCtx};
 
-pub(super) struct Scope {
+pub struct Scope {
     resolved_types: HashMap<String, Type>,
     resolved_vars: HashMap<String, Type>,
     parent: Option<Rc<RefCell<Scope>>>,

@@ -38,6 +38,10 @@ pub enum Type {
         prefex: Vec<Name>,
         typ: Box<Type>,
     },
+    /// An apliication of types to a Scheme or some other type in which case
+    /// the arguments should be empty
+    App { typ: Box<Type>, args: Vec<Type> },
+    
     /// Reference to the generic type under index `isize` in the definition
     /// with def id (defid, index)
     Generic(DefId, usize),
@@ -65,6 +69,7 @@ impl Type {
             | Type::Scheme { .. }
             | Type::Generic(_, _) => Some(true),
             Type::Fresh(_) | Type::Alias(_) | Type::ToInfere => None,
+            Type::App { typ, .. } => typ.is_ref(),
         }
     }
     pub fn align(&self) -> usize {
@@ -159,6 +164,10 @@ pub trait TypeFolder: Sized {
     fn fold_scheme(&mut self, prefex: Vec<Name>, typ: Type) -> Type {
         fold_scheme(self, prefex, typ)
     }
+
+    fn fold_application(&mut self, typ: Type, args: Vec<Type>) -> Type {
+        fold_application(self, typ, args)
+    }
 }
 
 pub fn fold_scheme(folder: &mut impl TypeFolder, prefex: Vec<Name>, typ: Type) -> Type {
@@ -191,6 +200,7 @@ pub fn fold_type(folder: &mut impl TypeFolder, typ: Type) -> Type {
         Type::Scheme { prefex, typ } => folder.fold_scheme(prefex, *typ),
         Type::Generic(def_id, id) => folder.fold_generic(def_id, id),
         Type::Fresh(id) => folder.fold_fresh(id),
+        Type::App { typ, args } => folder.fold_application(*typ, args),
     }
 }
 
@@ -218,4 +228,12 @@ pub fn fold_struct(folder: &mut impl TypeFolder, def: usize, fields: Vec<(String
 
 pub fn fold_array(folder: &mut impl TypeFolder, arr_t: Type) -> Type {
     Type::Array(Box::new(folder.fold_type(arr_t)))
+}
+
+pub fn fold_application(folder: &mut impl TypeFolder, typ: Type, args: Vec<Type>) -> Type {
+    let args = args.into_iter().map(|t| folder.fold_type(t)).collect();
+    Type::App {
+        typ: Box::new(folder.fold_type(typ)),
+        args,
+    }
 }

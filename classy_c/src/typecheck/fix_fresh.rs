@@ -1,20 +1,29 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc, cell::RefCell};
 
 use super::{
     constrait_solver::TypeReplacer,
     r#type::{Type, TypeFolder},
-    type_context::TypCtx,
+    type_context::TypCtx, scope::Scope,
 };
 
 pub fn fix_types_after_inference(
+    name: &str,
     substitutions: &mut HashMap<usize, Type>,
     tctx: &mut TypCtx,
     env: &mut HashMap<usize, Type>,
+    global_scope: Rc<RefCell<Scope>>,
 ) {
     fix_fresh_vars_in_substitutions(substitutions, tctx);
     fix_nested_types(substitutions, tctx);
     fix_types_in_env(substitutions, env);
-    tctx.fold_types(&mut TypeGeneralizer);
+    let new_t = tctx.variables.get(name).unwrap().clone();
+    tctx
+        .definitions
+        .iter_mut()
+        .filter(|(id, _)| **id == new_t)
+        .for_each(|(_, t)| *t = GeneralizerHelper::generalize(t.clone()));
+    let new_t = tctx.definitions.get(&new_t).unwrap().clone();
+    global_scope.borrow_mut().add_variable(name, new_t);
 }
 
 struct FreshFixer<'a> {
@@ -26,7 +35,7 @@ impl<'a> TypeFolder for FreshFixer<'a> {
         if let Some(typ) = self.substitutions.get(&id) {
             return typ.clone();
         }
-        panic!("Fresh type not found in substitutions")
+        Type::Fresh(id)
     }
 }
 
@@ -126,6 +135,26 @@ struct GeneralizerHelper {
 }
 
 impl GeneralizerHelper {
+    pub fn generalize(t: Type) -> Type {
+        let mut helper = GeneralizerHelper {
+            bindings: HashMap::new(),
+            current_id: 0,
+        };
+        let t = helper.fold_type(t);
+        if helper.bindings.is_empty() {
+            t
+        } else {
+            let mut prefex = Vec::new();
+            for i in 0..helper.current_id {
+                prefex.push(PREFEX_NAMES[i % PREFEX_NAMES.len()].to_owned());
+            }
+            Type::Scheme {
+                prefex,
+                typ: Box::new(t),
+            }
+        }
+    }
+
     pub fn new_generic(&mut self) -> Type {
         let id = self.current_id;
         self.current_id += 1;

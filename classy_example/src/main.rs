@@ -112,6 +112,7 @@ fn main() {
 
                 type Integer { value: Int }
 
+                print_integer: (Integer) -> ()
                 print_integer i {
                     print(itos(i.value))
                 }
@@ -123,8 +124,8 @@ fn main() {
 
                 main { 
                     print_integer(Integer(value=10))
-                    print(id("Hello world"))
-                    print(id2("hello world"))
+                    id2(1)
+                    id2("String")
                 }
             "#;
             let functions = compile(&mut vm, source);

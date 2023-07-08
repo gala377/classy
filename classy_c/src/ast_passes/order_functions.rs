@@ -79,19 +79,20 @@ impl FunctionsOrderer {
     }
 
     fn error_for_annotations(&self, cycles: &Vec<usize>) {
-        let mut roots = self
-            .graph
-            .iter()
-            .map(|v| v.is_empty())
-            .enumerate()
-            .filter(|(_, b)| *b)
-            .map(|(i, _)| i)
-            .collect::<Vec<_>>();
-        roots.retain(|f| {
-            let (_, _, argc) = self.functions[&self.order[*f]];
-            argc != 0
-        });
-        let all = Vec::from_iter(cycles.iter().chain(roots.iter()));
+        // let mut roots = self
+        //     .graph
+        //     .iter()
+        //     .map(|v| v.is_empty())
+        //     .enumerate()
+        //     .filter(|(_, b)| *b)
+        //     .map(|(i, _)| i)
+        //     .collect::<Vec<_>>();
+        // roots.retain(|f| {
+        //     let (_, _, argc) = self.functions[&self.order[*f]];
+        //     argc != 0
+        // });
+        // let all = Vec::from_iter(cycles.iter().chain(roots.iter()));
+        let all = Vec::from_iter(cycles.iter());
         for i in all {
             let name = self.order[*i].clone();
             let (_, annotation, _) = self.functions[&name];
@@ -367,5 +368,19 @@ mod tests {
         orderer.visit(&ast);
         let order = orderer.order();
         assert_eq!(order, vec!["c", "b", "a"]);
+    }
+
+
+    #[test]
+    fn simple_polymorphic_funcion_with_no_annotation1() {
+        let ast = mk_ast(
+            "
+            id x = x
+        ",
+        );
+        let mut orderer = super::FunctionsOrderer::new();
+        orderer.visit(&ast);
+        let order = orderer.order();
+        assert_eq!(order, vec!["id"]);
     }
 }
