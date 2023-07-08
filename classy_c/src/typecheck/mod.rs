@@ -1,5 +1,6 @@
 pub mod add_types;
 pub mod alias_resolver;
+pub mod constraints;
 pub mod constrait_solver;
 pub mod fix_fresh;
 pub mod inference;
@@ -55,7 +56,7 @@ pub fn resolve_type_names(mut ctx: TypCtx) -> TypCtx {
             }
             ast::TopLevelItem::FunctionDefinition(ast::FunctionDefinition {
                 name, typ, ..
-            }) => resolve_fn_def(typ, &mut ctx, name),
+            }) => resolve_fn_def(typ, &mut ctx, name, *def_id),
         }
     }
     for (id, t) in type_updates {
@@ -64,7 +65,7 @@ pub fn resolve_type_names(mut ctx: TypCtx) -> TypCtx {
     ctx
 }
 
-fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String) {
+fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String, def_id: usize) {
     match typ {
         ast::Typ::Function {
             args,
@@ -81,6 +82,7 @@ fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String) {
                         ctx.unit_id,
                         ctx.to_infere_id,
                         generics,
+                        def_id,
                         t,
                     )
                 })
@@ -92,6 +94,7 @@ fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String) {
                 ctx.unit_id,
                 ctx.to_infere_id,
                 generics,
+                def_id,
                 ret,
             );
             let function_t = ctx.mk_function_scheme(generics.clone(), &resolved_args, resolved_ret);
@@ -125,6 +128,7 @@ fn resolve_top_level_type(
                 ctx.unit_id,
                 ctx.to_infere_id,
                 &Vec::new(),
+                *def_id,
                 inner,
             );
             // invariant: because the prefex is empty this will always be an alias
@@ -141,6 +145,7 @@ fn resolve_top_level_type(
                     ctx.unit_id,
                     ctx.to_infere_id,
                     &Vec::new(),
+                    *def_id,
                     typ,
                 );
                 resolved_fields.push((name.clone(), resolved));
@@ -168,12 +173,13 @@ fn resolve_type(
     unit_id: TypeId,
     to_infere_id: TypeId,
     prefex: &Vec<String>,
+    curr_def_id: usize,
     typ: &ast::Typ,
 ) -> Type {
     match typ {
         ast::Typ::Name(n) if prefex.contains(n) => {
             let pos = prefex.iter().position(|x| x == n).unwrap();
-            Type::Generic(pos)
+            Type::Generic(curr_def_id, pos)
         }
         ast::Typ::Name(n) => {
             Type::Alias(names.get(n).expect(&format!("type not found, {n}")).clone())
@@ -189,6 +195,7 @@ fn resolve_type(
                         unit_id,
                         to_infere_id,
                         prefex,
+                        curr_def_id,
                         t,
                     )
                 })
@@ -213,6 +220,7 @@ fn resolve_type(
                         unit_id,
                         to_infere_id,
                         prefex,
+                        curr_def_id,
                         t,
                     )
                 })
@@ -224,6 +232,7 @@ fn resolve_type(
                 unit_id,
                 to_infere_id,
                 prefex,
+                curr_def_id,
                 ret,
             );
             let id = *next_id;
@@ -249,6 +258,7 @@ fn resolve_type(
                 unit_id,
                 to_infere_id,
                 prefex,
+                curr_def_id,
                 inner,
             );
             let id = *next_id;
@@ -322,7 +332,7 @@ fn types_eq(ctx: &TypCtx, t1: &Type, t2: &Type) -> bool {
                     .zip(args2)
                     .all(|(t1, t2)| types_eq(ctx, t1, t2))
         }
-        (Type::Generic(n1), Type::Generic(n2)) => n1 == n2,
+        (Type::Generic(d1, n1), Type::Generic(d2, n2)) => d1 == d2 && n1 == n2,
         (
             Type::Scheme {
                 prefex: prefex_1,
@@ -427,7 +437,7 @@ fn replace_aliases_with_map(typ: &Type, map: &HashMap<TypeId, TypeId>) -> Type {
                 ret: Box::new(ret),
             }
         }
-        g @ Type::Generic(_) => g.clone(),
+        g @ Type::Generic(_, _) => g.clone(),
         Type::Scheme { prefex, typ } => Type::Scheme {
             prefex: prefex.clone(),
             typ: Box::new(replace_aliases_with_map(typ, map)),
@@ -587,7 +597,7 @@ mod tests {
             }
             (Type::Divergent, _) => true,
             (_, Type::Divergent) => true,
-            (Type::Generic(n1), Type::Generic(n2)) => n1 == n2,
+            (Type::Generic(d1, n1), Type::Generic(d2, n2)) => d1 == d2 && n1 == n2,
             (
                 Type::Scheme {
                     typ: t1,

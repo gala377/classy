@@ -1,5 +1,7 @@
 use crate::typecheck::type_context::{Name, TypeId};
 
+use super::type_context::DefId;
+
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub enum Type {
     Int,
@@ -36,8 +38,9 @@ pub enum Type {
         prefex: Vec<Name>,
         typ: Box<Type>,
     },
-    /// Reference to the generic type under index `isize` in the closests enclosing schema.
-    Generic(usize),
+    /// Reference to the generic type under index `isize` in the definition
+    /// with def id (defid, index)
+    Generic(DefId, usize),
     /// Temporary type used onlu for type inference
     Fresh(usize),
 }
@@ -60,7 +63,7 @@ impl Type {
             | Type::Tuple(_)
             | Type::Array(_)
             | Type::Scheme { .. }
-            | Type::Generic(_) => Some(true),
+            | Type::Generic(_, _) => Some(true),
             Type::Fresh(_) | Type::Alias(_) | Type::ToInfere => None,
         }
     }
@@ -137,8 +140,8 @@ pub trait TypeFolder: Sized {
         Type::Fresh(id)
     }
 
-    fn fold_generic(&mut self, id: usize) -> Type {
-        Type::Generic(id)
+    fn fold_generic(&mut self, def_id: usize, id: usize) -> Type {
+        Type::Generic(def_id, id)
     }
 
     fn fold_function(&mut self, args: Vec<Type>, ret: Type) -> Type {
@@ -151,6 +154,17 @@ pub trait TypeFolder: Sized {
 
     fn fold_array(&mut self, arr_t: Type) -> Type {
         fold_array(self, arr_t)
+    }
+
+    fn fold_scheme(&mut self, prefex: Vec<Name>, typ: Type) -> Type {
+        fold_scheme(self, prefex, typ)
+    }
+}
+
+pub fn fold_scheme(folder: &mut impl TypeFolder, prefex: Vec<Name>, typ: Type) -> Type {
+    Type::Scheme {
+        prefex,
+        typ: Box::new(folder.fold_type(typ)),
     }
 }
 
@@ -174,8 +188,8 @@ pub fn fold_type(folder: &mut impl TypeFolder, typ: Type) -> Type {
         Type::Alias(for_type) => folder.fold_alias(for_type),
         Type::Divergent => folder.fold_divergent(),
         Type::ToInfere => folder.fold_to_infere(),
-        Type::Scheme { prefex: _, typ: _ } => todo!(),
-        Type::Generic(id) => folder.fold_generic(id),
+        Type::Scheme { prefex, typ } => folder.fold_scheme(prefex, *typ),
+        Type::Generic(def_id, id) => folder.fold_generic(def_id, id),
         Type::Fresh(id) => folder.fold_fresh(id),
     }
 }

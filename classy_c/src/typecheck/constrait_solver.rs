@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use crate::typecheck::{
-    inference::Constraint,
+    constraints::Constraint,
     r#type::{Type, TypeFolder},
 };
 
@@ -102,6 +102,8 @@ impl<'ctx> ConstraintSolver<'ctx> {
             Constraint::Eq(Type::Array(t_1), Type::Array(t_2)) => {
                 constraints.push_back(Constraint::Eq(*t_1, *t_2));
             }
+            Constraint::Eq(Type::Generic(d1, i1), Type::Generic(d2, i2))
+                if d1 == d2 && i1 == i2 => {}
             Constraint::HasField { t, field, of_type } => match t {
                 Type::Struct { fields, .. } => {
                     let f = fields
@@ -120,31 +122,7 @@ impl<'ctx> ConstraintSolver<'ctx> {
                         .expect("this field does not exists, constraint not met");
                     constraints.push_back(Constraint::Eq(f.1.clone(), of_type));
                 }
-                _ => constraints.push_front(Constraint::HasFieldDeferred {
-                    t: t.clone(),
-                    field,
-                    of_type,
-                }),
-            },
-            Constraint::HasFieldDeferred { t, field, of_type } => match t {
-                Type::Struct { fields, .. } => {
-                    let f = fields
-                        .iter()
-                        .find(|(f, _)| f == &field)
-                        .expect("this field does not exists, constraint not met");
-                    constraints.push_back(Constraint::Eq(f.1.clone(), of_type));
-                }
-                Type::Alias(id) => {
-                    let Type::Struct { fields, .. } = self.tctx.resolve_alias(id) else {
-                        panic!("Expected a struct type got {t:?}");
-                    };
-                    let f = fields
-                        .iter()
-                        .find(|(f, _)| f == &field)
-                        .expect("this field does not exists, constraint not met");
-                    constraints.push_back(Constraint::Eq(f.1.clone(), of_type));
-                }
-                _ => panic!("Expected a struct type got {t:?}, required type annotation"),
+                _ => panic!("cannot infer struct type"),
             },
             c => panic!("Cannot unify constraint {c:?}"),
         }
@@ -163,11 +141,6 @@ fn replace_in_constraints(id: usize, for_t: Type, cons: &mut VecDeque<Constraint
                 replacer.fold_type(t2.clone()),
             ),
             Constraint::HasField { t, field, of_type } => Constraint::HasField {
-                t: replacer.fold_type(t.clone()),
-                field: field.clone(),
-                of_type: replacer.fold_type(of_type.clone()),
-            },
-            Constraint::HasFieldDeferred { t, field, of_type } => Constraint::HasFieldDeferred {
                 t: replacer.fold_type(t.clone()),
                 field: field.clone(),
                 of_type: replacer.fold_type(of_type.clone()),

@@ -217,7 +217,7 @@ fn serialize_type(tctx: &TypCtx, typ: &typecheck::r#type::Type, top_level: bool)
             .unwrap(),
         typecheck::r#type::Type::Divergent => panic!("Cannot serialize divergent type"),
         typecheck::r#type::Type::ToInfere => panic!("Cannot serialize to infere type"),
-        typecheck::r#type::Type::Generic(_) => todo!("Cannot serialize generic type"),
+        typecheck::r#type::Type::Generic(_, _) => todo!("Cannot serialize generic type"),
         typecheck::r#type::Type::Scheme { .. } => todo!("Cannot serialize schema type"),
         typecheck::r#type::Type::Fresh(_) => {
             panic!("Fresh variables should not be present after type inference")

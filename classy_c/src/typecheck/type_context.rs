@@ -256,6 +256,20 @@ impl TypCtx {
         }
     }
 
+    pub fn fn_def_id(&self, name: &str) -> Option<DefId> {
+        for (id, def) in &self.nodes {
+            match def {
+                ast::TopLevelItem::FunctionDefinition(node) => {
+                    if node.name == name {
+                        return Some(*id);
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
     pub fn remove_to_infere_type(&mut self) {
         self.definitions.remove(&self.to_infere_id);
         for (_, id) in self.variables.iter() {

@@ -14,6 +14,7 @@ pub fn fix_types_after_inference(
     fix_fresh_vars_in_substitutions(substitutions, tctx);
     fix_nested_types(substitutions, tctx);
     fix_types_in_env(substitutions, env);
+    tctx.fold_types(&mut TypeGeneralizer);
 }
 
 struct FreshFixer<'a> {
@@ -87,3 +88,65 @@ fn fix_nested_types(substitutions: &mut HashMap<usize, Type>, tctx: &TypCtx) {
         *typ = replacer.fold_type(typ.clone());
     }
 }
+
+struct TypeGeneralizer;
+
+impl TypeFolder for TypeGeneralizer {
+    fn fold_function(&mut self, args: Vec<Type>, ret: Type) -> Type {
+        let mut helper = GeneralizerHelper {
+            bindings: HashMap::new(),
+            current_id: 0,
+        };
+        let args = args.into_iter().map(|t| helper.fold_type(t)).collect();
+        let ret = helper.fold_type(ret);
+        if helper.bindings.is_empty() {
+            Type::Function {
+                args,
+                ret: Box::new(ret),
+            }
+        } else {
+            let mut prefex = Vec::new();
+            for i in 0..helper.current_id {
+                prefex.push(PREFEX_NAMES[i % PREFEX_NAMES.len()].to_owned());
+            }
+            Type::Scheme {
+                prefex,
+                typ: Box::new(Type::Function {
+                    args,
+                    ret: Box::new(ret),
+                }),
+            }
+        }
+    }
+}
+
+struct GeneralizerHelper {
+    bindings: HashMap<usize, Type>,
+    current_id: usize,
+}
+
+impl GeneralizerHelper {
+    pub fn new_generic(&mut self) -> Type {
+        let id = self.current_id;
+        self.current_id += 1;
+        Type::Generic(0, id)
+    }
+}
+
+impl TypeFolder for GeneralizerHelper {
+    fn fold_fresh(&mut self, id: usize) -> Type {
+        match self.bindings.get(&id) {
+            Some(t) => t.clone(),
+            None => {
+                let t = self.new_generic();
+                self.bindings.insert(id, t.clone());
+                t
+            }
+        }
+    }
+}
+
+static PREFEX_NAMES: &[&str] = &[
+    "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s",
+    "t", "u", "w", "x", "y", "z",
+];

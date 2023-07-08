@@ -52,7 +52,7 @@ impl AliasResolver {
                 | Type::String
                 | Type::Unit
                 | Type::UInt
-                | Type::Generic(_)
+                | Type::Generic(_, _)
                 | Type::Scheme { .. } => Type::Alias(*for_type),
                 Type::Alias(..) => {
                     unreachable!("no alias should point to another alias at this point")
@@ -160,7 +160,7 @@ impl AliasResolver {
                     | Type::Unit
                     | Type::Byte
                     | Type::ToInfere
-                    | Type::Generic(_)) => t.clone(),
+                    | Type::Generic(_, _)) => t.clone(),
                     // Do not resolve this types as they migh create reference cycles.
                     Type::Struct { .. } => Type::Alias(*for_type),
                     Type::Function { .. } => Type::Alias(*for_type),
@@ -202,7 +202,7 @@ impl AliasResolver {
             | Type::Unit
             | Type::Byte
             | Type::ToInfere
-            | Type::Generic(_)) => t.clone(),
+            | Type::Generic(_, _)) => t.clone(),
             _ => unimplemented!(),
         }
     }

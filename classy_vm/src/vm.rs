@@ -166,6 +166,7 @@ mod tests {
         vm::{self, Vm},
     };
 
+    #[allow(dead_code)]
     fn setup_vm(page_size: usize, page_count: usize, debug: bool) -> Vm {
         let actual_page_size = size_of::<Page>() + page_size;
         Vm::new_default(vm::Options {

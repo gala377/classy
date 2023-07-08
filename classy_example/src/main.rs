@@ -116,17 +116,15 @@ fn main() {
                     print(itos(i.value))
                 }
 
+                id: forall a => (a) -> a
+                id x = x
+
+                id2 x = x
+
                 main { 
-                    print "Hello world1" 
-                    print_twice "Hello macarena"
-                    let a = type { a = "Hello"; b = 10 }
-                    let arr = array{"a", "b", "c", "d"}
-                    print(itos(header_data(arr[0])))
-                    print(itos(header_data(a.a)))
-                    print_n_times("test", 10)
-                    print(concat_strings("Hello", " world"))
                     print_integer(Integer(value=10))
-                    print_inf "hello"
+                    print(id("Hello world"))
+                    print(id2("hello world"))
                 }
             "#;
             let functions = compile(&mut vm, source);
