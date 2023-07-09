@@ -15,9 +15,24 @@ pub fn fix_types_after_inference(
     global_scope: Rc<RefCell<Scope>>,
 ) {
     fix_types_in_env(substitutions, env);
+    if name == "make_ref" {
+        println!("\n\nAFTER FOX TYPES\n\n{}", tctx.debug_string());
+    }
     fix_fresh_vars_in_substitutions(substitutions, tctx);
+
+    if name == "make_ref" {
+        println!("\n\nAFTER FIX FRESH\n\n{}", tctx.debug_string());
+    }
     fix_nested_types(substitutions, tctx);
+
+    if name == "make_ref" {
+        println!("\n\nAFTER FOX NESTED\n\n{}", tctx.debug_string());
+    }
     generalize_types(tctx, name, global_scope, env);
+
+    if name == "make_ref" {
+        println!("\n\nAFTER GEN\n\n{}", tctx.debug_string());
+    }
 }
 
 fn generalize_types(
@@ -55,12 +70,7 @@ fn fix_fresh_vars_in_substitutions(substitutions: &mut HashMap<usize, Type>, tct
         substitutions: HashMap::new(),
     };
     for (id, typ) in substitutions.iter() {
-        let for_type = match typ {
-            Type::Struct { def, .. } => Type::Alias(tctx.def_id_to_typ_id(*def)),
-            Type::ADT { def, .. } => Type::Alias(tctx.def_id_to_typ_id(*def)),
-            t => t.clone(),
-        };
-        replacer.substitutions.insert(*id, for_type.clone());
+        replacer.substitutions.insert(*id, typ.clone());
     }
     for (_, typ) in substitutions.iter_mut() {
         *typ = replacer.fold_type(typ.clone());
@@ -82,7 +92,13 @@ impl TypeFolder for ReplaceStructsWithAliases<'_> {
             };
             super::r#type::fold_struct(new_folder, def, fields)
         } else {
-            Type::Alias(self.tctx.def_id_to_typ_id(def))
+            let type_id = self.tctx.def_id_to_typ_id(def);
+            match self.tctx.definitions.get(&type_id).unwrap() {
+                // Only replace in case its a plain, non generic struct
+                // if its anything but that then it is probably an instantiated type
+                Type::Struct { .. } => Type::Alias(type_id),
+                t => self.fold_type(t.clone()),
+            }
         }
     }
 }

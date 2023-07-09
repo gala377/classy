@@ -37,6 +37,12 @@ impl<'ctx> ConstraintSolver<'ctx> {
         constraints.reverse();
         let mut constraints: VecDeque<_> = constraints.into();
         while let Some(con) = constraints.pop_back() {
+            println!("\n\nSOLVING CONSTRAINTS\n");
+            println!(">> {con:#?}");
+            for con in constraints.iter() {
+                println!("-> {con:#?}");
+            }
+
             self.solve_constraint(con, &mut constraints);
         }
     }
@@ -70,6 +76,29 @@ impl<'ctx> ConstraintSolver<'ctx> {
                     constraints.push_back(Constraint::Eq(t1.clone(), t2.clone()));
                 }
             }
+            Constraint::Eq(app @ Type::App { .. }, t) => {
+                constraints.push_back(Constraint::Eq(t, app));
+            }
+            Constraint::Eq(t, Type::App { typ: app_t, args }) => {
+                let app_t = match app_t.as_ref() {
+                    Type::Alias(id) => self.tctx.resolve_alias(*id),
+                    t => t.clone(),
+                };
+                let Type::Scheme { prefex, typ: scheme_t } = app_t else {
+                    panic!("Expected a scheme type got {app_t:?}");
+                };
+                assert!(prefex.len() == args.len());
+                let instantiated = args.into_iter().enumerate().fold(*scheme_t, |acc, (i, t)| {
+                    let mut replacer = Instatiator {
+                        for_gen: i,
+                        instatiated: t,
+                        tctx: self.tctx,
+                        deruijn: DeBruijn::zero(),
+                    };
+                    replacer.fold_type(acc)
+                });
+                constraints.push_back(Constraint::Eq(t, instantiated));
+            }
             Constraint::Eq(Type::Fresh(id1), other) => {
                 self.substitutions.push((id1, other.clone()));
                 replace_in_constraints(id1, other, constraints)
@@ -92,25 +121,6 @@ impl<'ctx> ConstraintSolver<'ctx> {
                 for (a1, a2) in args_1.iter().zip(args_2.iter()) {
                     constraints.push_back(Constraint::Eq(a1.clone(), a2.clone()));
                 }
-            }
-            Constraint::Eq(app @ Type::App { .. }, t) => {
-                constraints.push_back(Constraint::Eq(t, app));
-            }
-            Constraint::Eq(t, Type::App { typ: app_t, args }) => {
-                let Type::Scheme { prefex, typ: scheme_t } = *app_t else {
-                    panic!("Expected a scheme type got {app_t:?}");
-                };
-                assert!(prefex.len() == args.len());
-                let instantiated = args.into_iter().enumerate().fold(*scheme_t, |acc, (i, t)| {
-                    let mut replacer = Instatiator {
-                        for_gen: i,
-                        instatiated: t,
-                        tctx: self.tctx,
-                        deruijn: DeBruijn::zero(),
-                    };
-                    replacer.fold_type(acc)
-                });
-                constraints.push_back(Constraint::Eq(t, instantiated));
             }
             Constraint::Eq(Type::Array(t_1), Type::Array(t_2)) => {
                 constraints.push_back(Constraint::Eq(*t_1, *t_2));
@@ -137,6 +147,9 @@ impl<'ctx> ConstraintSolver<'ctx> {
                 }
                 _ => panic!("cannot infer struct type"),
             },
+            // TODO: Disallow instantiotion with not reference types
+            Constraint::Eq(Type::Generic(_, _), _) => {}
+            Constraint::Eq(_, Type::Generic(_, _)) => {}
             c => panic!("Cannot unify constraint {c:?}"),
         }
     }
@@ -164,11 +177,6 @@ fn replace_in_constraints(id: usize, for_t: Type, cons: &mut VecDeque<Constraint
         }
     }
 }
-
-/// TODO:
-/// For now we are ignoring definition ids
-/// And that will become a problem when we get to the methods
-/// for generic types
 struct Instatiator<'tctx> {
     for_gen: usize,
     instatiated: Type,
@@ -181,6 +189,9 @@ impl<'ctx> TypeFolder for Instatiator<'ctx> {
         self.deruijn += 1;
         let typ = self.fold_type(typ);
         self.deruijn -= 1;
+        if self.deruijn == DeBruijn(-1) {
+            return typ;
+        }
         Type::Scheme {
             prefex,
             typ: Box::new(typ),
@@ -192,7 +203,10 @@ impl<'ctx> TypeFolder for Instatiator<'ctx> {
             return Type::Generic(def, id);
         }
         if self.for_gen == id {
-            self.instatiated.clone()
+            match &self.instatiated {
+                Type::Generic(d, i) => Type::Generic(self.deruijn.clone() + d.0, *i),
+                t => t.clone(),
+            }
         } else {
             Type::Generic(def, id)
         }

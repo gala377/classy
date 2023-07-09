@@ -362,30 +362,34 @@ pub fn types_eq(ctx: &TypCtx, t1: &Type, t2: &Type) -> bool {
             types_eq(ctx, t1, t2) && a1.iter().zip(a2).all(|(t1, t2)| types_eq(ctx, t1, t2))
         }
         (Type::App { typ: t1, args: a1 }, t) => {
-            let expanded = ApplicationExpander::new(&a1).fold_type(*t1.clone());
-            types_eq(ctx, &expanded, t)
+            println!("comparing {t1:?} and {t:?}", t1 = t1, t = t);
+            let expanded = ApplicationExpander::new(ctx, &a1).fold_type(*t1.clone());
+            println!("COMPARING {expanded:?} and {t:?}");
+            dbg!(types_eq(ctx, &expanded, t))
         }
         (t1, t2 @ Type::App { .. }) => types_eq(ctx, t2, t1),
         _ => false,
     }
 }
 
-struct ApplicationExpander<'a> {
+struct ApplicationExpander<'a, 'ctx> {
     substitutions: &'a Vec<Type>,
     debruijn: DeBruijn,
+    tctx: &'ctx TypCtx,
 }
 
-impl<'a> ApplicationExpander<'a> {
-    pub fn new(substitutions: &'a Vec<Type>) -> Self {
+impl<'a, 'ctx> ApplicationExpander<'a, 'ctx> {
+    pub fn new(tctx: &'ctx TypCtx, substitutions: &'a Vec<Type>) -> Self {
         Self {
             substitutions,
             debruijn: DeBruijn(-1),
+            tctx,
         }
     }
 }
 // TODO: This does not exapand nested apllications but that should not be a problem
 // As types_eq will get to those applications and expand them recursevily
-impl TypeFolder for ApplicationExpander<'_> {
+impl TypeFolder for ApplicationExpander<'_, '_> {
     fn fold_scheme(&mut self, prefex: Vec<Name>, typ: Type) -> Type {
         self.debruijn += 1;
         let t = self.fold_type(typ);
@@ -402,11 +406,18 @@ impl TypeFolder for ApplicationExpander<'_> {
         }
     }
 
+    fn fold_alias(&mut self, for_type: usize) -> Type {
+        let t = self.tctx.resolve_alias(for_type);
+        self.fold_type(t)
+    }
+
     fn fold_generic(&mut self, index: DeBruijn, id: usize) -> Type {
         if index != self.debruijn {
             return Type::Generic(index, id);
         }
-        let typ = self.substitutions[id].clone();
-        self.fold_type(typ)
+        match self.substitutions[id].clone() {
+            Type::Generic(index, id) => Type::Generic(index + self.debruijn.0, id),
+            t => self.fold_type(t),
+        }
     }
 }

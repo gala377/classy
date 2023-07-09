@@ -97,14 +97,14 @@ fn main() {
 
                 type IntRef = Ref(Int)
 
-                make_int_ref: () -> IntRef
+                make_int_ref: () -> Ref(Int)
                 make_int_ref = make_ref 0
 
                 main {
                     let ref = make_ref "hello"
                     let ref2 = make_int_ref()
                     print(ref.ref)
-                    print(itoa(ref2.ref))
+                    print(itos(ref2.ref))
                 }
 
 

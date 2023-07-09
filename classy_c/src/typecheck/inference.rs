@@ -134,10 +134,13 @@ impl Inference {
                 .clone();
             println!("\n\nCONSTRAINTS FOR {name}\n\n");
             for c in &constraints {
-                println!("{:?}", c);
+                println!("-> {:#?}", c);
             }
             solver.solve(constraints);
             let mut substitutions = solver.substitutions.into_iter().collect();
+            if name == "make_ref" {
+                println!("{}", tctx.debug_string());
+            }
             fix_fresh::fix_types_after_inference(
                 name,
                 &mut substitutions,
@@ -145,6 +148,9 @@ impl Inference {
                 &mut inferer.env,
                 global_scope.clone(),
             );
+            if name == "make_ref" {
+                println!("{}", tctx.debug_string());
+            }
             println!("SUBSTITUTIONS");
             for (id, typ) in substitutions {
                 println!("{} -> {:?}", id, typ);
@@ -357,8 +363,61 @@ impl Inference {
                     let scope = self.scope.borrow();
                     scope.lookup_type(&name).unwrap()
                 };
-                self.constraints
-                    .push(Constraint::Eq(ret_t.clone(), strct_t.clone()));
+                // TODO:
+                // This does not look well, surely there has to be an easier way
+                // to generate constraints on fields?
+                let fields = match strct_t {
+                    Type::Scheme { prefex, typ } => {
+                        let args = prefex.iter().map(|_| self.fresh_type()).collect();
+                        self.constraints.push(Constraint::Eq(
+                            ret_t.clone(),
+                            Type::App {
+                                typ: Box::new(Type::Scheme {
+                                    prefex,
+                                    typ: typ.clone(),
+                                }),
+                                args,
+                            },
+                        ));
+                        match *typ {
+                            Type::Struct { fields, .. } => fields,
+                            _ => panic!("expected struct type"),
+                        }
+                    }
+                    Type::Struct { def, fields } => {
+                        self.constraints.push(Constraint::Eq(
+                            ret_t.clone(),
+                            Type::Struct {
+                                def,
+                                fields: fields.clone(),
+                            },
+                        ));
+                        fields
+                    }
+                    Type::App { typ, args } => match *typ {
+                        Type::Scheme { prefex, typ } => match *typ {
+                            Type::Struct { fields, def } => {
+                                self.constraints.push(Constraint::Eq(
+                                    ret_t.clone(),
+                                    Type::App {
+                                        typ: Box::new(Type::Scheme {
+                                            prefex,
+                                            typ: Box::new(Type::Struct {
+                                                def,
+                                                fields: fields.clone(),
+                                            }),
+                                        }),
+                                        args: args.clone(),
+                                    },
+                                ));
+                                fields
+                            }
+                            _ => panic!("expected struct type"),
+                        },
+                        _ => panic!("expected struct type"),
+                    },
+                    _ => panic!("expected struct type"),
+                };
                 let args_t = values
                     .iter()
                     .map(|(name, expr)| {
@@ -366,11 +425,7 @@ impl Inference {
                         (name, expr_t)
                     })
                     .collect::<HashMap<_, _>>();
-                let fields_t = match strct_t {
-                    Type::Struct { fields, .. } => fields,
-                    _ => panic!("expected struct type"),
-                };
-                for (f_name, typ) in &fields_t {
+                for (f_name, typ) in &fields {
                     let expr_t = args_t.get(f_name).unwrap();
                     self.constraints
                         .push(Constraint::Eq(expr_t.clone(), typ.clone()));
