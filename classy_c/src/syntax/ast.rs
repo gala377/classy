@@ -101,6 +101,7 @@ pub enum Typ {
         ret: Box<Typ>,
     },
     Tuple(Vec<Typ>),
+    Poly(Vec<String>, Box<Typ>),
     ToInfere,
 }
 

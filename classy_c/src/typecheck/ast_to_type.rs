@@ -2,41 +2,37 @@ use std::collections::HashMap;
 
 use crate::syntax::ast;
 
-use super::{type_context::{TypCtx, TypeId}, r#type::Type};
+use super::{
+    r#type::{DeBruijn, Type},
+    type_context::{TypCtx, TypeId},
+};
+use crate::scope::Scope;
 
+type PrefexScope = Scope<String, usize>;
 
-pub fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String, def_id: usize) {
+impl PrefexScope {
+    fn add_type_var(&mut self, name: impl Into<String>) {
+        self.add(name.into(), self.curr_scope_len());
+    }
+}
+
+pub fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String) {
+    let mut resolver = TypeResolver::new(ctx);
     match typ {
         ast::Typ::Function {
             args,
             ret,
             generics,
         } => {
+            let mut scope = PrefexScope::new();
+            for generic in generics {
+                scope.add_type_var(generic.clone());
+            }
             let resolved_args: Vec<_> = args
                 .iter()
-                .map(|t| {
-                    resolve_type(
-                        &ctx.types,
-                        &mut ctx.definitions,
-                        &mut ctx.next_id,
-                        ctx.unit_id,
-                        ctx.to_infere_id,
-                        generics,
-                        def_id,
-                        t,
-                    )
-                })
+                .map(|t| resolver.resolve_type(&mut scope, t))
                 .collect();
-            let resolved_ret = resolve_type(
-                &ctx.types,
-                &mut ctx.definitions,
-                &mut ctx.next_id,
-                ctx.unit_id,
-                ctx.to_infere_id,
-                generics,
-                def_id,
-                ret,
-            );
+            let resolved_ret = resolver.resolve_type(&mut scope, ret);
             let function_t = ctx.mk_function_scheme(generics.clone(), &resolved_args, resolved_ret);
             assert!(
                 ctx.variables.insert(name.clone(), function_t).is_some(),
@@ -59,24 +55,17 @@ pub fn resolve_top_level_type(
     updates: &mut HashMap<usize, Type>,
 ) {
     let exp_msg = format!("the types should have been prepopulated: {name}");
-    let type_id = ctx.types.get(name).expect(&exp_msg);
-    let prefex = type_variables
-        .iter()
-        .map(|v| v.name.clone())
-        .collect::<Vec<_>>();
+    let type_id = *ctx.types.get(name).expect(&exp_msg);
+    let mut scope = PrefexScope::new();
+    for generic in type_variables {
+        scope.add_type_var(generic.name.clone());
+    }
+    let prefex = type_variables.iter().map(|x| x.name.clone()).collect();
+    let mut resolver = TypeResolver::new(ctx);
     let resolved_type = match definition {
         ast::DefinedType::Alias(ast::Alias { for_type: inner }) => {
-            let resolved = resolve_type(
-                &ctx.types,
-                &mut ctx.definitions,
-                &mut ctx.next_id,
-                ctx.unit_id,
-                ctx.to_infere_id,
-                &prefex,
-                *def_id,
-                inner,
-            );
-            if prefex.is_empty() {
+            let resolved = resolver.resolve_type(&mut scope, inner);
+            if scope.is_empty() {
                 resolved
             } else {
                 Type::Scheme {
@@ -88,19 +77,10 @@ pub fn resolve_top_level_type(
         ast::DefinedType::Record(ast::Record { fields }) => {
             let mut resolved_fields = Vec::with_capacity(fields.len());
             for ast::TypedName { name, typ } in fields {
-                let resolved = resolve_type(
-                    &ctx.types,
-                    &mut ctx.definitions,
-                    &mut ctx.next_id,
-                    ctx.unit_id,
-                    ctx.to_infere_id,
-                    &prefex,
-                    *def_id,
-                    typ,
-                );
+                let resolved = resolver.resolve_type(&mut scope, typ);
                 resolved_fields.push((name.clone(), resolved));
             }
-            if prefex.is_empty() {
+            if scope.is_empty() {
                 Type::Struct {
                     def: *def_id,
                     fields: resolved_fields,
@@ -118,174 +98,125 @@ pub fn resolve_top_level_type(
         // only adt left
         _ => unimplemented!(),
     };
-    if let Some(t) = updates.insert(*type_id, resolved_type) {
+    if let Some(t) = updates.insert(type_id, resolved_type) {
         panic!(
             "Redefinition of type: {} => {}, previous value {:?}",
-            *type_id, name, t
+            type_id, name, t
         );
     }
 }
 
-fn resolve_type(
-    names: &HashMap<String, TypeId>,
-    definitions: &mut HashMap<TypeId, Type>,
-    next_id: &mut TypeId,
+struct TypeResolver<'ctx> {
+    names: &'ctx HashMap<String, TypeId>,
+    definitions: &'ctx mut HashMap<TypeId, Type>,
+    next_id: &'ctx mut TypeId,
     unit_id: TypeId,
     to_infere_id: TypeId,
-    prefex: &Vec<String>,
-    curr_def_id: usize,
-    typ: &ast::Typ,
-) -> Type {
-    match typ {
-        ast::Typ::Name(n) if prefex.contains(n) => {
-            let pos = prefex.iter().position(|x| x == n).unwrap();
-            Type::Generic(curr_def_id, pos)
+}
+
+impl<'ctx> TypeResolver<'ctx> {
+    pub fn new(tctx: &'ctx mut TypCtx) -> Self {
+        Self {
+            names: &tctx.types,
+            definitions: &mut tctx.definitions,
+            next_id: &mut tctx.next_id,
+            unit_id: tctx.unit_id,
+            to_infere_id: tctx.to_infere_id,
         }
-        ast::Typ::Name(n) => {
-            Type::Alias(names.get(n).expect(&format!("type not found, {n}")).clone())
-        }
-        ast::Typ::Tuple(types) => {
-            let resolved = types
-                .iter()
-                .map(|t| {
-                    resolve_type(
-                        names,
-                        definitions,
-                        next_id,
-                        unit_id,
-                        to_infere_id,
-                        prefex,
-                        curr_def_id,
-                        t,
-                    )
-                })
-                .collect();
-            let id = *next_id;
-            *next_id += 1;
-            definitions.insert(id, Type::Tuple(resolved));
-            Type::Alias(id)
-        }
-        ast::Typ::Function {
-            args,
-            ret,
-            generics: _generics,
-        } => {
-            // TODO:
-            // We would need to change it if we want higher order functions
-            // We need to have new generic indexes or like, new identification\
-            // number for the generic if we want those types to work
-            // As we need to have new generics here
-            let resolved_args = args
-                .iter()
-                .map(|t| {
-                    resolve_type(
-                        names,
-                        definitions,
-                        next_id,
-                        unit_id,
-                        to_infere_id,
-                        prefex,
-                        curr_def_id,
-                        t,
-                    )
-                })
-                .collect();
-            let resolved_ret = resolve_type(
-                names,
-                definitions,
-                next_id,
-                unit_id,
-                to_infere_id,
-                prefex,
-                curr_def_id,
+    }
+
+    fn next_id(&mut self) -> usize {
+        let id = *self.next_id;
+        *self.next_id += 1;
+        id
+    }
+
+    fn add_definition(&mut self, typ: Type) -> Type {
+        let id = self.next_id();
+        self.definitions.insert(id, typ);
+        Type::Alias(id)
+    }
+
+    pub fn resolve_type(&mut self, prefex: &mut PrefexScope, typ: &ast::Typ) -> Type {
+        match typ {
+            ast::Typ::Name(n) => match prefex.get(n) {
+                Some(index) => {
+                    let pos = prefex.position(n).unwrap();
+                    Type::Generic(DeBruijn(pos as isize), *index)
+                }
+                None => Type::Alias(
+                    self.names
+                        .get(n)
+                        .expect(&format!("type not found, {n}"))
+                        .clone(),
+                ),
+            },
+            ast::Typ::Tuple(types) => {
+                let resolved = types.iter().map(|t| self.resolve_type(prefex, t)).collect();
+                self.add_definition(Type::Tuple(resolved))
+            }
+            ast::Typ::Function {
+                args,
                 ret,
-            );
-            let id = *next_id;
-            *next_id += 1;
-            definitions.insert(
-                id,
-                Type::Function {
+                generics: _generics,
+            } => {
+                // TODO:
+                // We would need to change it if we want higher order functions
+                // We need to have new generic indexes or like, new identification\
+                // number for the generic if we want those types to work
+                // As we need to have new generics here
+                let resolved_args = args.iter().map(|t| self.resolve_type(prefex, t)).collect();
+                let resolved_ret = self.resolve_type(prefex, ret);
+                self.add_definition(Type::Function {
                     args: resolved_args,
                     ret: Box::new(resolved_ret),
-                },
-            );
-            Type::Alias(id)
-        }
-        ast::Typ::Unit => Type::Alias(unit_id),
-        ast::Typ::ToInfere => Type::Alias(to_infere_id),
-        // todo: for other types like a function or an array, we actually
-        // need to create them first.
-        ast::Typ::Array(inner) => {
-            let resolved = resolve_type(
-                names,
-                definitions,
-                next_id,
-                unit_id,
-                to_infere_id,
-                prefex,
-                curr_def_id,
-                inner,
-            );
-            let id = *next_id;
-            *next_id += 1;
-            definitions.insert(id, Type::Array(Box::new(resolved)));
-            Type::Alias(id)
-        }
-        ast::Typ::Application {
-            callee,
-            generics,
-            args,
-        } => {
-            let resolved_callee = resolve_type(
-                names,
-                definitions,
-                next_id,
-                unit_id,
-                to_infere_id,
-                prefex,
-                curr_def_id,
-                callee,
-            );
-            let resolved_args = args
-                .iter()
-                .map(|t| {
-                    resolve_type(
-                        names,
-                        definitions,
-                        next_id,
-                        unit_id,
-                        to_infere_id,
-                        prefex,
-                        curr_def_id,
-                        t,
-                    )
                 })
-                .collect();
-            let t = Type::App {
-                typ: Box::new(resolved_callee),
-                args: resolved_args,
-            };
-            if !generics.is_empty() {
-                /* 
-                What we need to do is somehow scope the prefex
-                Because those generics create a higher kinded type
-                this case applies for something like that
-                
-                type Foo a m = (m, a)
-                type Bar m = forall a => Foo a m
-                
-                In the case of Bar, Foo has a typevar `a` scoped to itself
-                but typevar `m` is scoped to Bar.
-                */
-                todo!("Higher kinded types are not yet supported")
             }
-            let id = *next_id;
-            *next_id += 1;
-            definitions.insert(
-                id,
-                t,
-            );
-            Type::Alias(id)
+            ast::Typ::Unit => Type::Alias(self.unit_id),
+            ast::Typ::ToInfere => Type::Alias(self.to_infere_id),
+            ast::Typ::Array(inner) => {
+                let resolved = self.resolve_type(prefex, inner);
+                self.add_definition(Type::Array(Box::new(resolved)))
+            }
+            ast::Typ::Application {
+                callee,
+                generics,
+                args,
+            } => {
+                if !generics.is_empty() {}
+                let resolved_callee = self.resolve_type(prefex, callee);
+                let resolved_args = args.iter().map(|t| self.resolve_type(prefex, t)).collect();
+                let t = Type::App {
+                    typ: Box::new(resolved_callee),
+                    args: resolved_args,
+                };
+                let t = if !generics.is_empty() {
+                    prefex.with_scope(|scope| {
+                        for generic in generics {
+                            scope.add_type_var(generic.clone());
+                        }
+                        Type::Scheme {
+                            prefex: generics.clone(),
+                            typ: Box::new(self.resolve_type(scope, typ)),
+                        }
+                    })
+                } else {
+                    t
+                };
+                self.add_definition(t)
+            }
+            ast::Typ::Poly(generics, t) => {
+                let t = prefex.with_scope(|scope| {
+                    for generic in generics {
+                        scope.add_type_var(generic.clone());
+                    }
+                    self.resolve_type(scope, t)
+                });
+                self.add_definition(Type::Scheme {
+                    prefex: generics.clone(),
+                    typ: Box::new(t),
+                })
+            }
         }
     }
 }

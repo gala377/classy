@@ -479,6 +479,9 @@ impl Inference {
             ast::Typ::Application { .. } => {
                 todo!()
             }
+            ast::Typ::Poly(generics, t) => {
+                todo!()
+            }
             ast::Typ::Array(t) => {
                 let t = Box::new(self.ast_type_to_type(scope, t));
                 Type::Array(t)

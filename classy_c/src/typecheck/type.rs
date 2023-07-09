@@ -1,3 +1,5 @@
+use std::ops::{Add, AddAssign, Sub, SubAssign};
+
 use crate::typecheck::type_context::{Name, TypeId};
 
 use super::type_context::{DefId, TypCtx};
@@ -45,9 +47,9 @@ pub enum Type {
         args: Vec<Type>,
     },
 
-    /// Reference to the generic type under index `isize` in the definition
-    /// with def id (defid, index)
-    Generic(DefId, usize),
+    /// Reference to the generic type under index `usize` in the definition
+    /// within the DeBrujin index.
+    Generic(DeBruijn, usize),
     /// Temporary type used onlu for type inference
     Fresh(usize),
 }
@@ -95,6 +97,43 @@ impl Type {
             Type::Int | Type::UInt | Type::Float | Type::Unit => std::mem::size_of::<usize>(),
             t => panic!("cannot get the size of the type {t:?}"),
         }
+    }
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
+pub struct DeBruijn(pub isize);
+
+impl DeBruijn {
+    pub fn zero() -> Self {
+        Self(0)
+    }
+}
+
+impl Add<isize> for DeBruijn {
+    type Output = Self;
+
+    fn add(self, rhs: isize) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
+
+impl Sub<isize> for DeBruijn {
+    type Output = Self;
+
+    fn sub(self, rhs: isize) -> Self::Output {
+        Self(self.0 - rhs as isize)
+    }
+}
+
+impl AddAssign<isize> for DeBruijn {
+    fn add_assign(&mut self, rhs: isize) {
+        self.0 += rhs;
+    }
+}
+
+impl SubAssign<isize> for DeBruijn {
+    fn sub_assign(&mut self, rhs: isize) {
+        self.0 -= 0;
     }
 }
 
@@ -148,8 +187,8 @@ pub trait TypeFolder: Sized {
         Type::Fresh(id)
     }
 
-    fn fold_generic(&mut self, def_id: usize, id: usize) -> Type {
-        Type::Generic(def_id, id)
+    fn fold_generic(&mut self, debruijn: DeBruijn, id: usize) -> Type {
+        Type::Generic(debruijn, id)
     }
 
     fn fold_function(&mut self, args: Vec<Type>, ret: Type) -> Type {
@@ -201,7 +240,7 @@ pub fn fold_type(folder: &mut impl TypeFolder, typ: Type) -> Type {
         Type::Divergent => folder.fold_divergent(),
         Type::ToInfere => folder.fold_to_infere(),
         Type::Scheme { prefex, typ } => folder.fold_scheme(prefex, *typ),
-        Type::Generic(def_id, id) => folder.fold_generic(def_id, id),
+        Type::Generic(debruijn, id) => folder.fold_generic(debruijn, id),
         Type::Fresh(id) => folder.fold_fresh(id),
         Type::App { typ, args } => folder.fold_application(*typ, args),
     }
@@ -240,7 +279,6 @@ pub fn fold_application(folder: &mut impl TypeFolder, typ: Type, args: Vec<Type>
         args,
     }
 }
-
 
 pub fn types_eq(ctx: &TypCtx, t1: &Type, t2: &Type) -> bool {
     match (t1, t2) {
@@ -324,29 +362,50 @@ pub fn types_eq(ctx: &TypCtx, t1: &Type, t2: &Type) -> bool {
             types_eq(ctx, t1, t2) && a1.iter().zip(a2).all(|(t1, t2)| types_eq(ctx, t1, t2))
         }
         (Type::App { typ: t1, args: a1 }, t) => {
-            let mut expander = ApplicationExpander { substitutions: &a1 };
-            let expanded = expander.fold_type(*t1.clone());
+            let expanded = ApplicationExpander::new(&a1).fold_type(*t1.clone());
             types_eq(ctx, &expanded, t)
         }
-        (t1, t2 @ Type::App { ..}) => {
-            types_eq(ctx, t2, t1)
-        }
+        (t1, t2 @ Type::App { .. }) => types_eq(ctx, t2, t1),
         _ => false,
     }
 }
 
 struct ApplicationExpander<'a> {
     substitutions: &'a Vec<Type>,
+    debruijn: DeBruijn,
 }
+
+impl<'a> ApplicationExpander<'a> {
+    pub fn new(substitutions: &'a Vec<Type>) -> Self {
+        Self {
+            substitutions,
+            debruijn: DeBruijn(-1),
+        }
+    }
+}
+// TODO: This does not exapand nested apllications but that should not be a problem
+// As types_eq will get to those applications and expand them recursevily
 impl TypeFolder for ApplicationExpander<'_> {
     fn fold_scheme(&mut self, prefex: Vec<Name>, typ: Type) -> Type {
-        if self.substitutions.len() != prefex.len() {
-            panic!("Type not fully applied")
+        self.debruijn += 1;
+        let t = self.fold_type(typ);
+        self.debruijn -= 1;
+        if self.debruijn == DeBruijn(-1) {
+            // this is a top level scheme, we have to exand this one
+            t
+        } else {
+            // This is a nested scheme, we have to keep it, as it is not applied
+            Type::Scheme {
+                prefex,
+                typ: Box::new(t),
+            }
         }
-        self.fold_type(typ)
     }
 
-    fn fold_generic(&mut self, _: usize, id: usize) -> Type {
+    fn fold_generic(&mut self, index: DeBruijn, id: usize) -> Type {
+        if index != self.debruijn {
+            return Type::Generic(index, id);
+        }
         let typ = self.substitutions[id].clone();
         self.fold_type(typ)
     }

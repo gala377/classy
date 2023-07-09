@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use super::{
     constrait_solver::FreshTypeReplacer,
-    r#type::{Type, TypeFolder},
+    r#type::{Type, TypeFolder, DeBruijn},
     scope::Scope,
     type_context::TypCtx,
 };
@@ -31,6 +31,7 @@ fn generalize_types(
     let mut generalizer = GeneralizerHelper {
         bindings: HashMap::new(),
         current_id: 0,
+        debruijn: DeBruijn::zero(),
     };
     let t = tctx.definitions.get_mut(&new_t).unwrap();
     *t = generalizer.generalize(t.clone());
@@ -99,6 +100,7 @@ fn fix_nested_types(substitutions: &mut HashMap<usize, Type>, tctx: &TypCtx) {
 struct GeneralizerHelper {
     bindings: HashMap<usize, Type>,
     current_id: usize,
+    debruijn: DeBruijn,
 }
 
 impl GeneralizerHelper {
@@ -121,11 +123,21 @@ impl GeneralizerHelper {
     pub fn new_generic(&mut self) -> Type {
         let id = self.current_id;
         self.current_id += 1;
-        Type::Generic(0, id)
+        Type::Generic(self.debruijn.clone(), id)
     }
 }
 
 impl TypeFolder for GeneralizerHelper {
+    fn fold_scheme(&mut self, prefex: Vec<super::type_context::Name>, typ: Type) -> Type {
+        self.debruijn += 1;
+        let t = self.fold_type(typ);
+        self.debruijn -= 1;
+        Type::Scheme {
+            prefex,
+            typ: Box::new(t),
+        }
+    }
+
     fn fold_fresh(&mut self, id: usize) -> Type {
         match self.bindings.get(&id) {
             Some(t) => t.clone(),

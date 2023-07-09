@@ -307,9 +307,10 @@ impl<'source> Parser<'source> {
                 }),
                 t => {
                     if !generics.is_empty() {
-                        panic!("Generics are only allowed in this type signature: {:#?}", t);
+                        Ok(ast::Typ::Poly(generics, Box::new(t)))
+                    } else {
+                        Ok(t)
                     }
-                    Ok(t)
                 }
             };
         }

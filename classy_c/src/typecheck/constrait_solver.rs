@@ -5,7 +5,7 @@ use crate::typecheck::{
     r#type::{Type, TypeFolder},
 };
 
-use super::type_context::{DefId, TypCtx};
+use super::{type_context::{DefId, TypCtx}, r#type::DeBruijn};
 
 pub(super) struct FreshTypeReplacer {
     pub substitutions: HashMap<usize, Type>,
@@ -106,6 +106,7 @@ impl<'ctx> ConstraintSolver<'ctx> {
                         for_gen: i,
                         instatiated: t,
                         tctx: self.tctx,
+                        deruijn: DeBruijn::zero(),
                     };
                     replacer.fold_type(acc)
                 });
@@ -171,11 +172,22 @@ fn replace_in_constraints(id: usize, for_t: Type, cons: &mut VecDeque<Constraint
 struct Instatiator<'tctx> {
     for_gen: usize,
     instatiated: Type,
+    deruijn: DeBruijn,
     tctx: &'tctx TypCtx,
 }
 
 impl<'ctx> TypeFolder for Instatiator<'ctx> {
-    fn fold_generic(&mut self, def: DefId, id: usize) -> Type {
+    fn fold_scheme(&mut self, prefex: Vec<super::type_context::Name>, typ: Type) -> Type {
+        self.deruijn += 1;
+        let typ = self.fold_type(typ);
+        self.deruijn -= 1;
+        Type::Scheme { prefex, typ: Box::new(typ) }
+    }
+
+    fn fold_generic(&mut self, def: DeBruijn, id: usize) -> Type {
+        if def != self.deruijn {
+            return Type::Generic(def, id);
+        }
         if self.for_gen == id {
             self.instatiated.clone()
         } else {

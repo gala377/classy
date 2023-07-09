@@ -5,3 +5,4 @@ pub mod ir;
 pub mod package;
 pub mod syntax;
 pub mod typecheck;
+pub mod scope;

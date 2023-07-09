@@ -67,7 +67,7 @@ pub fn resolve_type_names(mut ctx: TypCtx) -> TypCtx {
             }
             ast::TopLevelItem::FunctionDefinition(ast::FunctionDefinition {
                 name, typ, ..
-            }) => ast_to_type::resolve_fn_def(typ, &mut ctx, name, *def_id),
+            }) => ast_to_type::resolve_fn_def(typ, &mut ctx, name),
         }
     }
     for (id, t) in type_updates {
