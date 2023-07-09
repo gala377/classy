@@ -99,7 +99,7 @@ pub fn resolve_top_level_type(
                 }
             }
         }
-        // only adt left
+        // TODO: only adt left
         _ => unimplemented!(),
     };
     if let Some(t) = updates.insert(type_id, resolved_type) {
