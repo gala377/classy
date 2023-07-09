@@ -100,6 +100,11 @@ fn main() {
                 make_int_ref: () -> Ref(Int)
                 make_int_ref = make_ref 0
 
+                type List(a) {
+                    val: a
+                    next: List(a)
+                }
+
                 main {
                     let ref = make_ref "hello"
                     let ref2 = make_int_ref()
