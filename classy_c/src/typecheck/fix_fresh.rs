@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use super::{
     constrait_solver::FreshTypeReplacer,
-    r#type::{Type, TypeFolder, DeBruijn},
+    r#type::{DeBruijn, Type, TypeFolder},
     scope::Scope,
     type_context::TypCtx,
 };

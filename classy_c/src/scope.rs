@@ -1,12 +1,13 @@
 use std::{collections::HashMap, hash::Hash};
 
-
-
 pub struct Scope<K, V> {
     stack: Vec<HashMap<K, V>>,
 }
 
-impl<K, V> Scope<K, V> where K: Eq + Hash {
+impl<K, V> Scope<K, V>
+where
+    K: Eq + Hash,
+{
     pub fn new() -> Self {
         Self {
             stack: vec![HashMap::new()],
@@ -46,7 +47,6 @@ impl<K, V> Scope<K, V> where K: Eq + Hash {
     pub fn with_scope<F, R>(&mut self, mut f: F) -> R
     where
         F: FnOnce(&mut Self) -> R,
-
     {
         self.new_scope();
         let r = f(self);

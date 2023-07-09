@@ -14,6 +14,12 @@ impl PrefexScope {
     fn add_type_var(&mut self, name: impl Into<String>) {
         self.add(name.into(), self.curr_scope_len());
     }
+
+    fn add_type_vars(&mut self, vars: &[String]) {
+        for var in vars {
+            self.add_type_var(var);
+        }
+    }
 }
 
 pub fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String) {
@@ -25,9 +31,7 @@ pub fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String) {
             generics,
         } => {
             let mut scope = PrefexScope::new();
-            for generic in generics {
-                scope.add_type_var(generic.clone());
-            }
+            scope.add_type_vars(&generics);
             let resolved_args: Vec<_> = args
                 .iter()
                 .map(|t| resolver.resolve_type(&mut scope, t))
@@ -158,18 +162,21 @@ impl<'ctx> TypeResolver<'ctx> {
             ast::Typ::Function {
                 args,
                 ret,
-                generics: _generics,
+                generics,
             } => {
                 // TODO:
                 // We would need to change it if we want higher order functions
                 // We need to have new generic indexes or like, new identification\
                 // number for the generic if we want those types to work
                 // As we need to have new generics here
-                let resolved_args = args.iter().map(|t| self.resolve_type(prefex, t)).collect();
-                let resolved_ret = self.resolve_type(prefex, ret);
-                self.add_definition(Type::Function {
-                    args: resolved_args,
-                    ret: Box::new(resolved_ret),
+                prefex.with_scope(|scope| {
+                    scope.add_type_vars(&generics);
+                    let resolved_args = args.iter().map(|t| self.resolve_type(scope, t)).collect();
+                    let resolved_ret = self.resolve_type(scope, ret);
+                    self.add_definition(Type::Function {
+                        args: resolved_args,
+                        ret: Box::new(resolved_ret),
+                    })
                 })
             }
             ast::Typ::Unit => Type::Alias(self.unit_id),
@@ -192,9 +199,7 @@ impl<'ctx> TypeResolver<'ctx> {
                 };
                 let t = if !generics.is_empty() {
                     prefex.with_scope(|scope| {
-                        for generic in generics {
-                            scope.add_type_var(generic.clone());
-                        }
+                        scope.add_type_vars(generics);
                         Type::Scheme {
                             prefex: generics.clone(),
                             typ: Box::new(self.resolve_type(scope, typ)),
@@ -207,9 +212,7 @@ impl<'ctx> TypeResolver<'ctx> {
             }
             ast::Typ::Poly(generics, t) => {
                 let t = prefex.with_scope(|scope| {
-                    for generic in generics {
-                        scope.add_type_var(generic.clone());
-                    }
+                    scope.add_type_vars(generics);
                     self.resolve_type(scope, t)
                 });
                 self.add_definition(Type::Scheme {

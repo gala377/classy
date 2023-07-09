@@ -1,12 +1,12 @@
 pub mod add_types;
 pub mod alias_resolver;
+pub mod ast_to_type;
 pub mod constraints;
 pub mod constrait_solver;
 pub mod fix_fresh;
 pub mod inference;
 pub mod scope;
 pub mod r#type;
-pub mod ast_to_type;
 pub mod type_context;
 
 use std::collections::HashMap;
@@ -75,7 +75,6 @@ pub fn resolve_type_names(mut ctx: TypCtx) -> TypCtx {
     }
     ctx
 }
-
 
 pub fn dedup_trivially_eq_types(ctx: &mut TypCtx) {
     let mut duplicates = HashMap::new();

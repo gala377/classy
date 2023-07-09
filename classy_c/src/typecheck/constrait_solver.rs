@@ -5,7 +5,10 @@ use crate::typecheck::{
     r#type::{Type, TypeFolder},
 };
 
-use super::{type_context::{DefId, TypCtx}, r#type::DeBruijn};
+use super::{
+    r#type::DeBruijn,
+    type_context::{DefId, TypCtx},
+};
 
 pub(super) struct FreshTypeReplacer {
     pub substitutions: HashMap<usize, Type>,
@@ -181,7 +184,10 @@ impl<'ctx> TypeFolder for Instatiator<'ctx> {
         self.deruijn += 1;
         let typ = self.fold_type(typ);
         self.deruijn -= 1;
-        Type::Scheme { prefex, typ: Box::new(typ) }
+        Type::Scheme {
+            prefex,
+            typ: Box::new(typ),
+        }
     }
 
     fn fold_generic(&mut self, def: DeBruijn, id: usize) -> Type {
