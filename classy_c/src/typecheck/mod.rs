@@ -210,6 +210,11 @@ fn resolve_type(
             ret,
             generics: _generics,
         } => {
+            // TODO:
+            // We would need to change it if we want higher order functions
+            // We need to have new generic indexes or like, new identification\
+            // number for the generic if we want those types to work
+            // As we need to have new generics here
             let resolved_args = args
                 .iter()
                 .map(|t| {

@@ -89,6 +89,16 @@ fn main() {
 
                 get(i, arr) = arr[i]
 
+                id x = x
+
+                print_with_fn: (forall a => (a) -> a, String) -> ()
+                print_with_fn(f, x) {
+                    print(f(x))
+                }
+                main {
+                    print_with_fn(id, "hello")
+                }
+
             "#;
             let functions = compile(&mut vm, source);
             let mut thread = vm.create_evaluation_thread(functions["main"].clone());
