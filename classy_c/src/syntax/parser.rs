@@ -302,26 +302,22 @@ impl<'source> Parser<'source> {
             return match typ {
                 ast::Typ::Function { args, ret, .. } => Ok(ast::Typ::Function {
                     args,
-                    ret: ret,
+                    ret,
                     generics,
                 }),
-                t => {
-                    if !generics.is_empty() {
-                        Ok(ast::Typ::Poly(generics, Box::new(t)))
-                    } else {
-                        Ok(t)
-                    }
-                }
+                t => Ok(ast::Typ::Poly(generics, Box::new(t))),
             };
         }
         // type aplication
         let args = self.parse_delimited(Self::parse_type, TokenType::Comma);
         let _ = self.expect_token(TokenType::RParen);
-        Ok(ast::Typ::Application {
-            callee: Box::new(typ),
+        Ok(ast::Typ::Poly(
             generics,
-            args,
-        })
+            Box::new(ast::Typ::Application {
+                callee: Box::new(typ),
+                args,
+            }),
+        ))
     }
 
     fn parse_atomic_type(&mut self) -> ParseRes<ast::Typ> {

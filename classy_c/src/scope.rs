@@ -44,7 +44,7 @@ where
         None
     }
 
-    pub fn with_scope<F, R>(&mut self, mut f: F) -> R
+    pub fn with_scope<F, R>(&mut self, f: F) -> R
     where
         F: FnOnce(&mut Self) -> R,
     {

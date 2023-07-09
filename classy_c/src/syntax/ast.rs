@@ -91,7 +91,6 @@ pub enum Typ {
     Name(String),
     Application {
         callee: Box<Typ>,
-        generics: Vec<String>,
         args: Vec<Typ>,
     },
     Array(Box<Typ>),

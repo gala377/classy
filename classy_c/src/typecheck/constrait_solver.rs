@@ -5,10 +5,7 @@ use crate::typecheck::{
     r#type::{Type, TypeFolder},
 };
 
-use super::{
-    r#type::DeBruijn,
-    type_context::{DefId, TypCtx},
-};
+use super::{r#type::DeBruijn, type_context::TypCtx};
 
 pub(super) struct FreshTypeReplacer {
     pub substitutions: HashMap<usize, Type>,

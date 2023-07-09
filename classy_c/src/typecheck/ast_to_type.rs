@@ -8,14 +8,14 @@ use super::{
 };
 use crate::scope::Scope;
 
-type PrefexScope = Scope<String, usize>;
+pub type PrefexScope = Scope<String, usize>;
 
 impl PrefexScope {
-    fn add_type_var(&mut self, name: impl Into<String>) {
+    pub fn add_type_var(&mut self, name: impl Into<String>) {
         self.add(name.into(), self.curr_scope_len());
     }
 
-    fn add_type_vars(&mut self, vars: &[String]) {
+    pub fn add_type_vars(&mut self, vars: &[String]) {
         for var in vars {
             self.add_type_var(var);
         }
@@ -164,11 +164,14 @@ impl<'ctx> TypeResolver<'ctx> {
                 ret,
                 generics,
             } => {
-                // TODO:
-                // We would need to change it if we want higher order functions
-                // We need to have new generic indexes or like, new identification\
-                // number for the generic if we want those types to work
-                // As we need to have new generics here
+                if generics.is_empty() {
+                    let resolved_ars = args.iter().map(|t| self.resolve_type(prefex, t)).collect();
+                    let resolved_ret = self.resolve_type(prefex, ret);
+                    return self.add_definition(Type::Function {
+                        args: resolved_ars,
+                        ret: Box::new(resolved_ret),
+                    });
+                }
                 prefex.with_scope(|scope| {
                     scope.add_type_vars(&generics);
                     let resolved_args = args.iter().map(|t| self.resolve_type(scope, t)).collect();
@@ -185,32 +188,19 @@ impl<'ctx> TypeResolver<'ctx> {
                 let resolved = self.resolve_type(prefex, inner);
                 self.add_definition(Type::Array(Box::new(resolved)))
             }
-            ast::Typ::Application {
-                callee,
-                generics,
-                args,
-            } => {
-                if !generics.is_empty() {}
+            ast::Typ::Application { callee, args } => {
                 let resolved_callee = self.resolve_type(prefex, callee);
                 let resolved_args = args.iter().map(|t| self.resolve_type(prefex, t)).collect();
                 let t = Type::App {
                     typ: Box::new(resolved_callee),
                     args: resolved_args,
                 };
-                let t = if !generics.is_empty() {
-                    prefex.with_scope(|scope| {
-                        scope.add_type_vars(generics);
-                        Type::Scheme {
-                            prefex: generics.clone(),
-                            typ: Box::new(self.resolve_type(scope, typ)),
-                        }
-                    })
-                } else {
-                    t
-                };
                 self.add_definition(t)
             }
             ast::Typ::Poly(generics, t) => {
+                if generics.is_empty() {
+                    return self.resolve_type(prefex, t);
+                }
                 let t = prefex.with_scope(|scope| {
                     scope.add_type_vars(generics);
                     self.resolve_type(scope, t)

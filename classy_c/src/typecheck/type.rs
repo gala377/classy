@@ -2,7 +2,7 @@ use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 use crate::typecheck::type_context::{Name, TypeId};
 
-use super::type_context::{DefId, TypCtx};
+use super::type_context::TypCtx;
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub enum Type {
@@ -121,7 +121,7 @@ impl Sub<isize> for DeBruijn {
     type Output = Self;
 
     fn sub(self, rhs: isize) -> Self::Output {
-        Self(self.0 - rhs as isize)
+        Self(self.0 - rhs)
     }
 }
 
@@ -133,7 +133,7 @@ impl AddAssign<isize> for DeBruijn {
 
 impl SubAssign<isize> for DeBruijn {
     fn sub_assign(&mut self, rhs: isize) {
-        self.0 -= 0;
+        self.0 -= rhs;
     }
 }
 
