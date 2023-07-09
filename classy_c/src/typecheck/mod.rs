@@ -1,12 +1,12 @@
 pub mod add_types;
 pub mod alias_resolver;
-pub mod ast_to_type;
 pub mod constraints;
 pub mod constrait_solver;
 pub mod fix_fresh;
 pub mod inference;
 pub mod scope;
 pub mod r#type;
+pub mod ast_to_type;
 pub mod type_context;
 
 use std::collections::HashMap;
@@ -76,85 +76,6 @@ pub fn resolve_type_names(mut ctx: TypCtx) -> TypCtx {
     ctx
 }
 
-fn types_eq(ctx: &TypCtx, t1: &Type, t2: &Type) -> bool {
-    match (t1, t2) {
-        (Type::Alias(f1), Type::Alias(f2)) if f1 == f2 => {
-            return true;
-        }
-        _ => {}
-    }
-    let t1 = if let Type::Alias(for_type) = t1 {
-        match ctx.definitions.get(for_type) {
-            Some(t) => t,
-            None => return false,
-        }
-    } else {
-        t1
-    };
-    let t2 = if let Type::Alias(for_type) = t2 {
-        match ctx.definitions.get(for_type) {
-            Some(t) => t,
-            None => return false,
-        }
-    } else {
-        t2
-    };
-    match (t1, t2) {
-        (Type::Int, Type::Int) => true,
-        (Type::UInt, Type::UInt) => true,
-        (Type::Bool, Type::Bool) => true,
-        (Type::String, Type::String) => true,
-        (Type::Float, Type::Float) => true,
-        (Type::Unit, Type::Unit) => true,
-        (Type::ToInfere, Type::ToInfere) => false,
-        (Type::Divergent, _) => true,
-        (_, Type::Divergent) => true,
-        (Type::Struct { def: def1, .. }, Type::Struct { def: def2, .. }) => def1 == def2,
-        (Type::Tuple(fields1), Type::Tuple(fields2)) => {
-            if fields1.len() != fields2.len() {
-                return false;
-            }
-            fields1
-                .iter()
-                .zip(fields2)
-                .all(|(t1, t2)| types_eq(ctx, t1, t2))
-        }
-        (
-            Type::Function {
-                args: args1,
-                ret: ret1,
-            },
-            Type::Function {
-                args: args2,
-                ret: ret2,
-            },
-        ) => {
-            if args1.len() != args2.len() {
-                return false;
-            }
-            types_eq(ctx, ret1, ret2)
-                && args1
-                    .iter()
-                    .zip(args2)
-                    .all(|(t1, t2)| types_eq(ctx, t1, t2))
-        }
-        (Type::Generic(d1, n1), Type::Generic(d2, n2)) => d1 == d2 && n1 == n2,
-        (
-            Type::Scheme {
-                prefex: prefex_1,
-                typ: typ_1,
-            },
-            Type::Scheme {
-                prefex: prefex_2,
-                typ: typ_2,
-            },
-        ) => prefex_1.len() == prefex_2.len() && types_eq(ctx, typ_1, typ_2),
-        (Type::App { typ: t1, args: a1 }, Type::App { typ: t2, args: a2 }) => {
-            types_eq(ctx, t1, t2) && a1.iter().zip(a2).all(|(t1, t2)| types_eq(ctx, t1, t2))
-        }
-        _ => false,
-    }
-}
 
 pub fn dedup_trivially_eq_types(ctx: &mut TypCtx) {
     let mut duplicates = HashMap::new();
@@ -163,7 +84,7 @@ pub fn dedup_trivially_eq_types(ctx: &mut TypCtx) {
             if t_id_1 == t_id_2 {
                 continue;
             }
-            if !types_eq(ctx, typ_1, typ_2) {
+            if !r#type::types_eq(ctx, typ_1, typ_2) {
                 continue;
             }
             // different ids pointing to the same type

@@ -1,6 +1,6 @@
 use crate::typecheck::type_context::{Name, TypeId};
 
-use super::type_context::DefId;
+use super::type_context::{DefId, TypCtx};
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub enum Type {
@@ -238,5 +238,116 @@ pub fn fold_application(folder: &mut impl TypeFolder, typ: Type, args: Vec<Type>
     Type::App {
         typ: Box::new(folder.fold_type(typ)),
         args,
+    }
+}
+
+
+pub fn types_eq(ctx: &TypCtx, t1: &Type, t2: &Type) -> bool {
+    match (t1, t2) {
+        (Type::Alias(f1), Type::Alias(f2)) if f1 == f2 => {
+            return true;
+        }
+        _ => {}
+    }
+    let t1 = if let Type::Alias(for_type) = t1 {
+        match ctx.definitions.get(for_type) {
+            Some(t) => t,
+            None => return false,
+        }
+    } else {
+        t1
+    };
+    let t2 = if let Type::Alias(for_type) = t2 {
+        match ctx.definitions.get(for_type) {
+            Some(t) => t,
+            None => return false,
+        }
+    } else {
+        t2
+    };
+    match (t1, t2) {
+        (Type::Int, Type::Int) => true,
+        (Type::UInt, Type::UInt) => true,
+        (Type::Bool, Type::Bool) => true,
+        (Type::String, Type::String) => true,
+        (Type::Float, Type::Float) => true,
+        (Type::Unit, Type::Unit) => true,
+        (Type::ToInfere, Type::ToInfere) => false,
+        (Type::Divergent, _) => true,
+        (_, Type::Divergent) => true,
+        (Type::Struct { def: def1, .. }, Type::Struct { def: def2, .. }) => def1 == def2,
+        (Type::Tuple(fields1), Type::Tuple(fields2)) => {
+            if fields1.len() != fields2.len() {
+                return false;
+            }
+            fields1
+                .iter()
+                .zip(fields2)
+                .all(|(t1, t2)| types_eq(ctx, t1, t2))
+        }
+        (
+            Type::Function {
+                args: args1,
+                ret: ret1,
+            },
+            Type::Function {
+                args: args2,
+                ret: ret2,
+            },
+        ) => {
+            if args1.len() != args2.len() {
+                return false;
+            }
+            types_eq(ctx, ret1, ret2)
+                && args1
+                    .iter()
+                    .zip(args2)
+                    .all(|(t1, t2)| types_eq(ctx, t1, t2))
+        }
+        // TODO: This is kinda correct, depends how we want to compare schemes
+        (Type::Generic(d1, n1), Type::Generic(d2, n2)) => d1 == d2 && n1 == n2,
+        (
+            Type::Scheme {
+                prefex: prefex_1,
+                typ: typ_1,
+            },
+            Type::Scheme {
+                prefex: prefex_2,
+                typ: typ_2,
+            },
+        ) => {
+            // This is incorrect, to test for scheme equivalence we need to
+            // replace generics in typ_2 using generics in typ_1 and then compare this
+            prefex_1.len() == prefex_2.len() && types_eq(ctx, typ_1, typ_2)
+        }
+        (Type::App { typ: t1, args: a1 }, Type::App { typ: t2, args: a2 }) => {
+            types_eq(ctx, t1, t2) && a1.iter().zip(a2).all(|(t1, t2)| types_eq(ctx, t1, t2))
+        }
+        (Type::App { typ: t1, args: a1 }, t) => {
+            let mut expander = ApplicationExpander { substitutions: &a1 };
+            let expanded = expander.fold_type(*t1.clone());
+            types_eq(ctx, &expanded, t)
+        }
+        (t1, t2 @ Type::App { ..}) => {
+            types_eq(ctx, t2, t1)
+        }
+        _ => false,
+    }
+}
+
+struct ApplicationExpander<'a> {
+    substitutions: &'a Vec<Type>,
+}
+impl TypeFolder for ApplicationExpander<'_> {
+    fn fold_scheme(&mut self, prefex: Vec<Name>, typ: Type) -> Type {
+        if self.substitutions.len() != prefex.len() {
+            panic!("Type not fully applied")
+        }
+        self.fold_type(typ)
+    }
+
+    fn fold_generic(&mut self, _: usize, id: usize) -> Type {
+        let typ = self.substitutions[id].clone();
+        self.fold_type(typ)
     }
 }
