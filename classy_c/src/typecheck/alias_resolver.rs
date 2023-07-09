@@ -53,6 +53,7 @@ impl AliasResolver {
                 | Type::Unit
                 | Type::UInt
                 | Type::Generic(_, _)
+                | Type::App { .. }
                 | Type::Scheme { .. } => Type::Alias(*for_type),
                 Type::Alias(..) => {
                     unreachable!("no alias should point to another alias at this point")
@@ -127,12 +128,11 @@ impl AliasResolver {
                 let resolved_fields = fields
                     .iter()
                     .map(|(fname, ftyp)| {
-                        assert!(if let Type::Alias(_) = ftyp {
-                            true
-                        } else {
-                            false
-                        });
-                        let resolved_type = self.resolve_shallow_aliases_in_type(ctx, ftyp);
+                        let resolved_type = match ftyp {
+                            a @ Type::Alias(_) => self.resolve_shallow_aliases_in_type(ctx, a),
+                            g @ Type::Generic(_, _) => g.clone(),
+                            _ => panic!("struct field type should be an alias or a generic"),
+                        };
                         (fname.clone(), resolved_type)
                     })
                     .collect();
@@ -168,6 +168,7 @@ impl AliasResolver {
                     Type::ADT { .. } => Type::Alias(*for_type),
                     Type::Array { .. } => Type::Alias(*for_type),
                     Type::Scheme { .. } => Type::Alias(*for_type),
+                    Type::App { .. } => Type::Alias(*for_type),
                     t => unreachable!("other types should not be visible here {t:?}"),
                 }
             }
@@ -192,6 +193,13 @@ impl AliasResolver {
             Type::Scheme { prefex, typ } => Type::Scheme {
                 prefex: prefex.clone(),
                 typ: Box::new(self.resolve_shallow_aliases_in_type(ctx, typ)),
+            },
+            Type::App { typ, args } => Type::App {
+                typ: Box::new(self.resolve_shallow_aliases_in_type(ctx, typ)),
+                args: args
+                    .into_iter()
+                    .map(|t| self.resolve_shallow_aliases_in_type(ctx, t))
+                    .collect(),
             },
             Type::Array(t) => Type::Array(Box::new(self.resolve_shallow_aliases_in_type(ctx, t))),
             t @ (Type::UInt

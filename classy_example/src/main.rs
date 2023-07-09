@@ -87,17 +87,26 @@ fn main() {
                 @runtime @empty
                 str_from_bytes: ([Byte]) -> String
 
+                type Ref(a) { ref: a }
+
+                make_ref a = Ref(ref=a)
+
                 get(i, arr) = arr[i]
 
                 id x = x
 
-                print_with_fn: (forall a => (a) -> a, String) -> ()
-                print_with_fn(f, x) {
-                    print(f(x))
-                }
+                type IntRef = Ref(Int)
+
+                make_int_ref: () -> IntRef
+                make_int_ref = make_ref 0
+
                 main {
-                    print_with_fn(id, "hello")
+                    let ref = make_ref "hello"
+                    let ref2 = make_int_ref()
+                    print(ref.ref)
+                    print(itoa(ref2.ref))
                 }
+
 
             "#;
             let functions = compile(&mut vm, source);
