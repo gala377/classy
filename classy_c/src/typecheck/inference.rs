@@ -115,6 +115,7 @@ impl Inference {
             })
             .collect::<HashMap<_, _>>();
         for name in &function_check_order {
+            println!("CHECKING FUNCTION {}", name);
             let index = items_mapping.get(name).expect("Expected function to exist");
             let ast::TopLevelItem::FunctionDefinition(fn_def) = &ast.items[*index] else {
                 panic!("unexpected");

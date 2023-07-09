@@ -27,11 +27,11 @@ impl<'ctx> ast::fold::Folder for PromoteCallToStructLiteral<'ctx> {
         kwargs: std::collections::HashMap<String, ast::Expr>,
     ) -> ast::ExprKind {
         let ast::ExprKind::Name(name) = func.kind else {
-            println!("Functiona call is not a name, so no struct");
+            println!("Functiona call expr is not a Name, so no struct");
             return ast::fold::fold_function_call(self, func, args, kwargs);
         };
         let Some(mut typ) = self.tctx.get_type(&name) else {
-            println!("Function call is not a known name, so no struct");
+            println!("Function call {name} is not a known name, so no struct");
             return ast::fold::fold_function_call(
                 self,
                 ast::Expr {
@@ -43,33 +43,57 @@ impl<'ctx> ast::fold::Folder for PromoteCallToStructLiteral<'ctx> {
             );
         };
         if let Type::Alias(for_t) = typ {
-            println!("Function call is an alias, so resolving");
+            println!("Function call type is an alias, so resolving");
             typ = self.tctx.resolve_alias(for_t);
         }
-        let Type::Struct { fields, .. } = typ else {
-            println!("Function call is not a struct, so no struct");
-            return ast::fold::fold_function_call(
-                self,
-                ast::Expr {
-                    id: func.id,
-                    kind: ast::ExprKind::Name(name)
-                },
-                args,
-                kwargs,
-            );
+        let fields = match typ {
+            Type::Struct { fields, .. } => {
+                println!("Function call {name} is a struct, so promoting");
+                fields
+            }
+            Type::Scheme { typ, .. } => match *typ {
+                Type::Struct { fields, .. } => {
+                    println!("Function call {name} is a scheme for a struct so promoting");
+                    fields
+                }
+                _ => {
+                    println!("Function call {name} is a scheme, but not a struct, so no struct");
+                    return ast::fold::fold_function_call(
+                        self,
+                        ast::Expr {
+                            id: func.id,
+                            kind: ast::ExprKind::Name(name),
+                        },
+                        args,
+                        kwargs,
+                    );
+                }
+            },
+            _ => {
+                println!("Function call {name} is not a struct, so no struct");
+                return ast::fold::fold_function_call(
+                    self,
+                    ast::Expr {
+                        id: func.id,
+                        kind: ast::ExprKind::Name(name),
+                    },
+                    args,
+                    kwargs,
+                );
+            }
         };
         if fields.len() != kwargs.len() {
-            panic!("Not all fields on a struct literal were filled in")
+            panic!("Not all fields on a struct literal {name} were filled in")
         };
         if !args.is_empty() {
             panic!("Struct literals do not take positional arguments")
         }
         for (field, _) in &fields {
             if !kwargs.contains_key(field) {
-                panic!("Struct literal missing field: {}", field)
+                panic!("Struct literal {name} missing field: {}", field)
             }
         }
-        println!("Function call is a struct, so promoting");
+        println!("Function call is a struct {name}, so promoting");
         ast::fold::fold_struct_literal(self, ast::Path(vec![name]), kwargs)
     }
 }
