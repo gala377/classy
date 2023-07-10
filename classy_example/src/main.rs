@@ -106,6 +106,12 @@ fn main() {
                     next: List(a)
                 }
 
+                get_int: (String, (String) -> Int) -> Int
+                get_int(a,f) = f a
+
+                run_generic: (String, (String) -> String) -> String
+                run_generic(s, f) = f s
+
                 printi x = print (itos x)
 
                 main {
@@ -115,6 +121,8 @@ fn main() {
                     print(itos(ref2.ref.val))
                     printi(header_data "Hello")
                     printi(header_data ref2)
+                    printi(get_int("123", header_data))
+                    print(run_generic("123", id))
 
                 }
 

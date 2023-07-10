@@ -23,13 +23,15 @@ impl TypeFolder for FreshTypeReplacer {
 pub(super) struct ConstraintSolver<'ctx> {
     pub substitutions: Vec<(usize, Type)>,
     pub tctx: &'ctx TypCtx,
+    pub next_var: usize,
 }
 
 impl<'ctx> ConstraintSolver<'ctx> {
-    pub fn new(tctx: &'ctx TypCtx) -> Self {
+    pub fn new(next_var: usize, tctx: &'ctx TypCtx) -> Self {
         Self {
             substitutions: Vec::new(),
             tctx,
+            next_var,
         }
     }
 
@@ -127,6 +129,27 @@ impl<'ctx> ConstraintSolver<'ctx> {
                     constraints.push_back(Constraint::Eq(a1.clone(), a2.clone()));
                 }
             }
+            Constraint::Eq(f @ Type::Function { .. }, s @ Type::Scheme { .. }) => {
+                constraints.push_back(Constraint::Eq(s, f));
+            }
+            Constraint::Eq(Type::Scheme { prefex, typ }, func_1 @ Type::Function { .. }) => {
+                match *typ {
+                    func_2 @ Type::Function { .. } => {
+                        let args = prefex.iter().map(|_| self.fresh_type()).collect();
+                        constraints.push_back(Constraint::Eq(
+                            func_1,
+                            Type::App {
+                                typ: Box::new(Type::Scheme {
+                                    prefex,
+                                    typ: Box::new(func_2),
+                                }),
+                                args,
+                            },
+                        ));
+                    }
+                    _ => panic!("Cannot unify scheme that is not a function with a function"),
+                }
+            }
             Constraint::Eq(Type::Array(t_1), Type::Array(t_2)) => {
                 constraints.push_back(Constraint::Eq(*t_1, *t_2));
             }
@@ -156,6 +179,12 @@ impl<'ctx> ConstraintSolver<'ctx> {
             Constraint::Eq(t, Type::Generic(_, _)) if t.is_ref().unwrap() => {}
             c => panic!("Cannot unify constraint {c:?}"),
         }
+    }
+
+    fn fresh_type(&mut self) -> Type {
+        let var = self.next_var;
+        self.next_var += 1;
+        Type::Fresh(var)
     }
 }
 

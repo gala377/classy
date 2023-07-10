@@ -125,7 +125,7 @@ impl Inference {
             }
             inferer.generate_constrains_for_function(global_scope.clone(), fn_def);
 
-            let mut solver = ConstraintSolver::new(tctx);
+            let mut solver = ConstraintSolver::new(inferer.next_var, tctx);
             let constraints = inferer
                 .all_constraints
                 .last()
@@ -137,6 +137,7 @@ impl Inference {
                 println!("-> {:#?}", c);
             }
             solver.solve(constraints);
+            inferer.next_var = solver.next_var;
             let mut substitutions = solver.substitutions.into_iter().collect();
             if name == "make_ref" {
                 println!("{}", tctx.debug_string());
