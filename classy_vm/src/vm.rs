@@ -13,7 +13,10 @@ use crate::{
         permament_heap,
         ptr::NonNullPtr,
     },
-    runtime::{self, class, linker::Linker, thread_manager::ThreadManager, Runtime, UserClasses},
+    runtime::{
+        self, class, linker::Linker, thread::ThreadArgs, thread_manager::ThreadManager, Runtime,
+        UserClasses,
+    },
 };
 
 #[derive(Clone)]
@@ -91,17 +94,17 @@ impl Vm {
             from_space,
             to_space,
         } = self.clone_semispaces();
-        runtime::thread::Thread::new(
-            self.runtime.clone(),
-            self.thread_manager.clone(),
+        runtime::thread::Thread::new(ThreadArgs {
+            runtime: self.runtime.clone(),
+            thread_manager: self.thread_manager.clone(),
             from_space,
             to_space,
-            self.permament_heap.clone(),
-            self.options.initial_tlab_size,
-            self.options.young_space_size,
+            permament_heap: self.permament_heap.clone(),
+            initial_tlab_free_size: self.options.initial_tlab_size,
+            max_young_space_size: self.options.young_space_size,
             code,
-            self.options.debug,
-        )
+            debug: self.options.debug,
+        })
     }
 
     pub fn thread_manager(&self) -> Arc<ThreadManager> {
