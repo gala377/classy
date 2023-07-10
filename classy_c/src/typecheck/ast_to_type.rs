@@ -52,7 +52,7 @@ pub fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String) {
                 "updating type definition for funtion that does not exist {}",
                 name
             );
-        },
+        }
         ast::Typ::Application { callee, args } => {
             let mut scope = PrefexScope::new();
             let resolved_callee = resolver.resolve_type(&mut scope, callee);
@@ -69,7 +69,7 @@ pub fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String) {
                 "updating type definition for funtion that does not exist {}",
                 name
             );
-        },
+        }
         ast::Typ::Poly(generics, t) => {
             let mut scope = PrefexScope::new();
             scope.add_type_vars(generics);
@@ -80,7 +80,7 @@ pub fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String) {
                 "updating type definition for funtion that does not exist {}",
                 name
             );
-        },
+        }
         _ => panic!("invalid type for function definition {} => {:?}", name, typ),
     }
 }

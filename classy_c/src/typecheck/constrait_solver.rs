@@ -95,7 +95,7 @@ impl<'ctx> ConstraintSolver<'ctx> {
                     panic!("Expected a scheme type got {app_t:?}");
                 };
                 assert!(prefex.len() == args.len());
-                let instantiated = instance(&self.tctx, args, scheme_t);
+                let instantiated = instance(self.tctx, args, *scheme_t);
                 constraints.push_back(Constraint::Eq(t, instantiated));
             }
             Constraint::Eq(Type::Fresh(id1), other) => {
@@ -252,7 +252,7 @@ impl<'ctx> TypeFolder for Instatiator<'ctx> {
     }
 }
 
-pub fn instance(tctx: &TypCtx, args: Vec<Type>, scheme_t: Box<Type>) -> Type {
+pub fn instance(tctx: &TypCtx, args: Vec<Type>, scheme_t: Type) -> Type {
     instance_with_starting_index(DeBruijn::zero(), tctx, args, scheme_t)
 }
 
@@ -260,9 +260,9 @@ pub fn instance_with_starting_index(
     index: DeBruijn,
     tctx: &TypCtx,
     args: Vec<Type>,
-    scheme_t: Box<Type>,
+    scheme_t: Type,
 ) -> Type {
-    let instantiated = args.into_iter().enumerate().fold(*scheme_t, |acc, (i, t)| {
+    args.into_iter().enumerate().fold(scheme_t, |acc, (i, t)| {
         let mut replacer = Instatiator {
             for_gen: i,
             instatiated: t,
@@ -270,6 +270,5 @@ pub fn instance_with_starting_index(
             deruijn: index.clone(),
         };
         replacer.fold_type(acc)
-    });
-    instantiated
+    })
 }

@@ -14,7 +14,7 @@ use crate::{
     },
 };
 
-use super::{ast_to_type::PrefexScope, constrait_solver::instance, r#type::DeBruijn};
+use super::{ast_to_type::PrefexScope, r#type::DeBruijn};
 
 /// Maps unique node id in the ast with its type.
 pub type TypeEnv = HashMap<usize, Type>;
@@ -191,7 +191,7 @@ impl Inference {
             },
             Type::App { typ, args } => {
                 println!("INSTANTIATING {typ:?} with {args:?}");
-                let instantiated = instance_with_starting_index(DeBruijn(-1), tctx, args, typ);
+                let instantiated = instance_with_starting_index(DeBruijn(-1), tctx, args, *typ);
                 match instantiated {
                     Type::Function { args, ret } => (args, ret, vec![]),
                     t => panic!("Expected function type - got {t:?}"),
