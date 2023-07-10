@@ -380,10 +380,6 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
                 self.stack_map_add_value();
             }
             ir::Address::ConstantInt(val) => {
-                // TODO:
-                // This and constant float should use something
-                // like pushfloat and pushint so we can encode
-                // integer directly in the source code.
                 let id = self.constant_pool.add_entry(val.into());
                 self.emit_instr(code, OpCode::ConstLoadInteger);
                 self.emit_word(code, id as u64);

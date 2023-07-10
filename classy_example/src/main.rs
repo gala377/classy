@@ -70,7 +70,7 @@ fn main() {
                 print: (String) -> ()
                 
                 @runtime @empty
-                header_data: (String) -> Int
+                header_data: forall a => (a) -> Int
 
                 @runtime @empty
                 itos: (Int) -> String
@@ -87,6 +87,7 @@ fn main() {
                 @runtime @empty
                 str_from_bytes: ([Byte]) -> String
 
+                type Integer { val: Int }
                 type Ref(a) { ref: a }
 
                 make_ref a = Ref(ref=a)
@@ -95,21 +96,26 @@ fn main() {
 
                 id x = x
 
-                type IntRef = Ref(Int)
+                type IntRef = Ref(Integer)
 
-                make_int_ref: () -> Ref(Int)
-                make_int_ref = make_ref 0
+                make_int_ref: () -> IntRef
+                make_int_ref = make_ref (Integer(val=0))
 
                 type List(a) {
                     val: a
                     next: List(a)
                 }
 
+                printi x = print (itos x)
+
                 main {
                     let ref = make_ref "hello"
                     let ref2 = make_int_ref()
                     print(ref.ref)
-                    print(itos(ref2.ref))
+                    print(itos(ref2.ref.val))
+                    printi(header_data "Hello")
+                    printi(header_data ref2)
+
                 }
 
 

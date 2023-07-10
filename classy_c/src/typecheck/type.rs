@@ -72,8 +72,10 @@ impl Type {
             | Type::Tuple(_)
             | Type::Array(_)
             | Type::Scheme { .. }
+            // almost certain we will not have aliases to primitive types
+            | Type::Alias(_)
             | Type::Generic(_, _) => Some(true),
-            Type::Fresh(_) | Type::Alias(_) | Type::ToInfere => None,
+            Type::Fresh(_) | Type::ToInfere => None,
             Type::App { typ, .. } => typ.is_ref(),
         }
     }

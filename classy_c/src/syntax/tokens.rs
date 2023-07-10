@@ -129,6 +129,3 @@ lazy_static! {
         set
     };
 }
-
-// TODO: write lexer tests just to make sure
-// regexes are correct.

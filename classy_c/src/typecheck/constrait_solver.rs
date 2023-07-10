@@ -80,6 +80,11 @@ impl<'ctx> ConstraintSolver<'ctx> {
                 constraints.push_back(Constraint::Eq(t, app));
             }
             Constraint::Eq(t, Type::App { typ: app_t, args }) => {
+                for a in &args {
+                    if let Some(false) = a.is_ref() {
+                        panic!("Cannot apply generic for non ref type {a:?}");
+                    }
+                }
                 let app_t = match app_t.as_ref() {
                     Type::Alias(id) => self.tctx.resolve_alias(*id),
                     t => t.clone(),
@@ -147,9 +152,8 @@ impl<'ctx> ConstraintSolver<'ctx> {
                 }
                 _ => panic!("cannot infer struct type"),
             },
-            // TODO: Disallow instantiotion with not reference types
-            Constraint::Eq(Type::Generic(_, _), _) => {}
-            Constraint::Eq(_, Type::Generic(_, _)) => {}
+            Constraint::Eq(Type::Generic(_, _), t) if t.is_ref().unwrap() => {}
+            Constraint::Eq(t, Type::Generic(_, _)) if t.is_ref().unwrap() => {}
             c => panic!("Cannot unify constraint {c:?}"),
         }
     }
