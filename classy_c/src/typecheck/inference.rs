@@ -6,7 +6,7 @@ use crate::{
     syntax::ast::{self, Visitor},
     typecheck::{
         constraints::Constraint,
-        constrait_solver::ConstraintSolver,
+        constrait_solver::{instance_with_starting_index, ConstraintSolver},
         fix_fresh,
         r#type::{Type, TypeFolder},
         scope::Scope,
@@ -14,7 +14,7 @@ use crate::{
     },
 };
 
-use super::{ast_to_type::PrefexScope, r#type::DeBruijn};
+use super::{ast_to_type::PrefexScope, constrait_solver::instance, r#type::DeBruijn};
 
 /// Maps unique node id in the ast with its type.
 pub type TypeEnv = HashMap<usize, Type>;
@@ -123,7 +123,7 @@ impl Inference {
             if fn_def.attributes.contains(&"runtime".to_owned()) {
                 continue;
             }
-            inferer.generate_constrains_for_function(global_scope.clone(), fn_def);
+            inferer.generate_constrains_for_function(tctx, global_scope.clone(), fn_def);
 
             let mut solver = ConstraintSolver::new(inferer.next_var, tctx);
             let constraints = inferer
@@ -166,6 +166,7 @@ impl Inference {
 
     fn generate_constrains_for_function(
         &mut self,
+        tctx: &TypCtx,
         global_scope: Rc<RefCell<Scope>>,
         ast::FunctionDefinition {
             name,
@@ -188,7 +189,15 @@ impl Inference {
                 Type::Function { args, ret } => (args, ret, prefex),
                 _ => panic!("Expected function type"),
             },
-            _ => panic!("Expected function type"),
+            Type::App { typ, args } => {
+                println!("INSTANTIATING {typ:?} with {args:?}");
+                let instantiated = instance_with_starting_index(DeBruijn(-1), tctx, args, typ);
+                match instantiated {
+                    Type::Function { args, ret } => (args, ret, vec![]),
+                    t => panic!("Expected function type - got {t:?}"),
+                }
+            }
+            t => panic!("Expected function type - got {t:?}"),
         };
         let fn_actual_type = {
             let fn_scope = Scope::empty_scope_with_parent(global_scope);

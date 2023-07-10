@@ -24,8 +24,6 @@ impl Tlab {
             println!("Thread {id:?} waiting for its page");
             let mut semi = semi_space.lock().expect("mutex poisoned");
             println!("Thread {id:?} getting its page");
-            // todo: get_page should not depend on the information that the page metadata
-            // is stored inside the page itself.
             let Ptr(page) =
                 semi.allocator
                     .get_page(id, initial_tlab_free_size, std::mem::align_of::<usize>());
@@ -104,7 +102,7 @@ impl Tlab {
     }
 
     /// # Safety
-    ///
+    /// 
     /// User has to make sure that the current page is no longer used
     /// by an thread before realeasing it.
     pub unsafe fn release_current_page(&mut self) {

@@ -14,6 +14,7 @@ impl AliasResolver {
         let mut resolver = AliasResolver::new();
         resolver.resolve_aliases(ctx);
         resolver.update_names(ctx);
+        resolver.update_variables(ctx);
         resolver.resolve_aliases_shallow(ctx);
         resolver.remove_top_level_aliases(ctx);
     }
@@ -70,6 +71,18 @@ impl AliasResolver {
         }
         for (name, tid) in updates {
             ctx.types.insert(name, tid);
+        }
+    }
+
+    fn update_variables(&mut self, ctx: &mut TypCtx) {
+        let mut updates = Vec::new();
+        for (name, tid) in &ctx.variables {
+            if let Type::Alias(for_type) = ctx.definitions.get(tid).unwrap() {
+                updates.push((name.clone(), *for_type));
+            }
+        }
+        for (name, tid) in updates {
+            ctx.variables.insert(name, tid);
         }
     }
 

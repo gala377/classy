@@ -96,6 +96,8 @@ fn main() {
 
                 id x = x
 
+                type Void = () -> ()
+
                 type IntRef = Ref(Integer)
 
                 make_int_ref: () -> IntRef
@@ -114,7 +116,10 @@ fn main() {
 
                 printi x = print (itos x)
 
-                main {
+                type Side(a) = () -> a
+
+                main: Side(Integer)
+                main a {
                     let ref = make_ref "hello"
                     let ref2 = make_int_ref()
                     print(ref.ref)
@@ -123,6 +128,7 @@ fn main() {
                     printi(header_data ref2)
                     printi(get_int("123", header_data))
                     print(run_generic("123", id))
+                    ref2.ref
                 }
 
 

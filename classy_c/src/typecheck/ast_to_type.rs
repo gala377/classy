@@ -44,8 +44,43 @@ pub fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String) {
                 name
             );
         }
-        ast::Typ::Name(_) => todo!("Name aliases for function types not yet supported"),
-        ast::Typ::Application { .. } => todo!("Generic types for function types not yet supported"),
+        ast::Typ::Name(_) => {
+            let resolved = resolver.resolve_type(&mut PrefexScope::new(), typ);
+            let t = ctx.add_type(resolved);
+            assert!(
+                ctx.variables.insert(name.clone(), t).is_some(),
+                "updating type definition for funtion that does not exist {}",
+                name
+            );
+        },
+        ast::Typ::Application { callee, args } => {
+            let mut scope = PrefexScope::new();
+            let resolved_callee = resolver.resolve_type(&mut scope, callee);
+            let resolved_args: Vec<_> = args
+                .iter()
+                .map(|t| resolver.resolve_type(&mut scope, t))
+                .collect();
+            let t = ctx.add_type(Type::App {
+                typ: Box::new(resolved_callee),
+                args: resolved_args,
+            });
+            assert!(
+                ctx.variables.insert(name.clone(), t).is_some(),
+                "updating type definition for funtion that does not exist {}",
+                name
+            );
+        },
+        ast::Typ::Poly(generics, t) => {
+            let mut scope = PrefexScope::new();
+            scope.add_type_vars(generics);
+            let resolved = resolver.resolve_type(&mut scope, t);
+            let t = ctx.add_type(resolved);
+            assert!(
+                ctx.variables.insert(name.clone(), t).is_some(),
+                "updating type definition for funtion that does not exist {}",
+                name
+            );
+        },
         _ => panic!("invalid type for function definition {} => {:?}", name, typ),
     }
 }

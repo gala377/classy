@@ -26,12 +26,8 @@ pub struct Vm {
     pub permament_heap: Arc<Mutex<permament_heap::PermamentHeap>>,
     thread_manager: Arc<ThreadManager>,
     options: Options,
-    // invalid at the moment threads start an evalu
     semispaces: SemiSpaces,
     /// Maps index from the code object ot the static string pointer
-    /// TODO: This does not work as we have different code objects for each function.
-    /// And as such we will get colision when allocating strings between the same constant pools.
-    /// Which is a problem. All code objects should then share the same constant pool
     pub interned_strings: HashMap<String, u64>,
 }
 
@@ -47,7 +43,6 @@ pub struct Options {
 impl Vm {
     pub fn new_default(options: Options) -> Vm {
         let mut permament_heap = permament_heap::PermamentHeap::new();
-        // TODO: Define user classes
         let runtime = Runtime::init(&mut permament_heap, UserClasses::new());
         let thread_manager = ThreadManager::new();
         thread_manager

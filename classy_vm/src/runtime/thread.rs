@@ -48,7 +48,9 @@ pub struct Thread {
     thread_manager: Arc<ThreadManager>,
     code: NonNullPtr<class::code::Code>,
     debug: bool,
-    // todo: this is temporary
+    // todo: this is temporary, ideally linker should
+    // replace symbolic references to runtime functions
+    // with their addresses
     native_functions: HashMap<String, RuntimeFn>,
 }
 

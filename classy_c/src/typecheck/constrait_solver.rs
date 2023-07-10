@@ -39,11 +39,11 @@ impl<'ctx> ConstraintSolver<'ctx> {
         constraints.reverse();
         let mut constraints: VecDeque<_> = constraints.into();
         while let Some(con) = constraints.pop_back() {
-            println!("\n\nSOLVING CONSTRAINTS\n");
-            println!(">> {con:#?}");
-            for con in constraints.iter() {
-                println!("-> {con:#?}");
-            }
+            // println!("\n\nSOLVING CONSTRAINTS\n");
+            // println!(">> {con:#?}");
+            // for con in constraints.iter() {
+            //     println!("-> {con:#?}");
+            // }
 
             self.solve_constraint(con, &mut constraints);
         }
@@ -95,15 +95,7 @@ impl<'ctx> ConstraintSolver<'ctx> {
                     panic!("Expected a scheme type got {app_t:?}");
                 };
                 assert!(prefex.len() == args.len());
-                let instantiated = args.into_iter().enumerate().fold(*scheme_t, |acc, (i, t)| {
-                    let mut replacer = Instatiator {
-                        for_gen: i,
-                        instatiated: t,
-                        tctx: self.tctx,
-                        deruijn: DeBruijn::zero(),
-                    };
-                    replacer.fold_type(acc)
-                });
+                let instantiated = instance(&self.tctx, args, scheme_t);
                 constraints.push_back(Constraint::Eq(t, instantiated));
             }
             Constraint::Eq(Type::Fresh(id1), other) => {
@@ -219,12 +211,15 @@ struct Instatiator<'tctx> {
 
 impl<'ctx> TypeFolder for Instatiator<'ctx> {
     fn fold_scheme(&mut self, prefex: Vec<super::type_context::Name>, typ: Type) -> Type {
+        println!("Instatiating scheme {prefex:?} {typ:?}");
         self.deruijn += 1;
         let typ = self.fold_type(typ);
         self.deruijn -= 1;
         if self.deruijn == DeBruijn(-1) {
+            println!("Instatiated scheme to {typ:?}");
             return typ;
         }
+        println!("Not a top level so returning scheme of {typ:?}");
         Type::Scheme {
             prefex,
             typ: Box::new(typ),
@@ -232,6 +227,10 @@ impl<'ctx> TypeFolder for Instatiator<'ctx> {
     }
 
     fn fold_generic(&mut self, def: DeBruijn, id: usize) -> Type {
+        println!(
+            "Instatiating generic {def:?} {id} current ({:?}, {})",
+            self.deruijn, self.for_gen
+        );
         if def != self.deruijn {
             return Type::Generic(def, id);
         }
@@ -246,7 +245,31 @@ impl<'ctx> TypeFolder for Instatiator<'ctx> {
     }
 
     fn fold_alias(&mut self, for_type: usize) -> Type {
+        println!("Resolving alias {for_type}");
         let resolved = self.tctx.resolve_alias(for_type);
+        println!("Resolved alias {resolved:?}");
         self.fold_type(resolved)
     }
+}
+
+pub fn instance(tctx: &TypCtx, args: Vec<Type>, scheme_t: Box<Type>) -> Type {
+    instance_with_starting_index(DeBruijn::zero(), tctx, args, scheme_t)
+}
+
+pub fn instance_with_starting_index(
+    index: DeBruijn,
+    tctx: &TypCtx,
+    args: Vec<Type>,
+    scheme_t: Box<Type>,
+) -> Type {
+    let instantiated = args.into_iter().enumerate().fold(*scheme_t, |acc, (i, t)| {
+        let mut replacer = Instatiator {
+            for_gen: i,
+            instatiated: t,
+            tctx,
+            deruijn: index.clone(),
+        };
+        replacer.fold_type(acc)
+    });
+    instantiated
 }

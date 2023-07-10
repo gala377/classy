@@ -176,7 +176,7 @@ impl<'source> Parser<'source> {
         let name = self.parse_identifier()?;
         let typ = match self.match_token(TokenType::Colon) {
             Ok(_) => {
-                let typ = self.parse_fn_type()?;
+                let typ = self.parse_type()?;
                 let _ = self.expect_token(TokenType::Semicolon);
                 typ
             }
@@ -237,17 +237,6 @@ impl<'source> Parser<'source> {
             body,
             attributes,
         })
-    }
-
-    fn parse_fn_type(&mut self) -> ParseRes<ast::Typ> {
-        let beg = self.curr_pos();
-        match self.parse_type()? {
-            f_t @ ast::Typ::Function { .. } => Ok(f_t),
-            t => Err(self.error(
-                beg..self.curr_pos(),
-                format!("The function's type is not a function type: {t:#?}"),
-            )),
-        }
     }
 
     fn parse_argument_list(&mut self) -> ParseRes<Vec<String>> {

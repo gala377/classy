@@ -355,8 +355,7 @@ pub fn types_eq(ctx: &TypCtx, t1: &Type, t2: &Type) -> bool {
                 typ: typ_2,
             },
         ) => {
-            // TODO:
-            // This is incorrect, to test for scheme equivalence we need to
+            // This could be incorrect, to test for scheme equivalence we need to
             // replace generics in typ_2 using generics in typ_1 and then compare this
             prefex_1.len() == prefex_2.len() && types_eq(ctx, typ_1, typ_2)
         }
