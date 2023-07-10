@@ -128,7 +128,7 @@ fn main() {
 
             "#;
             let functions = compile(&mut vm, source);
-            let mut thread = vm.create_evaluation_thread(functions["main"].clone());
+            let mut thread = vm.create_evaluation_thread(functions["main"]);
             thread.interpert();
         }
         _ => panic!("Not implemented"),
@@ -185,7 +185,7 @@ fn compile(
 
 pub fn prepare_type_ctx(mut tctx: TypCtx, ast: &ast::Program) -> TypCtx {
     let mut add_types = AddTypes::with_primitive_types(&mut tctx);
-    add_types.visit(&ast);
+    add_types.visit(ast);
     tctx = typecheck::resolve_type_names(tctx);
     typecheck::alias_resolver::AliasResolver::resolve(&mut tctx);
     typecheck::dedup_trivially_eq_types(&mut tctx);

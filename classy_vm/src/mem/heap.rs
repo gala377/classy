@@ -151,12 +151,12 @@ impl Heap {
 
     fn collect_handles_to_roots(&mut self, roots: &mut Vec<*mut ErasedPtr>) {
         let handles = self.handles.lock().unwrap();
-        let mut curr = handles.clone();
+        let mut curr = *handles;
         while let Some(node) = curr {
             unsafe {
                 let ptr_addr = addr_of!((*node.as_ptr()).ptr) as *mut _;
                 roots.push(ptr_addr);
-                curr = (*node.as_ptr()).next.clone();
+                curr = (*node.as_ptr()).next;
             }
         }
     }
@@ -190,7 +190,7 @@ impl Heap {
     pub fn revoke_handle<T>(&mut self, handle: Handle<T>) {
         unsafe {
             let mut head = self.handles.lock().unwrap();
-            let mut curr = head.clone();
+            let mut curr = *head;
             while let Some(ptr) = curr {
                 if addr_of!((*ptr.as_ptr()).ptr) as *mut _ == handle.0 {
                     let prev = (*ptr.as_ptr()).prev;

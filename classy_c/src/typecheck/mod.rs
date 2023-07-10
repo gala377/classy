@@ -374,7 +374,7 @@ mod tests {
         }
 
         tctx.definitions
-            .extend(expected.iter().map(|(k, v)| (k.clone(), v.clone())));
+            .extend(expected.iter().map(|(k, v)| (*k, v.clone())));
         for (id, t) in expected {
             assert!(
                 tctx.definitions

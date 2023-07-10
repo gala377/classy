@@ -191,11 +191,11 @@ impl Inference {
             _ => panic!("Expected function type"),
         };
         let fn_actual_type = {
-            let fn_scope = Scope::empty_scope_with_parent(global_scope.clone());
+            let fn_scope = Scope::empty_scope_with_parent(global_scope);
             self.in_scope(fn_scope.clone(), |scope| {
                 scope.set_ret_t(Some(*(ret.clone())));
                 for (param, typ) in parameters.iter().zip(&args) {
-                    fn_scope.borrow_mut().add_variable(&param, typ.clone());
+                    fn_scope.borrow_mut().add_variable(param, typ.clone());
                 }
                 let mut prefex_scope = PrefexScope::new();
                 prefex_scope.add_type_vars(&prefex);
@@ -260,7 +260,7 @@ impl Inference {
                     let scope = self.scope.borrow();
                     scope
                         .type_of(name)
-                        .expect(format!("Unknown variable {name}").as_str())
+                        .unwrap_or_else(|| panic!("Unknown variable {name}"))
                 };
                 self.env.insert(id, typ.clone());
                 typ
@@ -273,7 +273,7 @@ impl Inference {
                     .iter()
                     .map(|arg| self.infer_in_expr(arg, prefex_scope))
                     .collect::<Vec<_>>();
-                if kwargs.len() > 0 {
+                if !kwargs.is_empty() {
                     todo!("kwargs not implemented yet")
                 }
                 let f_t = match f_t {
@@ -314,7 +314,7 @@ impl Inference {
                     .map(|arg| self.infer_in_expr(arg, prefex_scope))
                     .collect::<Vec<_>>();
                 self.constraints
-                    .push(Constraint::Eq(t_t.clone(), Type::Tuple(args_t.clone())));
+                    .push(Constraint::Eq(t_t.clone(), Type::Tuple(args_t)));
                 t_t
             }
             ast::ExprKind::Lambda { parameters, body } => {
@@ -408,7 +408,7 @@ impl Inference {
                                                 fields: fields.clone(),
                                             }),
                                         }),
-                                        args: args.clone(),
+                                        args,
                                     },
                                 ));
                                 fields
@@ -446,7 +446,7 @@ impl Inference {
                 self.env.insert(id, Type::Divergent);
                 let expr_t = self.infer_in_expr(expr, prefex_scope);
                 self.constraints
-                    .push(Constraint::Eq(expr_t.clone(), self.ret_t.clone().unwrap()));
+                    .push(Constraint::Eq(expr_t, self.ret_t.clone().unwrap()));
                 Type::Divergent
             }
             ast::ExprKind::If {
@@ -487,7 +487,7 @@ impl Inference {
                     t => self.ast_type_to_type(&self.scope.borrow(), prefex_scope, t),
                 };
                 self.constraints.push(Constraint::Eq(init_t, let_t.clone()));
-                self.scope.borrow_mut().add_variable(name, let_t.clone());
+                self.scope.borrow_mut().add_variable(name, let_t);
                 Type::Unit
             }
             ast::ExprKind::ArrayLiteral { typ, size, init } => {

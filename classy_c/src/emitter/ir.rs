@@ -372,7 +372,7 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
             ir::Address::Name(name) => {
                 let id = self
                     .constant_pool
-                    .add_entry(constant_pool::TypedEntry::String(name.clone()));
+                    .add_entry(constant_pool::TypedEntry::String(name));
                 self.emit_instr(code, OpCode::LookUpGlobal);
                 self.emit_word(code, id as u64);
                 // Global values are global so they are added to roots either way.
@@ -405,7 +405,7 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
             ir::Address::ConstantString(val) => {
                 let id = self
                     .constant_pool
-                    .add_entry(constant_pool::TypedEntry::String(val.clone()));
+                    .add_entry(constant_pool::TypedEntry::String(val));
                 self.emit_instr(code, OpCode::ConstLoadString);
                 self.emit_word(code, id as u64);
                 // The string is static so it's going to be scanned anyway.

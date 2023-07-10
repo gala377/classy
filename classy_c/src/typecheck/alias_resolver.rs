@@ -40,7 +40,7 @@ impl AliasResolver {
         }
         for (type_id, for_type) in &self.resolved {
             println!("Updating definition for {type_id} => {for_type}");
-            let t = match ctx.definitions.get(&for_type).unwrap() {
+            let t = match ctx.definitions.get(for_type).unwrap() {
                 Type::Struct { .. }
                 | Type::ADT { .. }
                 | Type::Tuple { .. }
@@ -197,7 +197,7 @@ impl AliasResolver {
             Type::App { typ, args } => Type::App {
                 typ: Box::new(self.resolve_shallow_aliases_in_type(ctx, typ)),
                 args: args
-                    .into_iter()
+                    .iter()
                     .map(|t| self.resolve_shallow_aliases_in_type(ctx, t))
                     .collect(),
             },

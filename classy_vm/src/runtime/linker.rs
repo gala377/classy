@@ -64,7 +64,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                 .permament_heap
                 .lock()
                 .unwrap()
-                .allocate_instance(self.vm.runtime.classes.code.clone());
+                .allocate_instance(self.vm.runtime.classes.code);
             let code_ptr = unsafe {
                 let code_ptr_non_null = NonNullPtr::from_ptr(code_ptr).cast::<class::code::Code>();
                 std::ptr::write(
@@ -105,7 +105,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                 .enumerate()
                 .map(|(i, (name, typ))| {
                     let field_name = unsafe {
-                        std::mem::transmute(self.intern_and_allocte_static_string(&name))
+                        std::mem::transmute(self.intern_and_allocte_static_string(name))
                     };
                     let sym_t_name = match typ {
                         Type::Int => "Int".to_owned(),
@@ -134,7 +134,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
             let cls_ptr = self.vm.permament_heap.lock().unwrap().allocate_class(
                 class,
                 &sym_fields,
-                self.vm.runtime.classes.klass.clone(),
+                self.vm.runtime.classes.klass,
             );
             user_classes.add_class(str_instance as usize, NonNullPtr::from_ptr(cls_ptr));
         }
@@ -155,24 +155,24 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                 let sym_str = class::string::as_rust_string(std::mem::transmute(*name));
                 println!("resolving symbolic references of class {sym_str}");
             }
-            let fields_count = unsafe { class::fields_count(cls_ptr.clone()) };
+            let fields_count = unsafe { class::fields_count(*cls_ptr) };
             for i in 0..fields_count {
                 unsafe {
-                    let field = read_field_sym_ref(cls_ptr.clone(), i);
+                    let field = read_field_sym_ref(*cls_ptr, i);
                     {
                         let sym = class::string::as_rust_string(std::mem::transmute(field.class));
-                        let name = class::string::as_rust_string(std::mem::transmute(field.name));
+                        let name = class::string::as_rust_string(field.name);
                         println!("resolving symbolic references of field {name} with type {sym}");
                     }
                     let sym = field.class.cast();
                     let sym_str = class::string::as_rust_string(sym);
                     let field_cls_addr = match sym_str.as_str() {
-                        "Int" => self.vm.runtime.classes.int.clone(),
-                        "String" => self.vm.runtime.classes.string.clone(),
-                        "Byte" => self.vm.runtime.classes.byte.clone(),
+                        "Int" => self.vm.runtime.classes.int,
+                        "String" => self.vm.runtime.classes.string,
+                        "Byte" => self.vm.runtime.classes.byte,
                         _ => user_classes.get_class_ptr(std::mem::transmute(sym)),
                     };
-                    set_field_cls(cls_ptr.clone(), i, field_cls_addr);
+                    set_field_cls(*cls_ptr, i, field_cls_addr);
                 }
             }
         }
@@ -184,13 +184,13 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
             Some(val) => *val,
             None => {
                 // allocate string in the permament heap
-                let strcls = self.vm.runtime.classes.string.clone();
+                let strcls = self.vm.runtime.classes.string;
                 let instance = self
                     .vm
                     .permament_heap
                     .lock()
                     .unwrap()
-                    .allocate_static_string(strcls, &val);
+                    .allocate_static_string(strcls, val);
                 assert!(!instance.is_null());
                 let instance_word = instance.unwrap() as u64;
                 // add it as interned
@@ -224,9 +224,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
         let bytes = &code.instructions[instr..instr + std::mem::size_of::<u64>()];
         let mut bytes_array: [u8; 8] = [0; 8];
         assert!(bytes.len() == 8);
-        for i in 0..8 {
-            bytes_array[i] = bytes[i];
-        }
+        bytes_array[..8].copy_from_slice(&bytes[..8]);
         u64::from_le_bytes(bytes_array)
     }
 
@@ -239,7 +237,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
         let array_cls_ptr = match self.array_classes.get(&name).cloned() {
             Some(cls) => cls,
             None => {
-                let klass = self.vm.runtime.classes.klass.clone();
+                let klass = self.vm.runtime.classes.klass;
                 let fields = &[];
                 let array_cls = self.vm.permament_heap.lock().unwrap().allocate_class(
                     class::array::mk_array_cls(
@@ -256,7 +254,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                     .permament_heap
                     .lock()
                     .unwrap()
-                    .allocate_static_string(self.vm.runtime.classes.string.clone(), &name);
+                    .allocate_static_string(self.vm.runtime.classes.string, &name);
                 self.array_classes.insert(name, array_cls);
                 unsafe {
                     if name_ptr.is_null() {
@@ -270,9 +268,8 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
         };
         let array_cls_ptr_bytes = (array_cls_ptr.get() as u64).to_le_bytes();
         assert!(array_cls_ptr_bytes.len() == std::mem::size_of::<u64>());
-        for i in 0..std::mem::size_of::<u64>() {
-            code.instructions[instr + i] = array_cls_ptr_bytes[i];
-        }
+        code.instructions[instr..(std::mem::size_of::<u64>() + instr)]
+            .copy_from_slice(&array_cls_ptr_bytes[..std::mem::size_of::<u64>()]);
         code::OpCode::AllocArray.argument_size() + 1
     }
 
@@ -291,9 +288,8 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
         let fn_ptr_bytes = (function_ptr.get() as u64).to_le_bytes();
         // overwrite the id with static pointer
         assert!(fn_ptr_bytes.len() == std::mem::size_of::<u64>());
-        for i in 0..std::mem::size_of::<u64>() {
-            code.instructions[instr + i] = fn_ptr_bytes[i];
-        }
+        code.instructions[instr..(std::mem::size_of::<u64>() + instr)]
+            .copy_from_slice(&fn_ptr_bytes[..std::mem::size_of::<u64>()]);
         code::OpCode::LookUpGlobal.argument_size() + 1
     }
 
@@ -304,9 +300,8 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
         let val_bytes = val.to_le_bytes();
         // overwrite the id with static pointer
         assert!(val_bytes.len() == std::mem::size_of::<u64>());
-        for i in 0..std::mem::size_of::<u64>() {
-            code.instructions[instr + i] = val_bytes[i];
-        }
+        code.instructions[instr..(std::mem::size_of::<u64>() + instr)]
+            .copy_from_slice(&val_bytes[..std::mem::size_of::<u64>()]);
         code::OpCode::ConstLoadInteger.argument_size() + 1
     }
 
@@ -330,9 +325,8 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
         let cls_ptr_bytes = (cls_ptr.get() as u64).to_le_bytes();
         // overwrite the id with static pointer
         assert!(cls_ptr_bytes.len() == std::mem::size_of::<u64>());
-        for i in 0..std::mem::size_of::<u64>() {
-            code.instructions[instr + i] = cls_ptr_bytes[i];
-        }
+        code.instructions[instr..(instr + std::mem::size_of::<u64>())]
+            .copy_from_slice(&cls_ptr_bytes[..std::mem::size_of::<u64>()]);
         code::OpCode::AllocHeap.argument_size() + 1
     }
 
@@ -348,9 +342,8 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                 let instance_word_bytes = instance_word.to_le_bytes();
                 // overwrite the id with static pointer
                 assert!(instance_word_bytes.len() == std::mem::size_of::<u64>());
-                for i in 0..std::mem::size_of::<u64>() {
-                    code.instructions[instr + i] = instance_word_bytes[i];
-                }
+                code.instructions[instr..(instr + std::mem::size_of::<u64>())]
+                    .copy_from_slice(&instance_word_bytes[..std::mem::size_of::<u64>()]);
             }
             None => {
                 // retrieve the string
@@ -359,7 +352,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                     .get::<String>(index as usize)
                     .expect("checked by instruction");
                 // allocate string in the permament heap
-                let strcls = self.vm.runtime.classes.string.clone();
+                let strcls = self.vm.runtime.classes.string;
                 let instance = self
                     .vm
                     .permament_heap
@@ -371,9 +364,8 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                 let instance_word_bytes = instance_word.to_le_bytes();
                 // overwrite the id with static pointer
                 assert!(instance_word_bytes.len() == std::mem::size_of::<u64>());
-                for i in 0..std::mem::size_of::<u64>() {
-                    code.instructions[instr + i] = instance_word_bytes[i];
-                }
+                code.instructions[instr..(instr + std::mem::size_of::<u64>())]
+                    .copy_from_slice(&instance_word_bytes[..std::mem::size_of::<u64>()]);
                 // add it as interned
                 self.vm.interned_strings.insert(cp_str_val, instance_word);
             }

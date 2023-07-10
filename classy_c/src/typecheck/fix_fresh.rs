@@ -42,7 +42,7 @@ fn generalize_types(
     env: &mut HashMap<usize, Type>,
 ) {
     // Generalize and update type in typ ctx
-    let new_t = tctx.variables.get(name).unwrap().clone();
+    let new_t = *tctx.variables.get(name).unwrap();
     let mut generalizer = GeneralizerHelper {
         bindings: HashMap::new(),
         current_id: 0,

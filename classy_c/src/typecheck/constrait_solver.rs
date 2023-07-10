@@ -192,7 +192,7 @@ fn replace_in_constraints(id: usize, for_t: Type, cons: &mut VecDeque<Constraint
     let mut replacer = FreshTypeReplacer {
         substitutions: {
             let mut m = HashMap::new();
-            m.insert(id, for_t.clone());
+            m.insert(id, for_t);
             m
         },
     };

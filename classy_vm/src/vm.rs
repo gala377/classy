@@ -134,7 +134,7 @@ impl Drop for Vm {
         if std::thread::current().id() != self.original_thread_id {
             return;
         }
-        while let Err(_) = self.thread_manager.cleanup_thread() {
+        while self.thread_manager.cleanup_thread().is_err() {
             self.thread_manager.stop_for_gc().unwrap();
         }
     }

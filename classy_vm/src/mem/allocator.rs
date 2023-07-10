@@ -142,7 +142,7 @@ impl Allocator {
         while let Some(inner) = curr {
             unsafe {
                 (*inner.as_ptr()).reset_page();
-                curr = (*inner.as_ptr()).next.clone();
+                curr = (*inner.as_ptr()).next;
             }
         }
     }

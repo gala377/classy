@@ -11,7 +11,7 @@ use classy_c::{
     typecheck::{self, add_types::AddTypes, type_context::TypCtx},
 };
 
-const SOURCE: &'static str = r#"
+const SOURCE: &str = r#"
     type MyFoo {
         a: String
     }
@@ -116,7 +116,7 @@ pub fn parse_source(source: &str) -> ast::Program {
 
 pub fn prepare_type_ctx(mut tctx: TypCtx, ast: &ast::Program) -> TypCtx {
     let mut add_types = AddTypes::with_primitive_types(&mut tctx);
-    add_types.visit(&ast);
+    add_types.visit(ast);
     println!("{}", tctx.debug_string());
     tctx = typecheck::resolve_type_names(tctx);
     println!("{}", tctx.debug_string());

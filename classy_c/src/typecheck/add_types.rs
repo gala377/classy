@@ -12,8 +12,8 @@ impl<'ctx> AddTypes<'ctx> {
     }
 
     pub fn with_primitive_types(ctx: &'ctx mut TypCtx) -> Self {
-        let mut this = Self::new(ctx);
-        insert_primitive_types(&mut this.ctx);
+        let this = Self::new(ctx);
+        insert_primitive_types(this.ctx);
         this
     }
 }

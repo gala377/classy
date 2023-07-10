@@ -90,7 +90,7 @@ impl Thread {
                         let str_ptr: NonNullPtr<StringInst> = std::mem::transmute(args[0]);
                         println!("{}", (*str_ptr.get()).as_rust_str());
                     }
-                    return 0;
+                    0
                 }
                 fn itos(t: &mut Thread, stack: &mut [NonNullPtr<Frame>], args: &[Word]) -> Word {
                     if args.len() != 1 {
@@ -175,7 +175,7 @@ impl Thread {
                             println!("{}", str);
                         }
                     }
-                    return 0;
+                    0
                 }
                 m.insert("print".to_owned(), native_print as RuntimeFn);
                 m.insert("header_data".to_owned(), header_data as RuntimeFn);
@@ -193,15 +193,23 @@ impl Thread {
         unsafe { self.heap.try_allocate(Layout::new::<T>()).cast() }
     }
 
-    // returned instance type T must be valid with the given class.
+    /// # Safety
+    /// 
+    /// Returned instance type T must be valid with the given class.
     pub unsafe fn allocate_instance<T>(&mut self, cls: NonNullPtr<Class>) -> Ptr<T> {
         self.heap.allocate_instance(cls).cast()
     }
 
+    /// # Safety
+    /// 
+    /// Pointer has to be non null.
     pub unsafe fn create_handle<T>(&mut self, ptr: NonNullPtr<T>) -> Handle<T> {
         self.heap.create_handle(ptr)
     }
 
+    /// # Safety
+    /// 
+    /// Handle has to be valid.
     pub unsafe fn revoke_handle<T>(&mut self, handle: Handle<T>) {
         self.heap.revoke_handle(handle);
     }
@@ -216,7 +224,7 @@ impl Thread {
 
     pub fn interpert(&mut self) {
         let mut instr = 0;
-        let mut frames = vec![self.alloc_frame(self.code.clone()).expect("Out of memory")];
+        let mut frames = vec![self.alloc_frame(self.code).expect("Out of memory")];
         let code_end = unsafe { (*self.code.get()).code.instructions.len() };
         let mut code = unsafe { &*self.code.get() };
         macro_rules! read_word {
@@ -313,7 +321,7 @@ impl Thread {
                     if frames.is_empty() {
                         break;
                     }
-                    c_frame = frames.last().unwrap().clone();
+                    c_frame = *frames.last().unwrap();
                     instr = unsafe { (*c_frame.get()).ip };
                     code = unsafe { &*(*c_frame.get()).code.get() };
                     push!(ret);
@@ -352,7 +360,7 @@ impl Thread {
                         let name_ptr: NonNullPtr<StringInst> = std::mem::transmute(name_ptr);
                         let name = class::string::as_rust_str(&name_ptr);
                         let func = *self.native_functions.get(name).unwrap();
-                        push!(std::mem::transmute(func));
+                        push!(func as usize as u64);
                     };
                     instr += OpCode::RuntimeCall.argument_size();
                 }
@@ -367,17 +375,17 @@ impl Thread {
                         NonNullPtr::from_ptr(code)
                     };
                     let mut new_frame = self.alloc_frame(code_inst);
-                    if let None = new_frame {
+                    if new_frame.is_none() {
                         // we need to gc
                         log!(self, "{}", "RUNNING GC BECAUSE I CANNOT ALLOCATE THE FRAME");
 
                         push!(func);
-                        let frame_cls = self.runtime.classes.frame.clone();
+                        let frame_cls = self.runtime.classes.frame;
                         unsafe { (*c_frame.get()).ip = instr };
                         let mut frames = frames.iter_mut().map(|f| f as *mut _).collect::<Vec<_>>();
                         self.heap.run_gc(frame_cls, &mut frames);
                         new_frame = self.alloc_frame(code_inst);
-                        if let None = new_frame {
+                        if new_frame.is_none() {
                             panic!("Out of memory");
                         }
                         pop!();
@@ -410,17 +418,17 @@ impl Thread {
                         NonNullPtr::from_ptr(code)
                     };
                     let mut new_frame = self.alloc_frame(code_inst);
-                    if let None = new_frame {
+                    if new_frame.is_none() {
                         // we need to gc
                         log!(self, "{}", "RUNNING GC BECAUSE I CANNOT ALLOCATE THE FRAME");
 
                         push!(func);
-                        let frame_cls = self.runtime.classes.frame.clone();
+                        let frame_cls = self.runtime.classes.frame;
                         unsafe { (*c_frame.get()).ip = instr };
                         let mut frames = frames.iter_mut().map(|f| f as *mut _).collect::<Vec<_>>();
                         self.heap.run_gc(frame_cls, &mut frames);
                         new_frame = self.alloc_frame(code_inst);
-                        if let None = new_frame {
+                        if new_frame.is_none() {
                             panic!("Out of memory");
                         }
                         pop!();
@@ -455,17 +463,17 @@ impl Thread {
                         NonNullPtr::from_ptr(code)
                     };
                     let mut new_frame = self.alloc_frame(code_inst);
-                    if let None = new_frame {
+                    if new_frame.is_none() {
                         // we need to gc
                         log!(self, "{}", "RUNNING GC BECAUSE I CANNOT ALLOCATE THE FRAME");
 
                         push!(func);
-                        let frame_cls = self.runtime.classes.frame.clone();
+                        let frame_cls = self.runtime.classes.frame;
                         unsafe { (*c_frame.get()).ip = instr };
                         let mut frames = frames.iter_mut().map(|f| f as *mut _).collect::<Vec<_>>();
                         self.heap.run_gc(frame_cls, &mut frames);
                         new_frame = self.alloc_frame(code_inst);
-                        if let None = new_frame {
+                        if new_frame.is_none() {
                             panic!("Out of memory");
                         }
                         pop!();
@@ -552,10 +560,7 @@ impl Thread {
                     let mut arr = self.heap.allocate_array(array_cls, size as usize);
                     if arr.is_null() {
                         let mut frames = frames.iter_mut().map(|f| f as *mut _).collect::<Vec<_>>();
-                        unsafe {
-                            self.heap
-                                .run_gc(std::mem::transmute(array_cls), &mut frames);
-                        }
+                        self.heap.run_gc(array_cls, &mut frames);
                         arr = self.heap.allocate_array(array_cls, size as usize);
                         if arr.is_null() {
                             panic!("Out of memory");

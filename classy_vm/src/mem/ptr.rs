@@ -57,13 +57,13 @@ impl<T> Ptr<T> {
         if let Some(inner) = self.inner() {
             f(inner)
         }
-        self.clone()
+        *self
     }
 }
 
 impl<T> Clone for Ptr<T> {
     fn clone(&self) -> Self {
-        Self(self.0.clone())
+        Self(self.0)
     }
 }
 
@@ -113,7 +113,7 @@ impl<T> NonNullPtr<T> {
     }
 
     pub fn class(&self) -> NonNullPtr<Class> {
-        unsafe { (*self.header().as_ptr()).class.clone() }
+        unsafe { (*self.header().as_ptr()).class }
     }
 
     pub fn header(&self) -> NonNull<Header> {
@@ -131,7 +131,7 @@ impl<T> NonNullPtr<T> {
 
 impl<T> Clone for NonNullPtr<T> {
     fn clone(&self) -> Self {
-        Self(self.0.clone())
+        Self(self.0)
     }
 }
 

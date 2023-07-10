@@ -131,8 +131,8 @@ pub trait ObjectAllocator {
         unsafe {
             let header_ptr = ptr.as_ptr() as *mut Header;
             header_ptr.write(header);
-            let obj_ptr = header_ptr.add(1) as *mut ();
-            obj_ptr
+            
+            header_ptr.add(1) as *mut ()
         }
     }
 

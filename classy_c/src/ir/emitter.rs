@@ -139,7 +139,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                     }
                     Lval::Indexed(addr, index) => {
                         self.current_block.push(Instruction::IndexSet {
-                            base: addr.clone(),
+                            base: addr,
                             offset: Address::ConstantInt(index as isize),
                             value: rval,
                         });
@@ -147,7 +147,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                     }
                     Lval::IndexedDynamic(addr, index) => {
                         self.current_block.push(Instruction::IndexSet {
-                            base: addr.clone(),
+                            base: addr,
                             offset: index,
                             value: rval,
                         });

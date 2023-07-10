@@ -82,7 +82,7 @@ fn read_package(pkg: &Package, tctx: &mut TypCtx) {
                 ast::DefinedType::Record(ast::Record { fields })
             }
             Type::Function { args, ret } => {
-                let args = args.iter().map(|t| deserialize_type(t)).collect();
+                let args = args.iter().map(deserialize_type).collect();
                 let ret = deserialize_type(ret);
                 ast::DefinedType::Alias(ast::Alias {
                     for_type: ast::Typ::Function {
@@ -93,7 +93,7 @@ fn read_package(pkg: &Package, tctx: &mut TypCtx) {
                 })
             }
             Type::Tuple(types) => {
-                let types = types.iter().map(|t| deserialize_type(t)).collect();
+                let types = types.iter().map(deserialize_type).collect();
                 ast::DefinedType::Alias(ast::Alias {
                     for_type: ast::Typ::Tuple(types),
                 })
@@ -116,7 +116,7 @@ fn read_package(pkg: &Package, tctx: &mut TypCtx) {
         tctx.add_type_name(node.name.clone(), type_id);
     }
     for Function { name, args, ret } in &pkg.functions {
-        let args: Vec<ast::Typ> = args.iter().map(|t| deserialize_type(t)).collect();
+        let args: Vec<ast::Typ> = args.iter().map(deserialize_type).collect();
         let ret = deserialize_type(ret);
         let pars = std::iter::repeat("unknown".to_owned()).take(args.len());
         let node = ast::FunctionDefinition {
@@ -145,7 +145,7 @@ fn deserialize_type(typ: &Type) -> ast::Typ {
         Type::Name(name) => ast::Typ::Name(name.clone()),
         Type::Struct { .. } => panic!("There should be no nested struct types"),
         Type::Function { args, ret } => {
-            let args = args.iter().map(|t| deserialize_type(t)).collect();
+            let args = args.iter().map(deserialize_type).collect();
             let ret = deserialize_type(ret);
             ast::Typ::Function {
                 args,
@@ -154,7 +154,7 @@ fn deserialize_type(typ: &Type) -> ast::Typ {
             }
         }
         Type::Tuple(vals) => {
-            let vals = vals.iter().map(|t| deserialize_type(t)).collect();
+            let vals = vals.iter().map(deserialize_type).collect();
             ast::Typ::Tuple(vals)
         }
         Type::Unit => ast::Typ::Unit,

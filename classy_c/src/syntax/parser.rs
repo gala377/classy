@@ -88,7 +88,7 @@ impl<'source> Parser<'source> {
             beg,
             "Expected type variables list",
         )?;
-        if let Ok(_) = self.match_token(TokenType::LBrace) {
+        if self.match_token(TokenType::LBrace).is_ok() {
             let possibly_adt = self.in_scope(|p| p.parse_variants_definition());
             let definition = if let Ok(adt) = possibly_adt {
                 adt
@@ -105,7 +105,7 @@ impl<'source> Parser<'source> {
                 definition,
                 span: beg..self.curr_pos(),
             })
-        } else if let Ok(_) = self.match_token(TokenType::Assignment) {
+        } else if self.match_token(TokenType::Assignment).is_ok() {
             let for_type =
                 self.parse_type()
                     .error(self, beg, "Expected a type in type alias definition")?;
@@ -298,7 +298,7 @@ impl<'source> Parser<'source> {
             _ => Vec::new(),
         };
         let typ = self.parse_atomic_type()?;
-        if let Err(_) = self.match_token(TokenType::LParen) {
+        if self.match_token(TokenType::LParen).is_err() {
             return match typ {
                 ast::Typ::Function { args, ret, .. } => Ok(ast::Typ::Function {
                     args,
@@ -403,7 +403,7 @@ impl<'source> Parser<'source> {
 
     fn parse_assignment(&mut self) -> ParseRes<ast::Expr> {
         let lhs = self.parse_typed_expression()?;
-        if let Err(_) = self.match_token(TokenType::Assignment) {
+        if self.match_token(TokenType::Assignment).is_err() {
             return Ok(lhs);
         }
         let rhs = self.parse_typed_expression()?;
@@ -416,7 +416,7 @@ impl<'source> Parser<'source> {
     fn parse_typed_expression(&mut self) -> ParseRes<ast::Expr> {
         let beg = self.curr_pos();
         let expr = self.parse_fn_call()?;
-        if let Err(_) = self.match_token(TokenType::Colon) {
+        if self.match_token(TokenType::Colon).is_err() {
             return Ok(expr);
         }
         let typ = self
@@ -431,7 +431,7 @@ impl<'source> Parser<'source> {
     fn parse_fn_call(&mut self) -> ParseRes<ast::Expr> {
         let beg = self.curr_pos();
         let func = self.parse_postfix_operators()?;
-        let args: Vec<ast::Expr> = if let Ok(_) = self.match_token(TokenType::LParen) {
+        let args: Vec<ast::Expr> = if self.match_token(TokenType::LParen).is_ok() {
             // this is a function call with arguments passed in parentheses
             // or a function call in a special form:
             // func (a, b) => { lambda body }
@@ -440,7 +440,7 @@ impl<'source> Parser<'source> {
                 self.match_token(TokenType::RParen)
                     .error(self, beg, "Missing closing parenthesis");
 
-            if let Ok(_) = self.match_token(TokenType::FatArrow) {
+            if self.match_token(TokenType::FatArrow).is_ok() {
                 // this means that we probably have a call in form
                 // func (a, b) => { a + b }
                 // which is a function call with trailing lambda with arguments
@@ -549,7 +549,7 @@ impl<'source> Parser<'source> {
                 Err(ParseErr::WrongRule) => return Ok(func),
                 Err(e) => return Err(e),
                 Ok(ast::ExprKind::Name(name)) => {
-                    if let Ok(_) = self.match_token(TokenType::FatArrow) {
+                    if self.match_token(TokenType::FatArrow).is_ok() {
                         // func name => { lambda body }
                         let body = self.parse_expr().error(
                             self,
@@ -671,7 +671,7 @@ impl<'source> Parser<'source> {
         let beg = self.curr_pos();
         let mut lhs = self.parse_term()?;
         loop {
-            if let Ok(_) = self.match_token(TokenType::LBracket) {
+            if self.match_token(TokenType::LBracket).is_ok() {
                 let index = self
                     .parse_expr()
                     .error(self, beg, "Expected expression on access")?;
@@ -682,7 +682,7 @@ impl<'source> Parser<'source> {
                 });
                 continue;
             }
-            if let Ok(_) = self.match_token(TokenType::Dot) {
+            if self.match_token(TokenType::Dot).is_ok() {
                 let field =
                     self.parse_identifier()
                         .error(self, beg, "A field has to be an indentifier")?;
@@ -719,7 +719,7 @@ impl<'source> Parser<'source> {
             }
             TokenType::Identifier(name) => {
                 self.lexer.advance();
-                if let Ok(_) = self.match_token(TokenType::FatArrow) {
+                if self.match_token(TokenType::FatArrow).is_ok() {
                     // lambda literal in form
                     // arg => expr
                     let body = self
@@ -737,17 +737,17 @@ impl<'source> Parser<'source> {
             }
             TokenType::LParen => {
                 self.lexer.advance();
-                if let Ok(_) = self.match_token(TokenType::RParen) {
+                if self.match_token(TokenType::RParen).is_ok() {
                     return Ok(mk_expr(ast::ExprKind::Unit));
                 }
                 let inner = self.parse_expr()?;
-                if let Err(_) = self.match_token(TokenType::Comma) {
+                if self.match_token(TokenType::Comma).is_err() {
                     let _ = self.match_token(TokenType::RParen).error(
                         self,
                         beg,
                         "Missing closing parenthesis",
                     );
-                    if let Ok(_) = self.match_token(TokenType::FatArrow) {
+                    if self.match_token(TokenType::FatArrow).is_ok() {
                         // this is a lambda literal in form
                         // (a) => expr
                         return match inner.kind {
@@ -792,7 +792,7 @@ impl<'source> Parser<'source> {
                     beg,
                     "Missing closing parenthesis",
                 );
-                if let Ok(_) = self.match_token(TokenType::FatArrow) {
+                if self.match_token(TokenType::FatArrow).is_ok() {
                     // this is a lambda literal in form
                     // (a, b, c) => expr
                     let parameters = tuple
@@ -830,7 +830,7 @@ impl<'source> Parser<'source> {
             }
             TokenType::Array => {
                 self.lexer.advance();
-                let size = if let Ok(_) = self.match_token(TokenType::LBracket) {
+                let size = if self.match_token(TokenType::LBracket).is_ok() {
                     let size = self.parse_expr();
                     let _ = self.expect_token(TokenType::RBracket);
                     match size {
@@ -841,7 +841,7 @@ impl<'source> Parser<'source> {
                     None
                 };
                 let t = self.parse_type();
-                let init = if let Ok(_) = self.match_token(TokenType::LBrace) {
+                let init = if self.match_token(TokenType::LBrace).is_ok() {
                     let init = self.parse_delimited(Self::parse_expr, TokenType::Comma);
                     let _ = self.expect_token(TokenType::RBrace);
                     init
@@ -880,7 +880,7 @@ impl<'source> Parser<'source> {
 
     fn parse_possibly_typed_name(&mut self) -> ParseRes<ast::TypedName> {
         let name = self.parse_identifier()?;
-        if let Err(_) = self.match_token(TokenType::Colon) {
+        if self.match_token(TokenType::Colon).is_err() {
             return Ok(ast::TypedName {
                 name,
                 typ: ast::Typ::ToInfere,
@@ -917,7 +917,7 @@ impl<'source> Parser<'source> {
             self.parse_identifier()
                 .error(self, beg, "expected a name after a let keyword")?;
 
-        let typ = if let Ok(_) = self.match_token(TokenType::Colon) {
+        let typ = if self.match_token(TokenType::Colon).is_ok() {
             self.parse_type()?
         } else {
             ast::Typ::ToInfere

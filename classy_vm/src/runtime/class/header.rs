@@ -68,7 +68,7 @@ impl Header {
             self.forward_address().is_none(),
             "Trying to access flag on a forward address"
         );
-        self.flags = self.flags | (Flags::PermamentHeap as usize)
+        self.flags |= Flags::PermamentHeap as usize
     }
 
     pub fn forward_address(&self) -> Option<usize> {

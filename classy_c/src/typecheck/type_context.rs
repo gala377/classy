@@ -208,7 +208,7 @@ impl TypCtx {
             s = s + &format!("\n\t\t{id}: {def:?}");
         }
 
-        s = s + "\n\tvariables:";
+        s += "\n\tvariables:";
 
         let mut tmp = Vec::new();
         for (name, type_id) in &self.variables {
@@ -223,7 +223,7 @@ impl TypCtx {
             s = s + &format!("\n\t\t{name}: {type_id} => {resolved_type}");
         }
 
-        s = s + "\n\tnames:";
+        s += "\n\tnames:";
 
         let mut tmp = Vec::new();
         for (id, def) in &self.types {
@@ -233,7 +233,7 @@ impl TypCtx {
         for (id, name) in tmp {
             s = s + &format!("\n\t\t{id}: {name}");
         }
-        s = s + "\n\tnodes:";
+        s += "\n\tnodes:";
 
         let mut tmp = Vec::new();
         for (id, def) in &self.nodes {
@@ -250,7 +250,7 @@ impl TypCtx {
         match self.nodes.get(&id) {
             Some(ast::TopLevelItem::TypeDefinition(node)) => {
                 let name = &node.name;
-                self.types.get(name).unwrap().clone()
+                *self.types.get(name).unwrap()
             }
             _ => panic!("expected type definition"),
         }

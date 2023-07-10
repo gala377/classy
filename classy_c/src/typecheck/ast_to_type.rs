@@ -31,7 +31,7 @@ pub fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String) {
             generics,
         } => {
             let mut scope = PrefexScope::new();
-            scope.add_type_vars(&generics);
+            scope.add_type_vars(generics);
             let resolved_args: Vec<_> = args
                 .iter()
                 .map(|t| resolver.resolve_type(&mut scope, t))
@@ -149,10 +149,9 @@ impl<'ctx> TypeResolver<'ctx> {
                     Type::Generic(DeBruijn(pos as isize), *index)
                 }
                 None => Type::Alias(
-                    self.names
+                    *self.names
                         .get(n)
-                        .expect(&format!("type not found, {n}"))
-                        .clone(),
+                        .unwrap_or_else(|| panic!("type not found, {n}")),
                 ),
             },
             ast::Typ::Tuple(types) => {
@@ -173,7 +172,7 @@ impl<'ctx> TypeResolver<'ctx> {
                     });
                 }
                 prefex.with_scope(|scope| {
-                    scope.add_type_vars(&generics);
+                    scope.add_type_vars(generics);
                     let resolved_args = args.iter().map(|t| self.resolve_type(scope, t)).collect();
                     let resolved_ret = self.resolve_type(scope, ret);
                     self.add_definition(Type::Function {

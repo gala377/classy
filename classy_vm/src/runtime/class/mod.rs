@@ -98,16 +98,16 @@ pub unsafe fn fields_mut<'a>(this: NonNullPtr<Class>) -> &'a mut [Field] {
 /// Can only be used on classes allocated within the managed heap.
 pub unsafe fn fields_ptr(this: NonNullPtr<Class>) -> *const Field {
     let ptr = this.get();
-    let fields_ptr = ptr.add(1) as *const Field;
-    fields_ptr
+    
+    ptr.add(1) as *const Field
 }
 
 /// Unsafe becaues it reaches past the class for variadic arguments.
 /// Can only be used on classes allocated within the managed heap.
 pub unsafe fn fields_ptr_mut(this: NonNullPtr<Class>) -> *mut Field {
     let ptr = this.get();
-    let fields_ptr = ptr.add(1) as *mut Field;
-    fields_ptr
+    
+    ptr.add(1) as *mut Field
 }
 
 /// Unsafe becaues it reaches past the class for variadic arguments.
@@ -231,7 +231,7 @@ pub unsafe fn instance_trace(obj: *mut (), tracer: &mut dyn Tracer) {
     for field in fields(cls).iter().filter(|f| f.reference) {
         let offset = field.offset;
         let field_ptr = (obj.map_addr(|addr| (addr as isize + offset) as usize)) as *mut ErasedPtr;
-        let forward = tracer.trace_pointer((*field_ptr).clone());
+        let forward = tracer.trace_pointer(*field_ptr);
         std::ptr::write(field_ptr, ErasedPtr::new(forward));
     }
 }
@@ -240,7 +240,7 @@ pub unsafe fn class_trace(obj: *mut (), tracer: &mut dyn Tracer) {
     let this = obj as *mut Class;
     let name = tracer.trace_pointer((*this).name.erase());
     (*this).name = Ptr::new(name as *mut StringInst);
-    let kind = (*this).kind.clone();
+    let kind = (*this).kind;
     let this_nonnull = NonNullPtr::new_unchecked(this);
     match kind {
         Kind::Instance => {

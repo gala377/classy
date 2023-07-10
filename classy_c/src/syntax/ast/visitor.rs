@@ -305,7 +305,7 @@ pub fn walk_function_def<'ast, V: Visitor<'ast>>(v: &mut V, def: &'ast ast::Func
     v.visit_name(&def.name);
     v.visit_typ(&def.typ);
     for param in &def.parameters {
-        v.visit_name(&param);
+        v.visit_name(param);
     }
     v.visit_expr(&def.body);
 }

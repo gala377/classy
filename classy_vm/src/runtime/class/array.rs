@@ -21,7 +21,7 @@ impl<T> Array<T> {
     }
 
     pub unsafe fn inner(&self) -> NonNullPtr<T> {
-        self.ptr.clone()
+        self.ptr
     }
 
     pub fn class(&self) -> NonNullPtr<Class> {
@@ -40,7 +40,7 @@ impl<T> std::ops::Index<usize> for Array<T> {
                 self.len()
             );
         }
-        unsafe { &*self.ptr.get().offset(index as isize) }
+        unsafe { &*self.ptr.get().add(index) }
     }
 }
 
@@ -53,7 +53,7 @@ impl<T> std::ops::IndexMut<usize> for Array<T> {
                 self.len()
             );
         }
-        unsafe { &mut *self.ptr.get().offset(index as isize) }
+        unsafe { &mut *self.ptr.get().add(index) }
     }
 }
 
@@ -87,7 +87,7 @@ pub unsafe fn trace(arr: *mut (), tracer: &mut dyn Tracer) {
 
 pub unsafe fn actual_size(arr: *const ()) -> usize {
     let header = (arr as *const Header).sub(1);
-    let cls = (*header).class.clone();
+    let cls = (*header).class;
     let size = (*header).data;
     assert!((*cls.get()).kind.is_array(), "has to be");
     let el_size = (*cls.get()).array_element_size();
@@ -98,7 +98,7 @@ pub fn mk_array_cls(size: usize, align: usize, is_ref: bool) -> Class {
     Class {
         name: Ptr::null(),
         drop: None,
-        trace: trace,
+        trace,
         instance_size: 0,
         instance_align: std::mem::align_of::<usize>(),
         actual_instance_size: Some(actual_size),

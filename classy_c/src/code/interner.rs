@@ -48,7 +48,7 @@ impl Interner {
     }
 
     pub fn check(&self, entry: &constant_pool::TypedEntry) -> Option<usize> {
-        self.interned.get(&entry.clone().into()).map(|x| *x)
+        self.interned.get(&entry.clone().into()).copied()
     }
 
     pub fn add(&mut self, entry: &constant_pool::TypedEntry, val: usize) {

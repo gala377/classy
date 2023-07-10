@@ -202,7 +202,7 @@ fn fill_in_class_names<Heap: ObjectAllocator>(
         (*string.get()).name = string_name;
     }
 }
-
+#[derive(Default)]
 pub struct UserClasses {
     // mapping from symbol address to class
     classes: HashMap<usize, NonNullPtr<Class>>,
