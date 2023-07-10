@@ -1,5 +1,6 @@
 use crate::syntax::ast::Visitor;
 
+#[derive(Default)]
 pub struct GatherRuntimeFunctions {
     pub res: Vec<String>,
 }

@@ -6,6 +6,12 @@ pub struct AssignExprId {
     id: usize,
 }
 
+impl Default for AssignExprId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AssignExprId {
     pub fn new() -> Self {
         Self { id: 1 }

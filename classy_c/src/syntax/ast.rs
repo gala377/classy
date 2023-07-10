@@ -675,7 +675,7 @@ impl ExprListBuilder {
         self.res
     }
 
-    pub fn add(mut self, f: impl FnOnce(ExprBuilder) -> ExprBuilder) -> Self {
+    pub fn add_expr(mut self, f: impl FnOnce(ExprBuilder) -> ExprBuilder) -> Self {
         let expr = f(default()).build();
         self.res.push(expr);
         self

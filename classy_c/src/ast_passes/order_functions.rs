@@ -78,7 +78,7 @@ impl FunctionsOrderer {
         sorted
     }
 
-    fn error_for_annotations(&self, cycles: &Vec<usize>) {
+    fn error_for_annotations(&self, cycles: &[usize]) {
         // let mut roots = self
         //     .graph
         //     .iter()

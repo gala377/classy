@@ -1205,9 +1205,9 @@ mod tests {
                 body.function_call(
                     |f| f.name("a"),
                     |args| args
-                        .add(|arg| arg.integer(10))
-                        .add(|arg| arg.integer(20))
-                        .add(|arg| arg.integer(30)),
+                        .add_expr(|arg| arg.integer(10))
+                        .add_expr(|arg| arg.integer(20))
+                        .add_expr(|arg| arg.integer(30)),
                     |k| k)
             })
     }
@@ -1218,9 +1218,9 @@ mod tests {
         ast::Builder::new()
             .unit_fn("a", |body| {
                 body.tuple(|vals|
-                    vals.add(|v| v.integer(1))
-                        .add(|v| v.integer(2))
-                        .add(|v| v.access(|lhs| lhs.name("a"), "b"))
+                    vals.add_expr(|v| v.integer(1))
+                        .add_expr(|v| v.integer(2))
+                        .add_expr(|v| v.access(|lhs| lhs.name("a"), "b"))
                 )
             })
     }
@@ -1252,8 +1252,8 @@ mod tests {
         ast::Builder::new()
             .unit_fn("a", |body| {
                 body.sequence(|es| es
-                    .add(|e| e.integer(1))
-                    .add(|e| e.integer(2)))
+                    .add_expr(|e| e.integer(1))
+                    .add_expr(|e| e.integer(2)))
             })
     }
 
@@ -1263,8 +1263,8 @@ mod tests {
         ast::Builder::new()
             .unit_fn("a", |body| {
                 body.sequence(|es| es
-                    .add(|e| e.integer(1))
-                    .add(|e| e.integer(2)))
+                    .add_expr(|e| e.integer(1))
+                    .add_expr(|e| e.integer(2)))
             })
     }
 
@@ -1287,11 +1287,11 @@ mod tests {
                 "a",
                 |body| body.function_call(
                     |c| c.name("a"),
-                    |args| args.add(|arg| {
+                    |args| args.add_expr(|arg| {
                         arg.lambda_no_types::<&str>(
                             &[],
                             |body| body.sequence(|seq|
-                                seq.add(|expr| expr.integer(1))))
+                                seq.add_expr(|expr| expr.integer(1))))
                     }),
                     |k| k))
     }
@@ -1302,7 +1302,7 @@ mod tests {
         ast::Builder::new()
             .unit_fn("a", |body| body.function_call(
                 |c| c.name("a"),
-                |args| args.add(
+                |args| args.add_expr(
                     |a| a.access(
                         |lhs| lhs.name("a"),
                         "b")),
@@ -1316,7 +1316,7 @@ mod tests {
             .unit_fn("a", |body| body.function_call(
                 |c| c.access(|l| l.name("a"), "b"),
                 |args| args
-                    .add(|l| l.lambda_no_types(
+                    .add_expr(|l| l.lambda_no_types(
                         &["c"],
                         |body| body.integer(1))),
                 |k| k))
@@ -1329,7 +1329,7 @@ mod tests {
             .unit_fn("a", |body| body.function_call(
                 |c| c.access(|l| l.name("a"), "b"),
                 |args| args
-                    .add(|l| l.lambda_no_types::<&str>(
+                    .add_expr(|l| l.lambda_no_types::<&str>(
                         &[],
                         |body| body.integer(1))),
                 |k| k))
@@ -1342,7 +1342,7 @@ mod tests {
             .unit_fn("a", |body| body.function_call(
                 |c| c.name("a"),
                 |args| args
-                    .add(|l| l.lambda_no_types(
+                    .add_expr(|l| l.lambda_no_types(
                         &["a", "b", "c"],
                         |body| body.integer(1))),
                 |k| k))
@@ -1355,13 +1355,13 @@ mod tests {
             .unit_fn("a", |body| body.function_call(
                 |c| c.name("a"),
                 |args| args
-                    .add(|a| a.name("a"))
-                    .add(|a| a.name("b"))
-                    .add(|a| a.name("c"))
-                    .add(|l| l.lambda_no_types::<&str>(
+                    .add_expr(|a| a.name("a"))
+                    .add_expr(|a| a.name("b"))
+                    .add_expr(|a| a.name("c"))
+                    .add_expr(|l| l.lambda_no_types::<&str>(
                         &[],
                         |body| body.sequence(
-                            |s| s.add(
+                            |s| s.add_expr(
                                 |e| e.integer(1))))),
                 |k| k))
     }
@@ -1373,13 +1373,13 @@ mod tests {
             .unit_fn("a", |body| body.function_call(
                 |c| c.name("a"),
                 |args| args
-                    .add(|a| a.name("a"))
-                    .add(|a| a.name("b"))
-                    .add(|a| a.name("c"))
-                    .add(|l| l.lambda_no_types(
+                    .add_expr(|a| a.name("a"))
+                    .add_expr(|a| a.name("b"))
+                    .add_expr(|a| a.name("c"))
+                    .add_expr(|l| l.lambda_no_types(
                         &["d", "e"],
                         |body| body.sequence(
-                            |s| s.add(
+                            |s| s.add_expr(
                                 |e| e.integer(1))))),
                 |k| k))
     }
@@ -1391,7 +1391,7 @@ mod tests {
             .unit_fn("a", |body| body.function_call(
                 |c| c.name("a"),
                 |args| args
-                    .add(|l| l.lambda(
+                    .add_expr(|l| l.lambda(
                         |pars| pars
                             .name("b", "c")
                             .name("d", "e"),
@@ -1411,7 +1411,7 @@ mod tests {
                                 |l| l.name("a"),
                                 "b"
                             ),
-                            |args| args.add(
+                            |args| args.add_expr(
                                 |a| a.name("c")),
                             |k| k)
                     },
@@ -1474,8 +1474,8 @@ mod tests {
             .unit_fn("a", |body| body.function_call(
                 |c| c.name("a"),
                 |args| args
-                    .add(|a| a.name("b"))
-                    .add(|a| a.lambda_no_types::<&str>(
+                    .add_expr(|a| a.name("b"))
+                    .add_expr(|a| a.lambda_no_types::<&str>(
                         &["c"], |body| body.integer(1))),
                 |k| k,
             )
@@ -1490,14 +1490,14 @@ mod tests {
                 |cond| {
                     cond.function_call(
                         |c| c.name("a"),
-                        |args| args.add(
+                        |args| args.add_expr(
                             |l| l.lambda_no_types::<&str>(
                                 &[],
                                 |body| body.sequence(
-                                    |seq| seq.add(|e| e.name("b"))))),
+                                    |seq| seq.add_expr(|e| e.name("b"))))),
                         |k| k)
                 },
-                |body| { body.add(|e| e.name("c"))
+                |body| { body.add_expr(|e| e.name("c"))
             })})
     }
     ptest! {
@@ -1506,13 +1506,13 @@ mod tests {
         ast::Builder::new()
             .unit_fn("a", |body| {
                 body.sequence(|seq| {
-                    seq.add(|e| {
+                    seq.add_expr(|e| {
                         e.r#if(
                             |cond| cond.name("b"),
-                            |body| body.add(|e| e.name("c")),
+                            |body| body.add_expr(|e| e.name("c")),
                             |e| e)
                         })
-                        .add(|e| e.name("d"))
+                        .add_expr(|e| e.name("d"))
                 })
 
             })
@@ -1525,11 +1525,11 @@ mod tests {
             .unit_fn("a", |body| {
                 body.r#else_if(
                     |cond| cond.name("b"),
-                    |body| body.add(|e| e.name("c")),
+                    |body| body.add_expr(|e| e.name("c")),
                     |els| els.r#if(
                             |cond| cond.name("d"),
-                            |body| body.add(|e| e.name("e")),
-                            |els2| els2.add(|e| e.name("f"))))
+                            |body| body.add_expr(|e| e.name("e")),
+                            |els2| els2.add_expr(|e| e.name("f"))))
         })
     }
 
@@ -1541,7 +1541,7 @@ mod tests {
                 body.r#return(|e| {
                     e.function_call(
                         |callee| callee.name("a"),
-                        |args| args.add(|a| a.name("b")),
+                        |args| args.add_expr(|a| a.name("b")),
                     |k| k)
                 })
             })
@@ -1554,7 +1554,7 @@ mod tests {
             .unit_fn("a", |body| {
                 body.r#let(
                     "var",
-                    |init| init.sequence(|s| s.add(
+                    |init| init.sequence(|s| s.add_expr(
                         |e| e.name("a")))
                 )
             })
@@ -1566,7 +1566,7 @@ mod tests {
         ast::Builder::new()
             .unit_fn("a", |b| b.function_call(
                 |f| f.name("a"),
-                |s| s.add(|a| a.name("a")),
+                |s| s.add_expr(|a| a.name("a")),
                 |kw| kw.add("b", |e| e.name("c"))
                        .add("d", |e| e.name("e"))))
     }
