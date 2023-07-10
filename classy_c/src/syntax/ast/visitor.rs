@@ -91,12 +91,7 @@ pub trait Visitor<'ast>: Sized {
         walk_anon_type(self, fields);
     }
 
-    fn visit_array(
-        &mut self,
-        size: &'ast Box<ast::Expr>,
-        typ: &'ast ast::Typ,
-        init: &'ast [ast::Expr],
-    ) {
+    fn visit_array(&mut self, size: &'ast ast::Expr, typ: &'ast ast::Typ, init: &'ast [ast::Expr]) {
         walk_array(self, size, typ, init)
     }
 
@@ -319,7 +314,7 @@ pub fn walk_anon_type<'ast, V: Visitor<'ast>>(v: &mut V, fields: &'ast [(String,
 
 pub fn walk_array<'ast, V: Visitor<'ast>>(
     v: &mut V,
-    size: &'ast Box<ast::Expr>,
+    size: &'ast ast::Expr,
     typ: &'ast ast::Typ,
     init: &'ast [ast::Expr],
 ) {

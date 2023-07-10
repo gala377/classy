@@ -31,6 +31,8 @@ impl Allocator {
         }
     }
 
+    /// # Safety
+    ///
     /// Unsafe because the returned page does not have a set owner.
     /// Because of it trying to access memory of this page might lead to data races.
     /// To get a page that is already associated with some thread use
@@ -88,6 +90,11 @@ impl Allocator {
     }
 
     /// Same as `allocate_custom_page` but uses allocator's settings.
+    ///
+    /// # Safety
+    ///
+    /// Allocates page unowned which means that any thread can take it in
+    /// the meantime (I think).
     pub unsafe fn allocate_page_unowned(&mut self) -> Ptr<Page> {
         self.allocate_custom_page_unowned(self.page_size, self.page_align)
     }

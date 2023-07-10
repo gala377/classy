@@ -19,6 +19,10 @@ pub struct Page {
 }
 
 impl Page {
+    /// # Safety
+    ///
+    /// size and align have to correctly describe allocated memory
+    /// starting at start
     pub unsafe fn new(start: NonNull<u8>, size: usize, align: usize) -> Self {
         Page {
             start,
@@ -30,6 +34,10 @@ impl Page {
         }
     }
 
+    /// # Safety
+    ///
+    /// `start` has to be a valid pointer to a page.
+    /// Same as `next`/
     pub unsafe fn new_linked(
         start: NonNull<u8>,
         size: usize,

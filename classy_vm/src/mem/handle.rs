@@ -3,6 +3,8 @@ use crate::mem::ptr::Ptr;
 pub struct Handle<T>(pub *mut Ptr<T>);
 
 impl<T> Handle<T> {
+    /// # Safety
+    ///
     /// Unsafe because the location of the object might change
     /// during gc. User has to ensure that the gc
     /// won't happen between calling this function and dereferencing

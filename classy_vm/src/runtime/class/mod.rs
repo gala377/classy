@@ -44,10 +44,7 @@ impl Class {
 
     pub fn is_reference_class(&self) -> bool {
         use Kind::*;
-        match self.kind {
-            Klass | Instance | Array { .. } => true,
-            _ => false,
-        }
+        matches!(self.kind, Klass | Instance | Array { .. })
     }
 
     pub fn is_array_of_ref(&self) -> bool {
@@ -73,7 +70,10 @@ impl Class {
     }
 }
 
-// has to be a free standing function because Klass drops itself
+/// # Safety
+///
+/// `instance` has to be na instance of the class `class`
+/// Has to be a free standing function because Klass drops itself
 pub unsafe fn drop_instance(class: NonNullPtr<Class>, instance: *mut ()) {
     let drop = (*class.get()).drop;
     // todo: assert instance class is self
@@ -82,34 +82,44 @@ pub unsafe fn drop_instance(class: NonNullPtr<Class>, instance: *mut ()) {
     }
 }
 
+/// # Safety
+///
 /// Unsafe because it reaches past the class for variadic arguments.
 /// Can only be used on classes allocated within the managed heap.
 pub unsafe fn fields<'a>(this: NonNullPtr<Class>) -> &'a [Field] {
     std::slice::from_raw_parts(fields_ptr(this), fields_count(this))
 }
 
+/// # Safety
+///
 /// Unsafe because it reaches past the class for variadic arguments.
 /// Can only be used on classes allocated within the managed heap.
 pub unsafe fn fields_mut<'a>(this: NonNullPtr<Class>) -> &'a mut [Field] {
     std::slice::from_raw_parts_mut(fields_ptr_mut(this), fields_count(this))
 }
 
+/// # Safety
+///
 /// Unsafe becaues it reaches past the class for variadic arguments.
 /// Can only be used on classes allocated within the managed heap.
 pub unsafe fn fields_ptr(this: NonNullPtr<Class>) -> *const Field {
     let ptr = this.get();
-    
+
     ptr.add(1) as *const Field
 }
 
+/// # Safety
+///
 /// Unsafe becaues it reaches past the class for variadic arguments.
 /// Can only be used on classes allocated within the managed heap.
 pub unsafe fn fields_ptr_mut(this: NonNullPtr<Class>) -> *mut Field {
     let ptr = this.get();
-    
+
     ptr.add(1) as *mut Field
 }
 
+/// # Safety
+///
 /// Unsafe becaues it reaches past the class for variadic arguments.
 /// Can only be used on classes allocated within the managed heap.
 pub unsafe fn read_field_indexed<T>(
@@ -124,6 +134,8 @@ pub unsafe fn read_field_indexed<T>(
     field_ptr.read()
 }
 
+/// # Safety
+///
 /// Unsafe becaues it reaches past the class for variadic arguments.
 /// Can only be used on classes allocated within the managed heap.
 pub unsafe fn set_field_indexed<T>(
@@ -141,6 +153,8 @@ pub unsafe fn set_field_indexed<T>(
     field_ptr.write(val)
 }
 
+/// # Safety
+///
 /// Unsafe becaues it reaches to the header before the class.
 /// Can only be used on classes allocated within the managed heap.
 pub unsafe fn fields_count(this: NonNullPtr<Class>) -> usize {
@@ -201,27 +215,26 @@ impl Kind {
     trivial_kind_predicate!(pub is_char, Char);
 
     pub fn is_array(&self) -> bool {
-        if let Self::Array { .. } = *self {
-            true
-        } else {
-            false
-        }
+        matches!(*self, Self::Array { .. })
     }
 
     pub fn is_kind(&self, other: &Self) -> bool {
         use Kind::*;
-        match (self, other) {
-            (Klass, Klass) => true,
-            (Isize, Isize) => true,
-            (Float64, Float64) => true,
-            (Bool, Bool) => true,
-            (Array { .. }, Array { .. }) => true,
-            (Instance, Instance) => true,
-            _ => false,
-        }
+        matches!(
+            (self, other),
+            (Klass, Klass)
+                | (Isize, Isize)
+                | (Float64, Float64)
+                | (Bool, Bool)
+                | (Array { .. }, Array { .. })
+                | (Instance, Instance)
+        )
     }
 }
 
+/// # Safety
+///
+/// Passed `obj` pointer has to be an instance object.
 pub unsafe fn instance_trace(obj: *mut (), tracer: &mut dyn Tracer) {
     let ptr = ErasedNonNull::new_unchecked(obj);
     let cls = ptr.class();
@@ -236,23 +249,22 @@ pub unsafe fn instance_trace(obj: *mut (), tracer: &mut dyn Tracer) {
     }
 }
 
+/// # Safety
+///
+/// Passed `obj` pointer has to be a class object.
 pub unsafe fn class_trace(obj: *mut (), tracer: &mut dyn Tracer) {
     let this = obj as *mut Class;
     let name = tracer.trace_pointer((*this).name.erase());
     (*this).name = Ptr::new(name as *mut StringInst);
     let kind = (*this).kind;
     let this_nonnull = NonNullPtr::new_unchecked(this);
-    match kind {
-        Kind::Instance => {
-            for field in fields_mut(this_nonnull) {
-                let forward = tracer.trace_nonnull_pointer(field.class.as_untyped());
-                field.class = NonNullPtr::new_unchecked(forward as *mut Class);
-                let name = tracer.trace_nonnull_pointer(field.name.as_untyped());
-                field.name = NonNullPtr::new_unchecked(name as *mut StringInst);
-            }
+    if let Kind::Instance = kind {
+        for field in fields_mut(this_nonnull) {
+            let forward = tracer.trace_nonnull_pointer(field.class.as_untyped());
+            field.class = NonNullPtr::new_unchecked(forward as *mut Class);
+            let name = tracer.trace_nonnull_pointer(field.name.as_untyped());
+            field.name = NonNullPtr::new_unchecked(name as *mut StringInst);
         }
-        // Other class kinds don't have anything to scan.
-        _ => (),
     }
 }
 
@@ -274,6 +286,8 @@ unsafe fn actual_class_size(cls: *const ()) -> usize {
     size_of::<Class>() + fields_count * size_of::<Field>()
 }
 
+/// # Safety
+/// Actually totally safe, it does nothing
 pub unsafe fn trace_none(_obj: *mut (), _tracer: &mut dyn Tracer) {}
 
 #[derive(Debug, Clone)]

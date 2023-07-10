@@ -149,7 +149,8 @@ impl<'ctx> TypeResolver<'ctx> {
                     Type::Generic(DeBruijn(pos as isize), *index)
                 }
                 None => Type::Alias(
-                    *self.names
+                    *self
+                        .names
                         .get(n)
                         .unwrap_or_else(|| panic!("type not found, {n}")),
                 ),

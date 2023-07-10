@@ -353,6 +353,7 @@ impl StructDefBuilder {
     }
 }
 
+#[derive(Default)]
 pub struct AdtDefBuilder {
     name: String,
     type_vars: Vec<TypeVariable>,

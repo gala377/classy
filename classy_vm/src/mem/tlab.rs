@@ -103,6 +103,10 @@ impl Tlab {
         self.local_buffer.alloc_layout(layout).erase()
     }
 
+    /// # Safety
+    ///
+    /// User has to make sure that the current page is no longer used
+    /// by an thread before realeasing it.
     pub unsafe fn release_current_page(&mut self) {
         self.semi_space
             .lock()

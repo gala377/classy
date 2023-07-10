@@ -53,7 +53,7 @@ impl<'a> Gc<'a> {
     }
 
     /// # Safety
-    /// 
+    ///
     /// Pointers passed as roots have to be nonull.
     pub unsafe fn collect(&mut self, roots: &[*mut ErasedPtr]) {
         println!("\n\n\nTracing roots\n\n\n");

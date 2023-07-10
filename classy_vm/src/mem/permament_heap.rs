@@ -5,6 +5,7 @@ use crate::{
     runtime::class::{self, header::Header},
 };
 
+#[derive(Default)]
 pub struct PermamentHeap {
     allocated_bytes: usize,
     allocated_addresses: Vec<(*mut u8, Layout)>,

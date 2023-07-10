@@ -19,6 +19,7 @@ const STRING_OFFSET_MASK: usize = 0x00000000FFFFFFFF;
 /// Vector of type erased values paired with their
 /// type information. Used to store constant information
 /// for the execution.
+#[derive(Default)]
 pub struct ConstantPool {
     entries: Vec<Entry>,
 
@@ -47,7 +48,7 @@ impl ConstantPool {
             match &entry {
                 TypedEntry::Bool(b) => self.entries.push(Entry {
                     typ: EntryType::Bool,
-                    val: if *b { 1 } else { 0 },
+                    val: usize::from(*b),
                 }),
                 TypedEntry::Int(val) => self.entries.push(Entry {
                     typ: EntryType::Int,
@@ -94,6 +95,10 @@ impl ConstantPool {
         self.entries[index].val
     }
 
+    /// # Safety
+    ///
+    /// This function is unsafe as it does not check if the type
+    /// of the entry matches T.
     pub unsafe fn get_unchecked<T>(&self, index: usize) -> T {
         assert_eq!(
             std::mem::size_of::<T>(),

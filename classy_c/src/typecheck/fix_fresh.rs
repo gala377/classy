@@ -60,7 +60,7 @@ pub fn fix_types_in_env(substitutions: &HashMap<usize, Type>, env: &mut HashMap<
     let mut replacer = FreshTypeReplacer {
         substitutions: substitutions.clone(),
     };
-    for (_, typ) in env {
+    for typ in env.values_mut() {
         *typ = replacer.fold_type(typ.clone());
     }
 }

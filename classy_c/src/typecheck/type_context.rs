@@ -8,6 +8,7 @@ use crate::{
 pub type TypeId = usize;
 pub type DefId = usize;
 pub type Name = String;
+#[derive(Default)]
 pub struct TypCtx {
     /// Associates type ids with their types. Useful for resolving aliases.
     pub definitions: HashMap<TypeId, Type>,
@@ -258,13 +259,10 @@ impl TypCtx {
 
     pub fn fn_def_id(&self, name: &str) -> Option<DefId> {
         for (id, def) in &self.nodes {
-            match def {
-                ast::TopLevelItem::FunctionDefinition(node) => {
-                    if node.name == name {
-                        return Some(*id);
-                    }
+            if let ast::TopLevelItem::FunctionDefinition(node) = def {
+                if node.name == name {
+                    return Some(*id);
                 }
-                _ => {}
             }
         }
         None

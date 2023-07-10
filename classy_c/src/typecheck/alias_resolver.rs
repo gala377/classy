@@ -27,15 +27,12 @@ impl AliasResolver {
     fn resolve_aliases(&mut self, ctx: &mut TypCtx) {
         for (typ_id, typ) in &ctx.definitions {
             let mut resolved_this_path = HashSet::new();
-            match typ {
-                Type::Alias(for_type) => {
-                    let new_id = self.resolve_deep(ctx, &mut resolved_this_path, *for_type);
-                    self.resolved.insert(*typ_id, new_id);
-                    for resolved_type in resolved_this_path {
-                        self.resolved.insert(resolved_type, new_id);
-                    }
+            if let Type::Alias(for_type) = typ {
+                let new_id = self.resolve_deep(ctx, &mut resolved_this_path, *for_type);
+                self.resolved.insert(*typ_id, new_id);
+                for resolved_type in resolved_this_path {
+                    self.resolved.insert(resolved_type, new_id);
                 }
-                _ => {}
             }
         }
         for (type_id, for_type) in &self.resolved {
@@ -112,14 +109,14 @@ impl AliasResolver {
                 // we will remove them later.
                 continue;
             }
-            updated_defs.insert(*typ_id, self.resolve_shallow_aliases_in_type(ctx, typ));
+            updated_defs.insert(*typ_id, Self::resolve_shallow_aliases_in_type(ctx, typ));
         }
         for (id, typ) in updated_defs {
             ctx.update_type_def(id, typ)
         }
     }
 
-    fn resolve_shallow_aliases_in_type(&self, ctx: &TypCtx, typ: &Type) -> Type {
+    fn resolve_shallow_aliases_in_type(ctx: &TypCtx, typ: &Type) -> Type {
         match typ {
             Type::Struct {
                 def: def_id,
@@ -129,7 +126,7 @@ impl AliasResolver {
                     .iter()
                     .map(|(fname, ftyp)| {
                         let resolved_type = match ftyp {
-                            a @ Type::Alias(_) => self.resolve_shallow_aliases_in_type(ctx, a),
+                            a @ Type::Alias(_) => Self::resolve_shallow_aliases_in_type(ctx, a),
                             g @ Type::Generic(_, _) => g.clone(),
                             _ => panic!("struct field type should be an alias or a generic"),
                         };
@@ -150,7 +147,7 @@ impl AliasResolver {
                     // this type we are sure to hit some other type after
                     // resolving this alias
                     Type::Alias(follow) => {
-                        self.resolve_shallow_aliases_in_type(ctx, &Type::Alias(*follow))
+                        Self::resolve_shallow_aliases_in_type(ctx, &Type::Alias(*follow))
                     }
                     t @ (Type::UInt
                     | Type::Int
@@ -175,16 +172,16 @@ impl AliasResolver {
             Type::Tuple(fields) => {
                 let resolved_fields = fields
                     .iter()
-                    .map(|f| self.resolve_shallow_aliases_in_type(ctx, f))
+                    .map(|f| Self::resolve_shallow_aliases_in_type(ctx, f))
                     .collect();
                 Type::Tuple(resolved_fields)
             }
             Type::Function { args, ret } => {
                 let resolved_args = args
                     .iter()
-                    .map(|t| self.resolve_shallow_aliases_in_type(ctx, t))
+                    .map(|t| Self::resolve_shallow_aliases_in_type(ctx, t))
                     .collect();
-                let resolved_ret = self.resolve_shallow_aliases_in_type(ctx, ret);
+                let resolved_ret = Self::resolve_shallow_aliases_in_type(ctx, ret);
                 Type::Function {
                     args: resolved_args,
                     ret: Box::new(resolved_ret),
@@ -192,16 +189,16 @@ impl AliasResolver {
             }
             Type::Scheme { prefex, typ } => Type::Scheme {
                 prefex: prefex.clone(),
-                typ: Box::new(self.resolve_shallow_aliases_in_type(ctx, typ)),
+                typ: Box::new(Self::resolve_shallow_aliases_in_type(ctx, typ)),
             },
             Type::App { typ, args } => Type::App {
-                typ: Box::new(self.resolve_shallow_aliases_in_type(ctx, typ)),
+                typ: Box::new(Self::resolve_shallow_aliases_in_type(ctx, typ)),
                 args: args
                     .iter()
-                    .map(|t| self.resolve_shallow_aliases_in_type(ctx, t))
+                    .map(|t| Self::resolve_shallow_aliases_in_type(ctx, t))
                     .collect(),
             },
-            Type::Array(t) => Type::Array(Box::new(self.resolve_shallow_aliases_in_type(ctx, t))),
+            Type::Array(t) => Type::Array(Box::new(Self::resolve_shallow_aliases_in_type(ctx, t))),
             t @ (Type::UInt
             | Type::Int
             | Type::Bool
@@ -216,7 +213,6 @@ impl AliasResolver {
     }
 
     fn remove_top_level_aliases(&mut self, ctx: &mut TypCtx) {
-        ctx.definitions
-            .retain(|_, v| if let Type::Alias(_) = v { false } else { true })
+        ctx.definitions.retain(|_, v| !matches!(v, Type::Alias(_)))
     }
 }

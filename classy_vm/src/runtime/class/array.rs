@@ -12,6 +12,10 @@ pub struct Array<T> {
 }
 
 impl<T> Array<T> {
+    /// # Safety
+    ///
+    /// No typechecking is done. So the `arr` has to point
+    /// to the valid instance of an array class.
     pub unsafe fn from_ptr(arr: ErasedNonNull) -> Self {
         Self { ptr: arr.cast() }
     }
@@ -20,6 +24,13 @@ impl<T> Array<T> {
         unsafe { (*self.ptr.header().as_ptr()).data }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// # Safety
+    ///
+    /// `self.ptr` has to be a valid pointer to an array object.
     pub unsafe fn inner(&self) -> NonNullPtr<T> {
         self.ptr
     }
@@ -57,6 +68,9 @@ impl<T> std::ops::IndexMut<usize> for Array<T> {
     }
 }
 
+/// # Safety
+///
+/// `arr` has to be a valid array object allocated on a managed heap.
 pub unsafe fn trace(arr: *mut (), tracer: &mut dyn Tracer) {
     let arr = ErasedNonNull::new_unchecked(arr);
     let cls = arr.class();
@@ -85,6 +99,9 @@ pub unsafe fn trace(arr: *mut (), tracer: &mut dyn Tracer) {
     }
 }
 
+/// # Safety
+///
+/// `arr` has to be a valid array object allocated on a managed heap.
 pub unsafe fn actual_size(arr: *const ()) -> usize {
     let header = (arr as *const Header).sub(1);
     let cls = (*header).class;

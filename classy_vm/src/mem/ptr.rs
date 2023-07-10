@@ -29,6 +29,10 @@ impl<T> Ptr<T> {
         self.0
     }
 
+    /// # Safety
+    ///
+    /// No typechecking is done so user has to ensure
+    /// That T is castable to U.
     pub unsafe fn cast<U>(&self) -> Ptr<U> {
         let Some(ptr) = self.0 else {
             return Ptr(None)
@@ -78,6 +82,9 @@ impl<T> NonNullPtr<T> {
         Self(ptr)
     }
 
+    /// # Safety
+    ///
+    /// ptr has to be non null.
     pub unsafe fn new_unchecked(ptr: *mut T) -> Self {
         Self(NonNull::new_unchecked(ptr))
     }
@@ -94,6 +101,10 @@ impl<T> NonNullPtr<T> {
         self.0
     }
 
+    /// # Safety
+    ///
+    /// No typechecking is done so user has to ensure
+    /// That T is castable to U.
     pub unsafe fn cast<U>(&self) -> NonNullPtr<U> {
         let ptr = self.0;
         assert!(

@@ -14,6 +14,12 @@ impl AstPass for PromoteAnonTypes {
     }
 }
 
+impl Default for PromoteAnonTypes {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PromoteAnonTypes {
     pub fn new() -> Self {
         Self {

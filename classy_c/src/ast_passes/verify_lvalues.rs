@@ -4,11 +4,11 @@ use super::AstPass;
 pub struct VerifyLvalues;
 
 impl VerifyLvalues {
-    fn verify_lvalues<'ast>(&self, lval: &'ast ast::ExprKind) {
+    fn verify_lvalues(lval: &ast::ExprKind) {
         match lval {
             ast::ExprKind::Name(_) => (),
             ast::ExprKind::Access { .. } => (),
-            ast::ExprKind::TypedExpr { expr, .. } => self.verify_lvalues(&expr.kind),
+            ast::ExprKind::TypedExpr { expr, .. } => Self::verify_lvalues(&expr.kind),
             ast::ExprKind::IndexAccess { .. } => (),
             e => panic!("Cannot assign to {e:?}"),
         };
@@ -17,7 +17,7 @@ impl VerifyLvalues {
 
 impl<'ast> ast::Visitor<'ast> for VerifyLvalues {
     fn visit_assignment(&mut self, lval: &'ast ast::Expr, rval: &'ast ast::Expr) {
-        self.verify_lvalues(&lval.kind);
+        Self::verify_lvalues(&lval.kind);
         self.visit_expr(rval);
     }
 }

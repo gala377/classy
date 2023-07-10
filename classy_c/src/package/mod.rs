@@ -44,7 +44,7 @@ fn make_package(name: &str, tctx: &TypCtx) -> Package {
         functions: Vec::new(),
         types: Vec::new(),
     };
-    for (name, _) in &tctx.types {
+    for name in tctx.types.keys() {
         match name.as_str() {
             // skip basic types
             "Int" | "UInt" | "Bool" | "String" | "Float" | "Unit" => continue,

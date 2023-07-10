@@ -118,10 +118,9 @@ impl<'ast> ast::Visitor<'ast> for FunctionsOrderer {
         match self.mode {
             Mode::GatherFunctions => {
                 let id = self.id();
-                let annotation = match &def.typ {
-                    ast::Typ::Function { ret, .. } if **ret == ast::Typ::ToInfere => false,
-                    _ => true,
-                };
+                let annotation = !matches!(
+                    &def.typ,
+                    ast::Typ::Function { ret, .. } if **ret == ast::Typ::ToInfere);
                 let argc = def.parameters.len();
                 self.functions
                     .insert(def.name.clone(), (id, annotation, argc));

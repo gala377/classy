@@ -14,7 +14,7 @@ pub trait AstPass {
 pub fn run_befor_type_context_passes(ast: ast::Program) -> ast::Program {
     let ast = verify_lvalues::VerifyLvalues.run(ast);
     let ast = promote_local_types::PromoteAnonTypes::new().run(ast);
-    
+
     assign_expr_id::AssignExprId::new().run(ast)
 }
 

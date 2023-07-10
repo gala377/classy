@@ -324,7 +324,7 @@ impl Inference {
                     .iter()
                     .map(|ast::TypedName { typ, .. }| match &typ {
                         ast::Typ::ToInfere => self.fresh_type(),
-                        typ => self.ast_type_to_type(&self.scope.borrow(), prefex_scope, typ),
+                        typ => Self::ast_type_to_type(&self.scope.borrow(), prefex_scope, typ),
                     })
                     .collect::<Vec<_>>();
                 let lambda_scope = Scope::empty_scope_with_parent(self.scope.clone());
@@ -347,7 +347,7 @@ impl Inference {
             }
             ast::ExprKind::TypedExpr { expr, typ } => {
                 let expr_t = self.infer_in_expr(expr, prefex_scope);
-                let typ_t = self.ast_type_to_type(&self.scope.borrow(), prefex_scope, typ);
+                let typ_t = Self::ast_type_to_type(&self.scope.borrow(), prefex_scope, typ);
                 self.constraints.push(Constraint::Eq(expr_t, typ_t.clone()));
                 self.env.insert(id, typ_t.clone());
                 typ_t
@@ -484,7 +484,7 @@ impl Inference {
                 let init_t = self.infer_in_expr(init, prefex_scope);
                 let let_t = match typ {
                     ast::Typ::ToInfere => init_t.clone(),
-                    t => self.ast_type_to_type(&self.scope.borrow(), prefex_scope, t),
+                    t => Self::ast_type_to_type(&self.scope.borrow(), prefex_scope, t),
                 };
                 self.constraints.push(Constraint::Eq(init_t, let_t.clone()));
                 self.scope.borrow_mut().add_variable(name, let_t);
@@ -497,7 +497,7 @@ impl Inference {
                 self.constraints.push(Constraint::Eq(size_t, Type::Int));
                 let array_inner_t = match typ {
                     ast::Typ::ToInfere => self.fresh_type(),
-                    t => self.ast_type_to_type(&self.scope.borrow(), prefex_scope, t),
+                    t => Self::ast_type_to_type(&self.scope.borrow(), prefex_scope, t),
                 };
                 self.constraints.push(Constraint::Eq(
                     array_t.clone(),
@@ -537,12 +537,7 @@ impl Inference {
         Type::Fresh(var)
     }
 
-    fn ast_type_to_type(
-        &self,
-        scope: &Scope,
-        prefex_scope: &mut PrefexScope,
-        typ: &ast::Typ,
-    ) -> Type {
+    fn ast_type_to_type(scope: &Scope, prefex_scope: &mut PrefexScope, typ: &ast::Typ) -> Type {
         // convert ast::Typ to Type
         match typ {
             ast::Typ::Unit => Type::Unit,
@@ -554,24 +549,24 @@ impl Inference {
                 None => scope.lookup_type(name).expect("unknown type"),
             },
             ast::Typ::Application { callee, args } => {
-                let callee = Box::new(self.ast_type_to_type(scope, prefex_scope, callee));
+                let callee = Box::new(Self::ast_type_to_type(scope, prefex_scope, callee));
                 let args = args
                     .iter()
-                    .map(|typ| self.ast_type_to_type(scope, prefex_scope, typ))
+                    .map(|typ| Self::ast_type_to_type(scope, prefex_scope, typ))
                     .collect::<Vec<_>>();
                 Type::App { typ: callee, args }
             }
             ast::Typ::Poly(generics, t) => {
                 if generics.is_empty() {
-                    return self.ast_type_to_type(scope, prefex_scope, t);
+                    return Self::ast_type_to_type(scope, prefex_scope, t);
                 }
                 prefex_scope.with_scope(|prefex_scope| {
                     prefex_scope.add_type_vars(generics);
-                    self.ast_type_to_type(scope, prefex_scope, t)
+                    Self::ast_type_to_type(scope, prefex_scope, t)
                 })
             }
             ast::Typ::Array(t) => {
-                let t = Box::new(self.ast_type_to_type(scope, prefex_scope, t));
+                let t = Box::new(Self::ast_type_to_type(scope, prefex_scope, t));
                 Type::Array(t)
             }
             ast::Typ::Function {
@@ -582,25 +577,25 @@ impl Inference {
                 if generics.is_empty() {
                     let args = args
                         .iter()
-                        .map(|typ| self.ast_type_to_type(scope, prefex_scope, typ))
+                        .map(|typ| Self::ast_type_to_type(scope, prefex_scope, typ))
                         .collect::<Vec<_>>();
-                    let ret = Box::new(self.ast_type_to_type(scope, prefex_scope, ret));
+                    let ret = Box::new(Self::ast_type_to_type(scope, prefex_scope, ret));
                     return Type::Function { args, ret };
                 }
                 prefex_scope.with_scope(|prefex_scope| {
                     prefex_scope.add_type_vars(generics);
                     let args = args
                         .iter()
-                        .map(|typ| self.ast_type_to_type(scope, prefex_scope, typ))
+                        .map(|typ| Self::ast_type_to_type(scope, prefex_scope, typ))
                         .collect::<Vec<_>>();
-                    let ret = Box::new(self.ast_type_to_type(scope, prefex_scope, ret));
+                    let ret = Box::new(Self::ast_type_to_type(scope, prefex_scope, ret));
                     Type::Function { args, ret }
                 })
             }
             ast::Typ::Tuple(types) => {
                 let types = types
                     .iter()
-                    .map(|typ| self.ast_type_to_type(scope, prefex_scope, typ))
+                    .map(|typ| Self::ast_type_to_type(scope, prefex_scope, typ))
                     .collect::<Vec<_>>();
                 Type::Tuple(types)
             }

@@ -138,7 +138,7 @@ pub trait Folder: Sized {
         attributes
     }
 
-    fn fold_array(&mut self, size: Box<Expr>, typ: Typ, init: Vec<Expr>) -> ExprKind {
+    fn fold_array(&mut self, size: Expr, typ: Typ, init: Vec<Expr>) -> ExprKind {
         fold_array(self, size, typ, init)
     }
 
@@ -225,7 +225,7 @@ pub fn fold_expr_kind(folder: &mut impl Folder, expr: ExprKind) -> ExprKind {
         ExprKind::StructLiteral { strct, values } => folder.fold_struct_literal(strct, values),
         ExprKind::BoolConst(val) => ExprKind::BoolConst(folder.fold_bool_const(val)),
         ExprKind::AnonType { fields } => folder.fold_anon_type(fields),
-        ExprKind::ArrayLiteral { typ, size, init } => folder.fold_array(size, typ, init),
+        ExprKind::ArrayLiteral { typ, size, init } => folder.fold_array(*size, typ, init),
         ExprKind::IndexAccess { lhs, index } => folder.fold_index_access(*lhs, *index),
     }
 }
@@ -352,13 +352,8 @@ pub fn fold_anon_type(folder: &mut impl Folder, fields: Vec<(String, Expr)>) -> 
     ExprKind::AnonType { fields: new_fields }
 }
 
-pub fn fold_array(
-    folder: &mut impl Folder,
-    size: Box<Expr>,
-    typ: Typ,
-    init: Vec<Expr>,
-) -> ExprKind {
-    let new_size = Box::new(folder.fold_expr(*size));
+pub fn fold_array(folder: &mut impl Folder, size: Expr, typ: Typ, init: Vec<Expr>) -> ExprKind {
+    let new_size = Box::new(folder.fold_expr(size));
     let new_t = folder.fold_typ(typ);
     let new_init = init.into_iter().map(|e| folder.fold_expr(e)).collect();
     ExprKind::ArrayLiteral {

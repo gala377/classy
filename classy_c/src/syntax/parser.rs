@@ -653,10 +653,7 @@ impl<'source> Parser<'source> {
             .collect();
         let args = args
             .iter()
-            .filter(|expr| match expr.kind {
-                ast::ExprKind::Assignment { .. } => false,
-                _ => true,
-            })
+            .filter(|expr| !matches!(expr.kind, ast::ExprKind::Assignment { .. }))
             .cloned()
             .collect();
         // todo split args into kwargs and args

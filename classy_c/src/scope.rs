@@ -4,6 +4,15 @@ pub struct Scope<K, V> {
     stack: Vec<HashMap<K, V>>,
 }
 
+impl<K, V> Default for Scope<K, V>
+where
+    K: Eq + Hash,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<K, V> Scope<K, V>
 where
     K: Eq + Hash,

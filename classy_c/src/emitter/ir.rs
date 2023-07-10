@@ -347,7 +347,7 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
                     self.emit_instr(&mut code, OpCode::AllocArray);
                     self.emit_word(&mut code, elem_size as u64);
                     self.emit_word(&mut code, elem_align as u64);
-                    self.emit_word(&mut code, if is_elem_ref { 1 } else { 0 } as u64);
+                    self.emit_word(&mut code, u64::from(is_elem_ref));
                     self.set_address(&mut code, res)
                         .map_err(|e| format!("line {index}, {debug_op:?} => {e}"))
                         .unwrap();

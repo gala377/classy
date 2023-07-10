@@ -8,9 +8,7 @@ pub fn debug_print_code(instrs: &Vec<u8>, cp: &constant_pool::ConstantPool) {
     fn read_word(index: &mut usize, instr: &[u8]) -> usize {
         assert_eq!(instr.len(), WORD_SIZE);
         let mut bytes: [u8; WORD_SIZE] = [0; WORD_SIZE];
-        for i in 0..WORD_SIZE {
-            bytes[i] = instr[i];
-        }
+        bytes[..WORD_SIZE].copy_from_slice(&instr[..WORD_SIZE]);
         *index += WORD_SIZE;
         usize::from_le_bytes(bytes)
     }

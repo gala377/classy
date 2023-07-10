@@ -55,12 +55,19 @@ impl StringInst {
         }
     }
 }
+
+/// # Safety
+///
+/// Expects that the pointer is valid and points to the correct instance.
 pub unsafe fn as_rust_str(ptr: &NonNullPtr<StringInst>) -> &str {
     let len = Header::data_from_nonnull(*ptr);
     let as_slice = std::slice::from_raw_parts(ptr.get() as *const u8, len);
     std::str::from_utf8(as_slice).unwrap()
 }
 
+/// # Safety
+///
+/// Expects that the pointer is valid and points to the correct instance.
 pub unsafe fn as_rust_string(ptr: NonNullPtr<StringInst>) -> String {
     as_rust_str(&ptr).to_owned()
 }

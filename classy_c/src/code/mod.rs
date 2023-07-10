@@ -232,6 +232,12 @@ pub struct Code {
     pub stack_map: GcStackMap,
 }
 
+impl Default for Code {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Code {
     pub fn new() -> Code {
         Code {

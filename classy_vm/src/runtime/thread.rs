@@ -194,21 +194,21 @@ impl Thread {
     }
 
     /// # Safety
-    /// 
+    ///
     /// Returned instance type T must be valid with the given class.
     pub unsafe fn allocate_instance<T>(&mut self, cls: NonNullPtr<Class>) -> Ptr<T> {
         self.heap.allocate_instance(cls).cast()
     }
 
     /// # Safety
-    /// 
+    ///
     /// Pointer has to be non null.
     pub unsafe fn create_handle<T>(&mut self, ptr: NonNullPtr<T>) -> Handle<T> {
         self.heap.create_handle(ptr)
     }
 
     /// # Safety
-    /// 
+    ///
     /// Handle has to be valid.
     pub unsafe fn revoke_handle<T>(&mut self, handle: Handle<T>) {
         self.heap.revoke_handle(handle);

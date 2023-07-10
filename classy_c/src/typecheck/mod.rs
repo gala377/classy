@@ -111,13 +111,13 @@ pub fn dedup_trivially_eq_types(ctx: &mut TypCtx) {
         println!("this type can be replaced with {id} => {typ_id}")
     }
     // update type aliases to point to the common type
-    for (_, id) in &mut ctx.types {
+    for id in ctx.types.values_mut() {
         if let Some(new_id) = duplicates.get(id) {
             *id = *new_id;
         }
     }
     // update variable names to point to the common type
-    for (_, id) in &mut ctx.variables {
+    for id in ctx.variables.values_mut() {
         if let Some(new_id) = duplicates.get(id) {
             *id = *new_id;
         }

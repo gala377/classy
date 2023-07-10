@@ -21,6 +21,7 @@ pub struct IrFunction {
     pub body: Block,
 }
 
+#[derive(Default)]
 pub struct SourceEmitter {
     functions: HashMap<String, IrFunction>,
 }

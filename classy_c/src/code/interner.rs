@@ -36,6 +36,7 @@ impl From<constant_pool::TypedEntry> for InternableEntry {
     }
 }
 
+#[derive(Default)]
 pub struct Interner {
     interned: HashMap<InternableEntry, usize>,
 }

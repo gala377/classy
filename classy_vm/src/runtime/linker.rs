@@ -104,9 +104,8 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                 .iter()
                 .enumerate()
                 .map(|(i, (name, typ))| {
-                    let field_name = unsafe {
-                        std::mem::transmute(self.intern_and_allocte_static_string(name))
-                    };
+                    let field_name =
+                        unsafe { std::mem::transmute(self.intern_and_allocte_static_string(name)) };
                     let sym_t_name = match typ {
                         Type::Int => "Int".to_owned(),
                         Type::UInt => "UInt".to_owned(),
