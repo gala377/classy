@@ -29,6 +29,18 @@ type RuntimeFn = fn(&mut Thread, &mut [NonNullPtr<Frame>], &[Word]) -> Word;
 
 pub type Word = u64;
 
+pub struct ThreadArgs {
+    pub runtime: Runtime,
+    pub thread_manager: Arc<ThreadManager>,
+    pub from_space: SemiSpace,
+    pub to_space: SemiSpace,
+    pub permament_heap: Arc<Mutex<permament_heap::PermamentHeap>>,
+    pub initial_tlab_free_size: usize,
+    pub max_young_space_size: usize,
+    pub code: NonNullPtr<class::code::Code>,
+    pub debug: bool,
+}
+
 pub struct Thread {
     heap: Heap,
     _permament_heap: Arc<Mutex<permament_heap::PermamentHeap>>,
@@ -48,15 +60,17 @@ macro_rules! log {
 
 impl Thread {
     pub fn new(
-        runtime: Runtime,
-        thread_manager: Arc<ThreadManager>,
-        from_space: SemiSpace,
-        to_space: SemiSpace,
-        permament_heap: Arc<Mutex<permament_heap::PermamentHeap>>,
-        initial_tlab_free_size: usize,
-        max_young_space_size: usize,
-        code: NonNullPtr<class::code::Code>,
-        debug: bool,
+        ThreadArgs {
+            runtime,
+            thread_manager,
+            from_space,
+            to_space,
+            permament_heap,
+            initial_tlab_free_size,
+            max_young_space_size,
+            code,
+            debug,
+        }: ThreadArgs,
     ) -> Self {
         let id = std::thread::current().id();
         Thread {
