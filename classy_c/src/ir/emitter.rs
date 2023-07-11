@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    syntax::ast::{self, Typ},
+    syntax::ast::{self},
     typecheck::{
         constrait_solver::instance,
         inference::TypeEnv,

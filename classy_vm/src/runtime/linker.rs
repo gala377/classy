@@ -98,19 +98,6 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
         implementation(tctx, t.clone())
     }
 
-    fn instance_until_struct_type(&self, tctx: &TypCtx, t: Type) -> Option<Type> {
-        match t {
-            t @ Type::Struct { .. } => Some(t),
-            Type::Scheme { typ, .. } => self.instance_until_struct_type(tctx, *typ),
-            Type::App { typ, .. } => self.instance_until_struct_type(tctx, *typ),
-            Type::Alias(for_t) => {
-                let t = tctx.definitions.get(&for_t).unwrap();
-                self.instance_until_struct_type(tctx, t.clone())
-            }
-            _ => None,
-        }
-    }
-
     fn get_type_name(tctx: &TypCtx, t: Type) -> String {
         match t {
             Type::Int => "Int".to_owned(),
