@@ -87,6 +87,8 @@ fn main() {
                 type Ref(a) { ref: a }
 
 
+                header_data_2 x = header_data x
+
                 make_ref a = Ref(ref=a)
 
                 id x = x
@@ -103,11 +105,12 @@ fn main() {
                     next: List(a)
                 }
 
-                get_int: (String, (String) -> Int) -> Int
+                get_int: (String, (String) -> Int) -> () 
                 get_int(a,f) {
-                    let res = f(a)
-                    printi(res)
-                    res
+                    print("In get_int")
+                    print(a)
+                    print(class_name a)
+                    printi(f a)
                 }
 
                 apply_generic: (String, (String) -> ()) -> ()
@@ -136,9 +139,9 @@ fn main() {
                     print("before")
                     "This is some really weird bug, like, it returns 0"
                     "And I have no idea why"
-                    printi(get_int("123", header_data))
-                    printi(get_int("1234", header_data))
-                    printi(get_int("12345", header_data))
+                    get_int("123", header_data)
+                    get_int("1234", header_data)
+                    get_int("12345", header_data)
                     printi(header_data "123")
                     print("after")
                     print(run_generic("123", id))
@@ -146,9 +149,9 @@ fn main() {
                     print(class_name(make_int_ref()))
                     print(class_name("123"))
                     apply_generic("123", generic_class_name)
-                    printi(get_int("123", header_data))
-                    printi(get_int("1234", header_data))
-                    printi(get_int("12345", header_data))
+                    get_int("123", header_data)
+                    get_int("1234", header_data)
+                    get_int("12345", header_data_2)
 
                     ref2.ref
                 }

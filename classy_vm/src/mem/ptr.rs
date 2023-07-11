@@ -127,6 +127,10 @@ impl<T> NonNullPtr<T> {
         unsafe { (*self.header().as_ptr()).class }
     }
 
+    pub fn data(&self) -> usize {
+        unsafe { (*self.header().as_ptr()).data }
+    }
+
     pub fn header(&self) -> NonNull<Header> {
         unsafe {
             let header = self.0.cast::<Header>().as_ptr().sub(1);

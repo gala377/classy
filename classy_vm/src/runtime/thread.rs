@@ -169,8 +169,11 @@ impl Thread {
                         panic!("array_len accepts only one argument");
                     }
                     unsafe {
-                        let arr_ptr: NonNullPtr<()> = std::mem::transmute(args[0]);
-                        (*arr_ptr.header().as_ptr()).data as Word
+                        let arg = args[0];
+                        let arr_ptr: NonNullPtr<()> = std::mem::transmute(arg);
+                        let p = arr_ptr.data() as Word;
+                        println!("NATIVE DATA IS {p}");
+                        p
                     }
                 }
                 fn print_n_times(
