@@ -68,31 +68,26 @@ fn main() {
             let source = r#"
                 @runtime @empty 
                 print: (String) -> ()
-                
                 @runtime @empty
                 header_data: forall a => (a) -> Int
-
                 @runtime @empty
                 itos: (Int) -> String
-
                 @runtime @empty
                 print_n_times: (String, Int) -> ()
-
                 @runtime @empty
                 byte_copy: (String, [Byte], Int, Int) -> ()
-
                 @runtime @empty
                 add: (Int, Int) -> Int
-
                 @runtime @empty
                 str_from_bytes: ([Byte]) -> String
+                @runtime @empty
+                class_name: forall a => (a) -> String
 
                 type Integer { val: Int }
                 type Ref(a) { ref: a }
 
-                make_ref a = Ref(ref=a)
 
-                get(i, arr) = arr[i]
+                make_ref a = Ref(ref=a)
 
                 id x = x
 
@@ -109,7 +104,14 @@ fn main() {
                 }
 
                 get_int: (String, (String) -> Int) -> Int
-                get_int(a,f) = f a
+                get_int(a,f) {
+                    let res = f(a)
+                    printi(res)
+                    res
+                }
+
+                apply_generic: (String, (String) -> ()) -> ()
+                apply_generic(x, f) = f x
 
                 run_generic: (String, (String) -> String) -> String
                 run_generic(s, f) = f s
@@ -118,6 +120,10 @@ fn main() {
 
                 type Side(a) = () -> a
 
+                generic_class_name: forall a => (a) -> ()
+                generic_class_name x = print (class_name x)
+
+
                 main: Side(Integer)
                 main a {
                     let ref = make_ref "hello"
@@ -125,9 +131,25 @@ fn main() {
                     print(ref.ref)
                     print(itos(ref2.ref.val))
                     printi(header_data "Hello")
+                    printi(header_data "aaaaaaaaaaaaaaa17")
                     printi(header_data ref2)
+                    print("before")
+                    "This is some really weird bug, like, it returns 0"
+                    "And I have no idea why"
                     printi(get_int("123", header_data))
+                    printi(get_int("1234", header_data))
+                    printi(get_int("12345", header_data))
+                    printi(header_data "123")
+                    print("after")
                     print(run_generic("123", id))
+                    print(class_name(Integer(val=1)))
+                    print(class_name(make_int_ref()))
+                    print(class_name("123"))
+                    apply_generic("123", generic_class_name)
+                    printi(get_int("123", header_data))
+                    printi(get_int("1234", header_data))
+                    printi(get_int("12345", header_data))
+
                     ref2.ref
                 }
 

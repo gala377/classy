@@ -1,8 +1,13 @@
 use std::collections::HashMap;
 
 use crate::{
-    syntax::ast,
-    typecheck::{inference::TypeEnv, r#type::Type, type_context::TypCtx},
+    syntax::ast::{self, Typ},
+    typecheck::{
+        constrait_solver::instance,
+        inference::TypeEnv,
+        r#type::Type,
+        type_context::{DefId, TypCtx},
+    },
 };
 
 use super::instr::{Address, Block, Instruction, IsRef, Label};
@@ -73,12 +78,39 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
         }
     }
 
+    fn get_function_args(&self, t: Type) -> Vec<Type> {
+        match t {
+            Type::Function { args, .. } => args.clone(),
+            Type::Scheme { typ, .. } => self.get_function_args(*typ.clone()),
+            Type::App { typ, args } => {
+                self.get_function_args(instance(&self.tctx, args.clone(), *typ.clone()))
+            }
+            Type::Alias(for_type) => self.get_function_args(self.tctx.resolve_alias(for_type)),
+            _ => panic!("Should be a function"),
+        }
+    }
+
+    fn get_struct_type(&self, name: &str) -> (DefId, Vec<(String, Type)>) {
+        fn get_struct_type_impl(tctx: &TypCtx, t: Type) -> (DefId, Vec<(String, Type)>) {
+            match t {
+                Type::Struct { def, fields } => (def, fields.clone()),
+                Type::Scheme { typ, .. } => get_struct_type_impl(tctx, *typ.clone()),
+                Type::App { typ, args } => {
+                    get_struct_type_impl(tctx, instance(tctx, args.clone(), *typ.clone()))
+                }
+                Type::Alias(for_type) => get_struct_type_impl(tctx, tctx.resolve_alias(for_type)),
+                _ => panic!("expected a struct type"),
+            }
+        }
+        let t = self.tctx.get_type(&name).unwrap();
+        get_struct_type_impl(&self.tctx, t.clone())
+    }
+
     pub fn emit_fn(mut self, func: &ast::FunctionDefinition) -> IrFunction {
         let func_name = func.name.clone();
         let func_t_id = self.tctx.variables.get(&func_name).unwrap();
-        let Type::Function { args, .. } = self.tctx.definitions.get(func_t_id).unwrap() else {
-            panic!("Should be a function type");
-        };
+        let func_t = self.tctx.definitions.get(func_t_id).unwrap();
+        let args = self.get_function_args(func_t.clone());
         let this_args = func
             .parameters
             .iter()
@@ -225,9 +257,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 // do it and this might create a struct when we dont want to because we reassigned
                 // the name of the type to something else
                 let name = strct.0.last().unwrap().clone();
-                let Type::Struct { def, fields } = self.tctx.get_type(&name).unwrap() else {
-                    panic!("should be a struct")
-                };
+                let (def, fields) = self.get_struct_type(&name);
                 let tid = self.tctx.def_id_to_typ_id(def);
                 let struct_address = self.new_temporary(IsRef::Ref);
                 self.current_block.push(Instruction::Alloc {

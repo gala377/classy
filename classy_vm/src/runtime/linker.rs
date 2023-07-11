@@ -81,12 +81,67 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
         self.replace_symbolic_references_in_code(code);
     }
 
+    fn instance_until_struct(&self, tctx: &TypCtx, tid: usize) -> Option<Type> {
+        fn implementation(tctx: &TypCtx, t: Type) -> Option<Type> {
+            match t {
+                t @ Type::Struct { .. } => Some(t),
+                Type::Scheme { typ, .. } => implementation(tctx, *typ),
+                Type::App { typ, .. } => implementation(tctx, *typ),
+                Type::Alias(for_t) => {
+                    let t = tctx.definitions.get(&for_t).unwrap();
+                    implementation(tctx, t.clone())
+                }
+                _ => None,
+            }
+        }
+        let t = tctx.definitions.get(&tid).unwrap();
+        implementation(tctx, t.clone())
+    }
+
+    fn instance_until_struct_type(&self, tctx: &TypCtx, t: Type) -> Option<Type> {
+        match t {
+            t @ Type::Struct { .. } => Some(t),
+            Type::Scheme { typ, .. } => self.instance_until_struct_type(tctx, *typ),
+            Type::App { typ, .. } => self.instance_until_struct_type(tctx, *typ),
+            Type::Alias(for_t) => {
+                let t = tctx.definitions.get(&for_t).unwrap();
+                self.instance_until_struct_type(tctx, t.clone())
+            }
+            _ => None,
+        }
+    }
+
+    fn get_type_name(tctx: &TypCtx, t: Type) -> String {
+        match t {
+            Type::Int => "Int".to_owned(),
+            Type::UInt => "UInt".to_owned(),
+            Type::Bool => "Bool".to_owned(),
+            Type::String => "String".to_owned(),
+            Type::Float => "Float".to_owned(),
+            Type::Unit => "Unit".to_owned(),
+            Type::Generic(_, _) => "@GenericRef".to_owned(),
+            Type::Struct { def, .. } => {
+                let tid = tctx.def_id_to_typ_id(def);
+                tctx.get_name(tid).unwrap()
+            }
+            Type::App { typ, .. } => Self::get_type_name(tctx, *typ),
+            Type::Scheme { typ, .. } => Self::get_type_name(tctx, *typ),
+            Type::Alias(for_t) => {
+                let t = tctx.definitions.get(&for_t).unwrap();
+                Self::get_type_name(tctx, t.clone())
+            }
+            t => {
+                panic!("Not supported yet {t:?}")
+            }
+        }
+    }
+
     fn allocate_user_classes_keep_symbolic_references(&mut self, tctx: &TypCtx) -> UserClasses {
         let names = tctx.types.clone();
         let mut user_classes = UserClasses::new();
         for (name, tid) in names {
             let str_instance = self.intern_and_allocte_static_string(&name);
-            let Type::Struct { fields, .. } = tctx.definitions.get(&tid).unwrap() else {
+            let Some(Type::Struct{ fields, .. }) = self.instance_until_struct(tctx, tid) else {
                 println!("Linking of {:?} skipped", tctx.definitions.get(&tid).unwrap());
                 continue;
             };
@@ -106,21 +161,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                 .map(|(i, (name, typ))| {
                     let field_name =
                         unsafe { std::mem::transmute(self.intern_and_allocte_static_string(name)) };
-                    let sym_t_name = match typ {
-                        Type::Int => "Int".to_owned(),
-                        Type::UInt => "UInt".to_owned(),
-                        Type::Bool => "Bool".to_owned(),
-                        Type::String => "String".to_owned(),
-                        Type::Float => "Float".to_owned(),
-                        Type::Unit => "Unit".to_owned(),
-                        Type::Struct { def, .. } => {
-                            let tid = tctx.def_id_to_typ_id(*def);
-                            tctx.get_name(tid).unwrap()
-                        }
-                        _ => {
-                            panic!("Not supported yet")
-                        }
-                    };
+                    let sym_t_name = Self::get_type_name(tctx, typ.clone());
                     let sym_t_name = self.intern_and_allocte_static_string(&sym_t_name);
                     class::Field {
                         name: field_name,
@@ -169,6 +210,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                         "Int" => self.vm.runtime.classes.int,
                         "String" => self.vm.runtime.classes.string,
                         "Byte" => self.vm.runtime.classes.byte,
+                        "@GenericRef" => self.vm.runtime.classes.gref,
                         _ => user_classes.get_class_ptr(std::mem::transmute(sym)),
                     };
                     set_field_cls(*cls_ptr, i, field_cls_addr);

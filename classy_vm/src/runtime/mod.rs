@@ -44,6 +44,7 @@ pub struct RuntimeClasses {
     pub int: NonNullPtr<Class>,
     pub frame: NonNullPtr<Class>,
     pub code: NonNullPtr<Class>,
+    pub gref: NonNullPtr<Class>,
     // pub bool: NonNullPtr<class::Bool>,
 }
 
@@ -82,6 +83,14 @@ impl RuntimeClasses {
             &class::code::make_code_class(),
             &[],
         );
+        let gref = setup_class(
+            heap,
+            klass,
+            string,
+            "@GenericRef",
+            &class::generic::GENERIC_REF_CLASS,
+            &[],
+        );
         RuntimeClasses {
             klass,
             string,
@@ -89,6 +98,7 @@ impl RuntimeClasses {
             int,
             frame,
             code,
+            gref,
         }
     }
 }

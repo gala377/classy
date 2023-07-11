@@ -170,7 +170,9 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
                         &mut code,
                         match offset {
                             ir::Address::ConstantInt(val) => val as u64,
-                            _ => todo!(),
+                            _ => todo!(
+                                "Check if the offset is withing the bounds if not throw error"
+                            ),
                         },
                     );
                     self.set_address(&mut code, res)

@@ -13,7 +13,7 @@ use crate::{
         handle::Handle,
         heap::{self, Heap, SemiSpace},
         permament_heap,
-        ptr::{NonNullPtr, Ptr},
+        ptr::{ErasedNonNull, NonNullPtr, Ptr},
         ObjectAllocator,
     },
     runtime::{
@@ -193,6 +193,14 @@ impl Thread {
                     }
                     0
                 }
+                fn class_name(_: &mut Thread, _: &mut [NonNullPtr<Frame>], args: &[Word]) -> Word {
+                    if args.len() != 1 {
+                        panic!("class_name accepts only one argument");
+                    }
+                    let arg = args[0];
+                    let ptr: ErasedNonNull = unsafe { std::mem::transmute(arg) };
+                    unsafe { (*ptr.class().get()).name().as_ptr() as Word }
+                }
                 m.insert("print".to_owned(), native_print as RuntimeFn);
                 m.insert("header_data".to_owned(), header_data as RuntimeFn);
                 m.insert("itos".to_owned(), itos as RuntimeFn);
@@ -200,6 +208,7 @@ impl Thread {
                 m.insert("byte_copy".to_owned(), byte_copy as RuntimeFn);
                 m.insert("add".to_owned(), add);
                 m.insert("str_from_bytes".to_owned(), str_from_bytes);
+                m.insert("class_name".to_owned(), class_name);
                 m
             },
         }

@@ -3,6 +3,7 @@ pub mod array;
 pub mod byte;
 pub mod code;
 pub mod frame;
+pub mod generic;
 pub mod header;
 pub mod integer;
 pub mod klass;
