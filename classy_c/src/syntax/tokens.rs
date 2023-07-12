@@ -44,6 +44,8 @@ pub enum TokenType {
     Forall,
     #[token("array")]
     Array,
+    #[token("match")]
+    Match,
 
     // Literals
     #[regex(r"[_a-zA-Z][_a-zA-Z0-9]*", |lex| lex.slice().to_owned())]
@@ -90,6 +92,8 @@ pub enum TokenType {
     Assignment,
     #[token(".", priority = 3)]
     Dot,
+    #[token("*")]
+    Star,
 
     // Others
     #[regex(r"[ \t\f]+", logos::skip)]

@@ -181,6 +181,34 @@ pub enum ExprKind {
         lhs: Box<Expr>,
         index: Box<Expr>,
     },
+    Match {
+        expr: Box<Expr>,
+        cases: Vec<(Pattern, Expr)>,
+    },
+}
+
+#[derive(Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq))]
+pub enum Pattern {
+    Name(String),
+    Tuple(Vec<Pattern>),
+    Struct {
+        strct: String,
+        fields: HashMap<String, Pattern>,
+    },
+    TupleStruct {
+        strct: String,
+        fields: Vec<Pattern>,
+    },
+    Array(Vec<Pattern>),
+    Wildcard,
+    Unit,
+    String(String),
+    Int(isize),
+    Bool(bool),
+    /// accumulate rest of values in an array
+    /// *name 
+    Rest(String),
 }
 
 #[derive(Debug, Clone)]

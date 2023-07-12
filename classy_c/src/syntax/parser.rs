@@ -386,6 +386,7 @@ impl<'source> Parser<'source> {
             TokenType::Return => self.parse_return(),
             TokenType::Let => self.parse_let(),
             TokenType::Type => self.parse_type_expr(),
+            TokenType::Match => self.parse_match(),
             _ => self.parse_assignment(),
         }
     }
@@ -919,6 +920,99 @@ impl<'source> Parser<'source> {
             typ,
             init: Box::new(init),
         }))
+    }
+
+    fn parse_match(&mut self) -> ParseRes<ast::Expr> {
+        self.match_token(TokenType::Match)?;
+        let expr = self.parse_expr()?;
+        let _ = self.expect_token(TokenType::LBrace);
+        let mut cases = Vec::new();
+        while self.lexer.current().typ != TokenType::RBrace {
+            let pattern = self.parse_pattern()?;
+            let _ = self.expect_token(TokenType::FatArrow);
+            let body = self.parse_expr()?;
+            let _ = self.match_token(TokenType::Semicolon);
+            cases.push((pattern, body));
+        }
+        let _ = self.expect_token(TokenType::RBrace);
+        Ok(mk_expr(ast::ExprKind::Match {
+            expr: Box::new(expr),
+            cases,
+        }))
+    }
+
+    fn parse_pattern(&mut self) -> ParseRes<ast::Pattern> {
+        let tok = self.lexer.current().typ.clone();
+        match tok {
+            TokenType::Integer(val) => {
+                self.lexer.advance();
+                Ok(ast::Pattern::Int(val))
+            }
+            TokenType::True => {
+                self.lexer.advance();
+                Ok(ast::Pattern::Bool(true))
+            }
+            TokenType::False => {
+                self.lexer.advance();
+                Ok(ast::Pattern::Bool(false))
+            }
+            TokenType::String(s) => {
+                self.lexer.advance();
+                Ok(ast::Pattern::String(s))
+            }
+            TokenType::LParen => {
+                self.lexer.advance();
+                if let Ok(_) = self.match_token(TokenType::RParen) {
+                    return Ok(ast::Pattern::Unit);
+                }
+                let inner = self.parse_delimited(Self::parse_pattern, TokenType::Comma);
+                let _ = self.expect_token(TokenType::RParen);
+                Ok(ast::Pattern::Tuple(inner))
+            }
+            TokenType::RBracket => {
+                self.lexer.advance();
+                let inner = self.parse_delimited(Self::parse_pattern, TokenType::Comma);
+                let _ = self.expect_token(TokenType::RBracket);
+                Ok(ast::Pattern::Tuple(inner))
+
+            }
+            TokenType::Identifier(name) => {
+                self.lexer.advance();
+                if let Ok(_) = self.match_token(TokenType::LParen) {
+                    let inner = self.parse_delimited(Self::parse_pattern, TokenType::Comma);
+                    let _ = self.expect_token(TokenType::RParen);
+                    return Ok(ast::Pattern::TupleStruct {
+                        strct: name,
+                        fields: inner,
+                    });
+                }
+                if let Ok(_) = self.match_token(TokenType::LBrace) {
+                    let fields = self.parse_delimited(Self::parse_pattern_field, TokenType::Comma);
+                    let _ = self.expect_token(TokenType::RBrace);
+                    return Ok(ast::Pattern::Struct {
+                        strct: name,
+                        fields: fields.into_iter().collect(),
+                    });
+                }
+                if name == "_" {
+                    return Ok(ast::Pattern::Wildcard);
+                }
+                Ok(ast::Pattern::Name(name))
+            }
+            TokenType::Star => {
+                self.lexer.advance(); 
+                let name = self.parse_identifier()?;
+                Ok(ast::Pattern::Rest(name))
+            }
+            _ => panic!("Invalid pattern"),
+        }
+    }
+
+    fn parse_pattern_field(&mut self) -> ParseRes<(String, ast::Pattern)> {
+        let name = self.parse_identifier()?;
+        let _ = self.expect_token(TokenType::Colon);
+        let pattern = self.parse_pattern()?;
+        Ok((name, pattern))
     }
 
     fn parse_while(&mut self) -> ParseRes<ast::Expr> {
