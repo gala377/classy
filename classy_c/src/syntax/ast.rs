@@ -1,7 +1,6 @@
 use std::{collections::HashMap, ops::Range};
 
 pub mod fold;
-pub mod typed;
 pub mod visitor;
 
 pub use fold::Folder;
