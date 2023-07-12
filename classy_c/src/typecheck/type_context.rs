@@ -257,6 +257,14 @@ impl TypCtx {
         }
     }
 
+    pub fn name_by_def_id(&self, id: DefId) -> String {
+        match self.nodes.get(&id) {
+            Some(ast::TopLevelItem::TypeDefinition(node)) => node.name.clone(),
+            Some(ast::TopLevelItem::FunctionDefinition(node)) => node.name.clone(),
+            _ => panic!("expected type definition"),
+        }
+    }
+
     pub fn fn_def_id(&self, name: &str) -> Option<DefId> {
         for (id, def) in &self.nodes {
             if let ast::TopLevelItem::FunctionDefinition(node) = def {

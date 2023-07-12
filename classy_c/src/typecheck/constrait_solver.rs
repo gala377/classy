@@ -167,6 +167,41 @@ impl<'ctx> ConstraintSolver<'ctx> {
                 }
                 _ => panic!("cannot infer struct type"),
             },
+            Constraint::HasCase { t, case, of_type } => match t.clone() {
+                Type::Struct { def, .. } => {
+                    let name = self.tctx.name_by_def_id(def);
+                    if case != name {
+                        panic!("Cannot unify case {case} with {name}");
+                    }
+                    let Type::Struct { fields: pat_f, .. } = of_type else {
+                        panic!("Expected a struct type in pattern got {of_type:?}");
+                    };
+                    for (fname, ftyp) in pat_f {
+                        constraints.push_back(Constraint::HasField {
+                            t: t.clone(),
+                            field: fname.clone(),
+                            of_type: ftyp.clone(),
+                        });
+                    }
+                }
+                Type::ADT { constructors, .. } => {
+                    let c = constructors
+                        .iter()
+                        .find(|(c, _)| c == &case)
+                        .expect("this case does not exists, constraint not met");
+                    // TODO: the of_type is a dummy type so the struct does
+                    // not have an existing id
+                    constraints.push_back(Constraint::Eq(c.1.clone(), of_type));
+                }
+                Type::Alias(id) => {
+                    constraints.push_back(Constraint::HasCase {
+                        t: self.tctx.resolve_alias(id),
+                        case,
+                        of_type,
+                    });
+                }
+                _ => panic!("cannot infer ADT type"),
+            }
             Constraint::Eq(Type::Generic(_, _), t) if t.is_ref().unwrap() => {}
             Constraint::Eq(t, Type::Generic(_, _)) if t.is_ref().unwrap() => {}
             c => panic!("Cannot unify constraint {c:?}"),
@@ -197,6 +232,11 @@ fn replace_in_constraints(id: usize, for_t: Type, cons: &mut VecDeque<Constraint
             Constraint::HasField { t, field, of_type } => Constraint::HasField {
                 t: replacer.fold_type(t.clone()),
                 field: field.clone(),
+                of_type: replacer.fold_type(of_type.clone()),
+            },
+            Constraint::HasCase { t, case, of_type } => Constraint::HasCase {
+                t: replacer.fold_type(t.clone()),
+                case: case.clone(),
                 of_type: replacer.fold_type(of_type.clone()),
             },
         }

@@ -537,9 +537,103 @@ impl Inference {
                 ));
                 inner_t
             }
+            ast::ExprKind::Match { expr, cases } => {
+                let ret = self.fresh_type();
+                self.env.insert(id, ret.clone());
+                let expr_t = self.infer_in_expr(expr, prefex_scope);
+                for (pattern, body) in cases {
+                    self.in_scope(Scope::empty_scope_with_parent(self.scope.clone()), |this| {
+                        let pattern_t = this.infer_in_pattern(pattern, prefex_scope);
+                        this.constraints
+                            .push(Constraint::Eq(pattern_t, expr_t.clone()));
+                        let body_t = this.infer_in_expr(body, prefex_scope);
+                        this.constraints.push(Constraint::Eq(body_t, ret.clone()));
+                        Type::Unit
+                    });
+                }
+                ret
+            }
         }
     }
 
+    fn infer_in_pattern(&mut self, pattern: &ast::Pattern, prefex_scope: &mut PrefexScope) -> Type {
+        match pattern {
+            ast::Pattern::Name(n) => {
+                let typ = self.fresh_type();
+                self.scope.borrow_mut().add_variable(n, typ.clone());
+                typ
+            }
+            ast::Pattern::Tuple(inner) => {
+                let typ = self.fresh_type();
+                let inner_types = inner
+                    .iter()
+                    .map(|p| self.infer_in_pattern(p, prefex_scope))
+                    .collect::<Vec<_>>();
+                self.constraints
+                    .push(Constraint::Eq(typ.clone(), Type::Tuple(inner_types)));
+                typ
+            }
+            // TODO: This approach does not allow us to actually match structs, like
+            // if we want to just match a struct not a case of a struct then we are kinda
+            // screwed as there is not a possiblity to do so.
+            ast::Pattern::Struct { strct, fields } => {
+                let typ = self.fresh_type();
+                let inner_types = fields
+                    .iter()
+                    .map(|(n, p)| {
+                        let typ = self.infer_in_pattern(p, prefex_scope);
+                        (n.clone(), typ)
+                    })
+                    .collect::<Vec<_>>();
+                self.constraints.push(Constraint::HasCase {
+                    t: typ.clone(),
+                    case: strct.clone(),
+                    of_type: Type::Struct {
+                        def: 0,
+                        fields: inner_types.into_iter().collect(),
+                    },
+                });
+                typ
+            }
+            ast::Pattern::TupleStruct { strct, fields } => {
+                let typ = self.fresh_type();
+                let inner_types = fields
+                    .iter()
+                    .map(|p| self.infer_in_pattern(p, prefex_scope))
+                    .collect::<Vec<_>>();
+                self.constraints.push(Constraint::HasCase {
+                    t: typ.clone(),
+                    case: strct.clone(),
+                    of_type: Type::Tuple(inner_types),
+                });
+                typ
+            }
+            ast::Pattern::Array(patterns) => {
+                let typ = self.fresh_type();
+                let inner_types = patterns
+                    .iter()
+                    .map(|p| self.infer_in_pattern(p, prefex_scope))
+                    .collect::<Vec<_>>();
+                for t in &inner_types {
+                    self.constraints
+                        .push(Constraint::Eq(t.clone(), inner_types[0].clone()));
+                }
+                self.constraints.push(Constraint::Eq(
+                    typ.clone(),
+                    Type::Array(Box::new(inner_types[0].clone())),
+                ));
+                typ
+            }
+            ast::Pattern::Rest(_) => {
+                todo!("Rest patterns are kinds hard as they mess up tuple types a bit")
+            }
+            ast::Pattern::Wildcard => self.fresh_type(),
+            ast::Pattern::Unit => Type::Unit,
+            ast::Pattern::String(_) => Type::String,
+            ast::Pattern::Int(_) => Type::Int,
+            ast::Pattern::Bool(_) => Type::Bool,
+        }
+    }
     fn fresh_type(&mut self) -> Type {
         let var = self.next_var;
         self.next_var += 1;

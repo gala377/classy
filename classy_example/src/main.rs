@@ -113,6 +113,13 @@ fn main() {
                     printi(f a)
                 }
 
+                type Either(a, b) {
+                    Left(a)
+                    Right(b)
+                }
+
+
+
                 apply_generic: (String, (String) -> ()) -> ()
                 apply_generic(x, f) = f x
 
@@ -152,7 +159,6 @@ fn main() {
                     get_int("123", header_data)
                     get_int("1234", header_data)
                     get_int("12345", header_data_2)
-
                     ref2.ref
                 }
 

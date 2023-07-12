@@ -10,4 +10,12 @@ pub enum Constraint {
         field: String,
         of_type: Type,
     },
+    /// t has to be an ADT with a case named `case` and of type `of_type`.
+    /// A tuple struct is expected as a tuple type.
+    /// A struct is expected as a struct type with dummy definition ID.
+    HasCase {
+        t: Type,
+        case: String,
+        of_type: Type,
+    },
 }
