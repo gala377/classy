@@ -8,3 +8,4 @@ loom = "0.5.6"
 sptr = "0.3.2"
 thiserror = "1.0.37"
 classy_c = { path = "../classy_c" }
+bitvec = "1.0.1"

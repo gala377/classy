@@ -8,6 +8,7 @@ pub mod header;
 pub mod integer;
 pub mod klass;
 pub mod string;
+pub mod tuple;
 
 use std::{fmt::Debug, mem::size_of, ops::Index};
 

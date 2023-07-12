@@ -45,6 +45,7 @@ pub struct RuntimeClasses {
     pub frame: NonNullPtr<Class>,
     pub code: NonNullPtr<Class>,
     pub gref: NonNullPtr<Class>,
+    pub tuple: NonNullPtr<Class>,
     // pub bool: NonNullPtr<class::Bool>,
 }
 
@@ -91,6 +92,14 @@ impl RuntimeClasses {
             &class::generic::GENERIC_REF_CLASS,
             &[],
         );
+        let tuple = setup_class(
+            heap,
+            klass,
+            string,
+            "Tuple",
+            &class::tuple::TUPLE_CLASS,
+            &[],
+        );
         RuntimeClasses {
             klass,
             string,
@@ -99,6 +108,7 @@ impl RuntimeClasses {
             frame,
             code,
             gref,
+            tuple,
         }
     }
 }

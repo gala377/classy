@@ -176,6 +176,7 @@ dependencies = [
 name = "classy_vm"
 version = "0.1.0"
 dependencies = [
+ "bitvec",
  "classy_c",
  "loom",
  "sptr",
