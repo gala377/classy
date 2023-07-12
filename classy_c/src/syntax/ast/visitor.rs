@@ -99,6 +99,34 @@ pub trait Visitor<'ast>: Sized {
         walk_index_access(self, lhs, index)
     }
 
+    fn visit_match(&mut self, expr: &'ast ast::Expr, cases: &'ast [(ast::Pattern, ast::Expr)]) {
+        walk_match(self, expr, cases)
+    }
+
+    fn visit_pattern(&mut self, pattern: &'ast ast::Pattern) {
+        walk_pattern(self, pattern)
+    }
+
+    fn visit_tuple_pattern(&mut self, fields: &'ast [ast::Pattern]) {
+        walk_tuple_pattern(self, fields)
+    }
+    fn visit_array_pattern(&mut self, fields: &'ast [ast::Pattern]) {
+        walk_array_pattern(self, fields)
+    }
+    fn visit_struct_pattern(&mut self, strct: &'ast str, fields: &'ast HashMap<String, ast::Pattern>) {
+        walk_struct_pattern(self, strct, fields)
+    }
+    fn visit_tuple_struct_pattern(&mut self, strct: &'ast str, fields: &'ast [ast::Pattern]) {
+        walk_tuple_struct_pattern(self, strct, fields)
+    }
+    fn visit_unit_pattern(&mut self) {}
+    fn visit_rest_pattern(&mut self, _name: &'ast str) {}
+    fn visit_wildcard_pattern(&mut self) {}
+    fn visit_name_pattern(&mut self, _name: &'ast str) {}
+    fn visit_int_pattern(&mut self, _val: isize) {}
+    fn visit_bool_pattern(&mut self, _val: bool) {}
+    fn visit_string_pattern(&mut self, _val: &'ast str) {}
+
     // leaf nodes
     fn visit_typ(&mut self, _node: &'ast ast::Typ) {}
     fn visit_name(&mut self, _node: &'ast str) {}
@@ -187,6 +215,7 @@ pub fn walk_expr_kind<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::ExprKi
         ast::ExprKind::AnonType { fields } => v.visit_anon_type(fields),
         ast::ExprKind::ArrayLiteral { typ, size, init } => v.visit_array(size, typ, init),
         ast::ExprKind::IndexAccess { lhs, index } => v.visit_index_access(lhs, index),
+        ast::ExprKind::Match { expr, cases } => v.visit_match(expr, cases),
     }
 }
 
@@ -332,4 +361,66 @@ pub fn walk_index_access<'ast, V: Visitor<'ast>>(
 ) {
     v.visit_expr(lhs);
     v.visit_expr(index);
+}
+
+pub fn walk_match<'ast, V: Visitor<'ast>>(
+    v: &mut V,
+    expr: &'ast ast::Expr,
+    cases: &'ast [(ast::Pattern, ast::Expr)],
+) {
+    v.visit_expr(expr);
+    for (pattern, expr) in cases {
+        v.visit_pattern(pattern);
+        v.visit_expr(expr);
+    }
+}
+
+pub fn walk_pattern<'ast, V: Visitor<'ast>>(v: &mut V, pattern: &'ast ast::Pattern) {
+    match pattern {
+        ast::Pattern::Name(n) => v.visit_name_pattern(n),
+        ast::Pattern::Tuple(fs) => v.visit_tuple_pattern(fs),
+        ast::Pattern::Struct { strct, fields } => v.visit_struct_pattern(strct, fields),
+        ast::Pattern::TupleStruct { strct, fields } => v.visit_tuple_struct_pattern(strct, fields),
+        ast::Pattern::Array(fs) => v.visit_array_pattern(fs),
+        ast::Pattern::Wildcard => v.visit_wildcard_pattern(),
+        ast::Pattern::Unit => v.visit_unit_pattern(),
+        ast::Pattern::String(s) => v.visit_string_pattern(s),
+        ast::Pattern::Int(i) => v.visit_int_pattern(*i),
+        ast::Pattern::Bool(b) => v.visit_bool_pattern(*b),
+        ast::Pattern::Rest(n) => v.visit_rest_pattern(n),
+    }
+}
+
+pub fn walk_tuple_pattern<'ast, V: Visitor<'ast>>(v: &mut V, fields: &'ast [ast::Pattern]) {
+    for field in fields {
+        v.visit_pattern(field);
+    }
+}
+
+pub fn walk_array_pattern<'ast, V: Visitor<'ast>>(v: &mut V, fields: &'ast [ast::Pattern]) {
+    for field in fields {
+        v.visit_pattern(field);
+    }
+}
+
+pub fn walk_struct_pattern<'ast, V: Visitor<'ast>>(
+    v: &mut V,
+    strct: &'ast str,
+    fields: &'ast HashMap<String, ast::Pattern>,
+) {
+    v.visit_name(strct);
+    for field in fields.values() {
+        v.visit_pattern(field);
+    }
+}
+
+pub fn walk_tuple_struct_pattern<'ast, V: Visitor<'ast>>(
+    v: &mut V,
+    strct: &'ast str,
+    fields: &'ast [ast::Pattern],
+) {
+    v.visit_name(strct);
+    for field in fields {
+        v.visit_pattern(field);
+    }
 }
