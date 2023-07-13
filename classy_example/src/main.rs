@@ -66,6 +66,8 @@ fn main() {
     match args.example {
         Example::Print => {
             let source = r#"
+                @runtime @empty
+                panic: forall a => (String) -> a
                 @runtime @empty 
                 print: (String) -> ()
                 @runtime @empty
@@ -99,6 +101,11 @@ fn main() {
 
                 printi x = print (itos x)
 
+                foo: (String, forall a => (a) -> ()) 
+                foo(x, f) {
+                    f x
+                }
+
                 print_either: (Either(Option(Integer), String)) -> ()
                 print_either a {
                     match (a) {
@@ -106,6 +113,7 @@ fn main() {
                         Right(x) => print x
                     }
                 }
+
 
             "#;
             let functions = compile(&mut vm, source);
