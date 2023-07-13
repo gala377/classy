@@ -179,6 +179,13 @@ fn replace_aliases_with_map(typ: &Type, map: &HashMap<TypeId, TypeId>) -> Type {
                 .collect(),
         },
         Type::Array(inner) => Type::Array(Box::new(replace_aliases_with_map(inner, map))),
+        Type::ADT { def, constructors } => Type::ADT { 
+            def: *def, 
+            constructors: constructors
+                .iter()
+                .map(|(n, t)| (n.clone(), replace_aliases_with_map(t, map)))
+                .collect(),
+        },
         _ => unimplemented!(),
     }
 }

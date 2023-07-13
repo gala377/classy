@@ -83,85 +83,29 @@ fn main() {
                 @runtime @empty
                 class_name: forall a => (a) -> String
 
-                type Integer { val: Int }
-                type Ref(a) { ref: a }
-
-
-                header_data_2 x = header_data x
-
-                make_ref a = Ref(ref=a)
-
-                id x = x
-
-                type Void = () -> ()
-
-                type IntRef = Ref(Integer)
-
-                make_int_ref: () -> IntRef
-                make_int_ref = make_ref (Integer(val=0))
-
-                type List(a) {
-                    val: a
-                    next: List(a)
-                }
-
-                get_int: (String, (String) -> Int) -> () 
-                get_int(a,f) {
-                    print("In get_int")
-                    print(a)
-                    print(class_name a)
-                    printi(f a)
+                type Option(a) {
+                    Some(a)
+                    None
                 }
 
                 type Either(a, b) {
                     Left(a)
                     Right(b)
                 }
-
-
-
-                apply_generic: (String, (String) -> ()) -> ()
-                apply_generic(x, f) = f x
-
-                run_generic: (String, (String) -> String) -> String
-                run_generic(s, f) = f s
+                
+                type Integer {
+                    val: Int
+                }
 
                 printi x = print (itos x)
 
-                type Side(a) = () -> a
-
-                generic_class_name: forall a => (a) -> ()
-                generic_class_name x = print (class_name x)
-
-
-                main: Side(Integer)
-                main a {
-                    let ref = make_ref "hello"
-                    let ref2 = make_int_ref()
-                    print(ref.ref)
-                    print(itos(ref2.ref.val))
-                    printi(header_data "Hello")
-                    printi(header_data "aaaaaaaaaaaaaaa17")
-                    printi(header_data ref2)
-                    print("before")
-                    "This is some really weird bug, like, it returns 0"
-                    "And I have no idea why"
-                    get_int("123", header_data)
-                    get_int("1234", header_data)
-                    get_int("12345", header_data)
-                    printi(header_data "123")
-                    print("after")
-                    print(run_generic("123", id))
-                    print(class_name(Integer(val=1)))
-                    print(class_name(make_int_ref()))
-                    print(class_name("123"))
-                    apply_generic("123", generic_class_name)
-                    get_int("123", header_data)
-                    get_int("1234", header_data)
-                    get_int("12345", header_data_2)
-                    ref2.ref
+                print_either: (Either(Option(Integer), String)) -> ()
+                print_either a {
+                    match (a) {
+                        Left(Some(Integer { val: x })) => printi x
+                        Right(x) => print x
+                    }
                 }
-
 
             "#;
             let functions = compile(&mut vm, source);

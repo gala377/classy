@@ -134,8 +134,53 @@ pub fn resolve_top_level_type(
                 }
             }
         }
-        // TODO: only adt left
-        _ => unimplemented!(),
+        ast::DefinedType::ADT(ast::ADT { discriminants }) => {
+            let mut resolved_discriminants = Vec::with_capacity(discriminants.len());
+            for ast::Discriminant {
+                constructor,
+                arguments,
+            } in discriminants
+            {
+                match arguments {
+                    ast::DiscriminantKind::Tuple(types) => {
+                        let resolved = types
+                            .iter()
+                            .map(|t| resolver.resolve_type(&mut scope, t))
+                            .collect();
+                        resolved_discriminants.push((constructor.clone(), Type::Tuple(resolved)));
+                    }
+                    ast::DiscriminantKind::Record(fields) => {
+                        let mut resolved_fields = Vec::with_capacity(fields.len());
+                        for (name, typ) in fields {
+                            let resolved = resolver.resolve_type(&mut scope, typ);
+                            resolved_fields.push((name.clone(), resolved));
+                        }
+                        resolved_discriminants.push((
+                            constructor.clone(),
+                            Type::Struct {
+                                def: *def_id,
+                                fields: resolved_fields,
+                            },
+                        ));
+                    }
+                    ast::DiscriminantKind::Empty => {
+                        resolved_discriminants.push((constructor.clone(), Type::Unit));
+                    }
+                }
+            }
+            let t = Type::ADT {
+                def: *def_id,
+                constructors: resolved_discriminants,
+            };
+            if scope.is_empty() {
+                t
+            } else {
+                Type::Scheme {
+                    prefex,
+                    typ: Box::new(t),
+                }
+            }
+        }
     };
     if let Some(t) = updates.insert(type_id, resolved_type) {
         panic!(

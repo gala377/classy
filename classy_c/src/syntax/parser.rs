@@ -127,18 +127,33 @@ impl<'source> Parser<'source> {
     fn parse_variants_definition(&mut self) -> ParseRes<ast::DefinedType> {
         fn parse_discriminant(parser: &mut Parser) -> ParseRes<ast::Discriminant> {
             let constructor = parser.parse_identifier()?;
-            let mut arguments = Vec::new();
             // possibly a record definition
             if parser.match_token(TokenType::Colon).is_ok() {
                 return wrong_rule();
             }
             if parser.match_token(TokenType::LParen).is_ok() {
-                arguments = parser.parse_delimited(Parser::parse_type, TokenType::Comma);
+                let arguments = parser.parse_delimited(Parser::parse_type, TokenType::Comma);
                 let _ = parser.expect_token(TokenType::RParen)?;
+                return Ok(ast::Discriminant {
+                    constructor,
+                    arguments: ast::DiscriminantKind::Tuple(arguments),
+                });
+            }
+            if parser.match_token(TokenType::LBrace).is_ok() {
+                let fields = parser.parse_delimited(Parser::parse_typed_identifier, TokenType::Comma);
+                let _ = parser.expect_token(TokenType::RBrace)?;
+                let fields = fields
+                    .into_iter()
+                    .map(|field| (field.name, field.typ))
+                    .collect();
+                return Ok(ast::Discriminant {
+                    constructor,
+                    arguments: ast::DiscriminantKind::Record(fields),
+                });
             }
             Ok(ast::Discriminant {
                 constructor,
-                arguments,
+                arguments: ast::DiscriminantKind::Empty,
             })
         }
         let discriminants = self.parse_delimited(parse_discriminant, TokenType::Semicolon);
@@ -924,7 +939,9 @@ impl<'source> Parser<'source> {
 
     fn parse_match(&mut self) -> ParseRes<ast::Expr> {
         self.match_token(TokenType::Match)?;
+        let _ = self.match_token(TokenType::LParen);
         let expr = self.parse_expr()?;
+        let _ = self.match_token(TokenType::RParen);
         let _ = self.expect_token(TokenType::LBrace);
         let mut cases = Vec::new();
         while self.lexer.current().typ != TokenType::RBrace {
@@ -1004,7 +1021,7 @@ impl<'source> Parser<'source> {
                 let name = self.parse_identifier()?;
                 Ok(ast::Pattern::Rest(name))
             }
-            _ => panic!("Invalid pattern"),
+            t => panic!("Invalid pattern {:?}", t),
         }
     }
 

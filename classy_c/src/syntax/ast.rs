@@ -58,7 +58,16 @@ pub struct ADT {
 #[cfg_attr(test, derive(PartialEq))]
 pub struct Discriminant {
     pub constructor: String,
-    pub arguments: Vec<Typ>,
+    pub arguments: DiscriminantKind,
+}
+
+
+#[derive(Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq))]
+pub enum DiscriminantKind {
+    Empty,
+    Tuple(Vec<Typ>),
+    Record(Vec<(String, Typ)>),
 }
 
 #[derive(Debug, Clone)]
@@ -404,10 +413,10 @@ impl AdtDefBuilder {
     pub fn discriminant(mut self, name: impl Into<String>, arguments: &[impl AsRef<str>]) -> Self {
         self.discriminants.push(Discriminant {
             constructor: name.into(),
-            arguments: arguments
+            arguments: DiscriminantKind::Tuple(arguments
                 .iter()
                 .map(|typ| Typ::Name(typ.as_ref().into()))
-                .collect(),
+                .collect()),
         });
         self
     }

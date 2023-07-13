@@ -1,3 +1,4 @@
+use core::panic;
 use std::collections::{HashMap, VecDeque};
 
 use crate::typecheck::{
@@ -39,18 +40,18 @@ impl<'ctx> ConstraintSolver<'ctx> {
         constraints.reverse();
         let mut constraints: VecDeque<_> = constraints.into();
         while let Some(con) = constraints.pop_back() {
-            // println!("\n\nSOLVING CONSTRAINTS\n");
-            // println!(">> {con:#?}");
-            // for con in constraints.iter() {
-            //     println!("-> {con:#?}");
-            // }
+            println!("\n\nSOLVING CONSTRAINTS\n");
+            println!(">> {con:#?}");
+            for con in constraints.iter() {
+                println!("-> {con:#?}");
+            }
 
             self.solve_constraint(con, &mut constraints);
         }
     }
 
     fn solve_constraint(&mut self, cons: Constraint, constraints: &mut VecDeque<Constraint>) {
-        match cons {
+        match cons.clone() {
             Constraint::Eq(Type::Bool, Type::Bool)
             | Constraint::Eq(Type::Int, Type::Int)
             | Constraint::Eq(Type::UInt, Type::UInt)
@@ -165,7 +166,7 @@ impl<'ctx> ConstraintSolver<'ctx> {
                         .expect("this field does not exists, constraint not met");
                     constraints.push_back(Constraint::Eq(f.1.clone(), of_type));
                 }
-                _ => panic!("cannot infer struct type"),
+                t => panic!("cannot infer struct type, {t:?}"),
             },
             Constraint::HasCase { t, case, of_type } => match t.clone() {
                 Type::Struct { def, .. } => {
@@ -200,7 +201,14 @@ impl<'ctx> ConstraintSolver<'ctx> {
                         of_type,
                     });
                 }
-                _ => panic!("cannot infer ADT type"),
+                t => {
+                    println!("\n\nERRRRRORRRRRRR\n\n");
+                    println!("cannot infer ADT type {t:?} full constraint {cons:?}");
+                    for c in constraints.iter().rev() {
+                        println!("-> {c:?}");
+                    }
+                    panic!()
+                }
             }
             Constraint::Eq(Type::Generic(_, _), t) if t.is_ref().unwrap() => {}
             Constraint::Eq(t, Type::Generic(_, _)) if t.is_ref().unwrap() => {}

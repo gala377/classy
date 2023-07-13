@@ -212,6 +212,9 @@ pub trait TypeFolder: Sized {
     fn fold_application(&mut self, typ: Type, args: Vec<Type>) -> Type {
         fold_application(self, typ, args)
     }
+    fn fold_adt(&mut self, def: usize, constructors: Vec<(String, Type)>) -> Type {
+        fold_adt(self, def, constructors)
+    }
 }
 
 pub fn fold_scheme(folder: &mut impl TypeFolder, prefex: Vec<Name>, typ: Type) -> Type {
@@ -231,10 +234,7 @@ pub fn fold_type(folder: &mut impl TypeFolder, typ: Type) -> Type {
         Type::Unit => folder.fold_unit(),
         Type::Byte => folder.fold_byte(),
         Type::Struct { def, fields } => folder.fold_struct(def, fields),
-        Type::ADT {
-            def: _,
-            constructors: _,
-        } => todo!(),
+        Type::ADT { def, constructors } => folder.fold_adt(def, constructors),
         Type::Function { args, ret } => folder.fold_function(args, *ret),
         Type::Tuple(types) => folder.fold_tuple(types),
         Type::Array(inner) => folder.fold_array(*inner),
@@ -364,4 +364,12 @@ pub fn types_eq(ctx: &TypCtx, t1: &Type, t2: &Type) -> bool {
         }
         _ => false,
     }
+}
+
+fn fold_adt(folder: &mut impl TypeFolder, def: usize, constructors: Vec<(String, Type)>) -> Type {
+    let constructors = constructors
+        .into_iter()
+        .map(|(name, t)| (name, folder.fold_type(t)))
+        .collect();
+    Type::ADT { def, constructors }
 }

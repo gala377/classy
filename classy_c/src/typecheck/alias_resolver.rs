@@ -212,6 +212,16 @@ impl AliasResolver {
                     .collect(),
             },
             Type::Array(t) => Type::Array(Box::new(Self::resolve_shallow_aliases_in_type(ctx, t))),
+            Type::ADT { def, constructors } => {
+                let resolved_constructors = constructors
+                    .iter()
+                    .map(|(name, t)| (name.clone(), Self::resolve_shallow_aliases_in_type(ctx, t)))
+                    .collect();
+                Type::ADT {
+                    def: *def,
+                    constructors: resolved_constructors,
+                }
+            }
             t @ (Type::UInt
             | Type::Int
             | Type::Bool
