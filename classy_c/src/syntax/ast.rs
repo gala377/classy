@@ -61,7 +61,6 @@ pub struct Discriminant {
     pub arguments: DiscriminantKind,
 }
 
-
 #[derive(Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum DiscriminantKind {
@@ -215,10 +214,10 @@ pub enum Pattern {
     Int(isize),
     Bool(bool),
     /// accumulate rest of values in an array
-    /// *name 
+    /// *name
     Rest(String),
 
-    /// Patterns in form Type.Case pattern 
+    /// Patterns in form Type.Case pattern
     /// used when one wants to explicitly specify the type
     /// to look for cases in
     TypeSpecifier(String, Box<Pattern>),
@@ -418,10 +417,12 @@ impl AdtDefBuilder {
     pub fn discriminant(mut self, name: impl Into<String>, arguments: &[impl AsRef<str>]) -> Self {
         self.discriminants.push(Discriminant {
             constructor: name.into(),
-            arguments: DiscriminantKind::Tuple(arguments
-                .iter()
-                .map(|typ| Typ::Name(typ.as_ref().into()))
-                .collect()),
+            arguments: DiscriminantKind::Tuple(
+                arguments
+                    .iter()
+                    .map(|typ| Typ::Name(typ.as_ref().into()))
+                    .collect(),
+            ),
         });
         self
     }

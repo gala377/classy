@@ -570,11 +570,15 @@ impl Inference {
                     })
                 } else {
                     self.scope.borrow_mut().add_variable(n, typ.clone());
-                }   
+                }
                 typ
             }
             ast::Pattern::TypeSpecifier(tname, case) => {
-                let typ = self.scope.borrow().lookup_type(tname).expect("unknown type");
+                let typ = self
+                    .scope
+                    .borrow()
+                    .lookup_type(tname)
+                    .expect("unknown type");
                 let case_t = self.infer_in_pattern(case, prefex_scope);
                 self.constraints.push(Constraint::Eq(case_t, typ.clone()));
                 typ

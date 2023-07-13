@@ -113,7 +113,11 @@ pub trait Visitor<'ast>: Sized {
     fn visit_array_pattern(&mut self, fields: &'ast [ast::Pattern]) {
         walk_array_pattern(self, fields)
     }
-    fn visit_struct_pattern(&mut self, strct: &'ast str, fields: &'ast HashMap<String, ast::Pattern>) {
+    fn visit_struct_pattern(
+        &mut self,
+        strct: &'ast str,
+        fields: &'ast HashMap<String, ast::Pattern>,
+    ) {
         walk_struct_pattern(self, strct, fields)
     }
     fn visit_tuple_struct_pattern(&mut self, strct: &'ast str, fields: &'ast [ast::Pattern]) {

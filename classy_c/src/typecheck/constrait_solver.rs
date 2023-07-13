@@ -271,7 +271,10 @@ impl<'ctx> ConstraintSolver<'ctx> {
                 case,
                 of_type: Type::Struct { fields, .. },
             } => {
-                let t = self.tctx.get_type(&case).expect(&format!("Could not find type {case}"));
+                let t = self
+                    .tctx
+                    .get_type(&case)
+                    .expect(&format!("Could not find type {case}"));
                 for (fname, ftyp) in fields {
                     constraints.push_back(Constraint::HasField {
                         t: Type::Fresh(id),

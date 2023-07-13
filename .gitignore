@@ -1,3 +1,4 @@
 /target
 /coverage
 .DS_Store
+/private
