@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     mem::size_of,
+    path::Path,
 };
 
 use clap::{Parser, ValueEnum};
@@ -24,6 +25,7 @@ const PAGE_ALIGN: usize = 1 << 12;
 enum Example {
     Allocation,
     Print,
+    RunFile,
 }
 
 #[derive(Parser, Debug, Clone)]
@@ -52,6 +54,9 @@ struct Args {
 
     #[arg(long, default_value_t = false)]
     debug: bool,
+
+    #[arg(long)]
+    file: Option<String>,
 }
 
 fn main() {
@@ -108,6 +113,13 @@ fn main() {
 
             "#;
             let functions = compile(&mut vm, source);
+            let mut thread = vm.create_evaluation_thread(functions["main"]);
+            thread.interpert();
+        }
+        Example::RunFile => {
+            let file = args.file.expect("file path has to be provided");
+            let source = std::fs::read_to_string(Path::new(&file)).unwrap();
+            let functions = compile(&mut vm, &source);
             let mut thread = vm.create_evaluation_thread(functions["main"]);
             thread.interpert();
         }
