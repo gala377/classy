@@ -1016,7 +1016,9 @@ impl<'source> Parser<'source> {
                     let case = self.parse_pattern()?;
                     if !matches!(
                         case,
-                        ast::Pattern::TupleStruct { .. } | ast::Pattern::Struct { .. }
+                        ast::Pattern::TupleStruct { .. }
+                            | ast::Pattern::Struct { .. }
+                            | ast::Pattern::Name(_)
                     ) {
                         return Err(self.error(beg..self.curr_pos(), "Expected a struct pattern"));
                     }

@@ -161,6 +161,16 @@ pub enum ExprKind {
         strct: Path,
         values: HashMap<String, Expr>,
     },
+    AdtTupleConstructor {
+        typ: String,
+        constructor: String,
+        args: Vec<Expr>,
+    },
+    AdtStructConstructor {
+        typ: String,
+        constructor: String,
+        fields: Vec<(String, Expr)>,
+    },
     While {
         cond: Box<Expr>,
         body: Box<Expr>,

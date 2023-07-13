@@ -555,6 +555,48 @@ impl Inference {
                 }
                 ret
             }
+            ast::ExprKind::AdtTupleConstructor {
+                typ,
+                constructor,
+                args,
+            } => {
+                let ret = self.fresh_type();
+                self.env.insert(id, ret.clone());
+                let t = self.scope.borrow().lookup_type(&typ).unwrap();
+                self.constraints.push(Constraint::Eq(ret.clone(), t));
+                let args_t = args
+                    .iter()
+                    .map(|arg| self.infer_in_expr(arg, prefex_scope))
+                    .collect::<Vec<_>>();
+                self.constraints.push(Constraint::HasCase {
+                    t: ret.clone(),
+                    case: constructor.clone(),
+                    of_type: Type::Tuple(args_t),
+                });
+                ret
+            }
+            ast::ExprKind::AdtStructConstructor { typ, constructor, fields } => {
+                let ret = self.fresh_type();
+                self.env.insert(id, ret.clone());
+                let t = self.scope.borrow().lookup_type(&typ).unwrap();
+                self.constraints.push(Constraint::Eq(ret.clone(), t));
+                let fields_t = fields
+                    .iter()
+                    .map(|(name, expr)| {
+                        let expr_t = self.infer_in_expr(expr, prefex_scope);
+                        (name.clone(), expr_t)
+                    })
+                    .collect::<Vec<_>>();
+                self.constraints.push(Constraint::HasCase {
+                    t: ret.clone(),
+                    case: constructor.clone(),
+                    of_type: Type::Struct {
+                        def: 0,
+                        fields: fields_t.into_iter().collect(),
+                    },
+                });
+                ret
+            }
         }
     }
 

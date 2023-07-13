@@ -201,6 +201,14 @@ pub trait Folder: Sized {
     fn fold_type_specified_pattern(&mut self, name: String, typ: Pattern) -> Pattern {
         fold_type_specified_pattern(self, name, typ)
     }
+
+    fn fold_adt_struct_constructor(&mut self, name: String, case: String, fields: Vec<(String, Expr)>) -> ExprKind {
+        fold_adt_struct_constructor(self, name, case, fields)
+    }
+
+    fn fold_adt_tuple_constructor(&mut self, name: String, case: String, fields: Vec<Expr>) -> ExprKind {
+        fold_adt_tuple_constructor(self, name, case, fields)
+    }
 }
 
 pub fn fold_program<F: Folder>(folder: &mut F, program: Program) -> Program {
@@ -284,6 +292,8 @@ pub fn fold_expr_kind(folder: &mut impl Folder, expr: ExprKind) -> ExprKind {
         ExprKind::ArrayLiteral { typ, size, init } => folder.fold_array(*size, typ, init),
         ExprKind::IndexAccess { lhs, index } => folder.fold_index_access(*lhs, *index),
         ExprKind::Match { expr, cases } => folder.fold_match(*expr, cases),
+        ExprKind::AdtStructConstructor { typ, constructor, fields } => folder.fold_adt_struct_constructor(typ, constructor, fields),
+        ExprKind::AdtTupleConstructor { typ, constructor, args } => folder.fold_adt_tuple_constructor(typ, constructor, args),
     }
 }
 
@@ -507,4 +517,38 @@ pub fn fold_type_specified_pattern(
     pattern: Pattern,
 ) -> Pattern {
     Pattern::TypeSpecifier(name, Box::new(folder.fold_pattern(pattern)))
+}
+
+pub fn fold_adt_struct_constructor(
+    folder: &mut impl Folder,
+    name: String,
+    case: String,
+    fields: Vec<(String, Expr)>,
+) -> ExprKind {
+    let mut new_fields = Vec::new();
+    for (name, val) in fields {
+        new_fields.push((name, folder.fold_expr(val)));
+    }
+    ExprKind::AdtStructConstructor {
+        typ: name,
+        constructor: case,
+        fields: new_fields,
+    }
+}
+
+pub fn fold_adt_tuple_constructor(
+    folder: &mut impl Folder,
+    name: String,
+    case: String,
+    fields: Vec<Expr>,
+) -> ExprKind {
+    let mut new_fields = Vec::new();
+    for val in fields {
+        new_fields.push(folder.fold_expr(val));
+    }
+    ExprKind::AdtTupleConstructor {
+        typ: name,
+        constructor: case,
+        args: new_fields,
+    }
 }

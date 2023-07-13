@@ -207,9 +207,30 @@ impl<'ctx> ConstraintSolver<'ctx> {
                     .iter()
                     .find(|(c, _)| c == &case)
                     .expect(&format!("{case} case does not exists, constraint not met"));
-                // TODO: the of_type is a dummy type so the struct does
-                // not have an existing id
-                constraints.push_back(Constraint::Eq(c.1.clone(), of_type));
+                match (c.1.clone(), of_type) {
+                    (Type::Struct { fields: fs_1, .. }, Type::Struct { fields: fs_2, .. }) => {
+                        for (n1, t1) in fs_1 {
+                            let t2 = fs_2
+                                .iter()
+                                .find(|(n2, _)| &n1 == n2)
+                                .expect(&format!(
+                                    "Field {n1} does not exists in {case} case",
+                                    n1 = n1,
+                                    case = case
+                                ))
+                                .1
+                                .clone();
+                            constraints.push_back(Constraint::Eq(t1.clone(), t2.clone()));
+                        }
+                    }
+                    (Type::Tuple(ts_1), Type::Tuple(ts_2)) => {
+                        for (t1, t2) in ts_1.iter().zip(ts_2.iter()) {
+                            constraints.push_back(Constraint::Eq(t1.clone(), t2.clone()));
+                        }
+                    }
+                    (Type::Unit, Type::Unit) => {}
+                    (t1, t2) => panic!("Constructor type did not match {t1:?} != {t2:?}"),
+                }
             }
 
             Constraint::HasCase {

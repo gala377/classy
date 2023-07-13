@@ -87,6 +87,24 @@ pub trait Visitor<'ast>: Sized {
         walk_struct_literal(self, strct, values);
     }
 
+    fn visit_adt_struct_constructor(
+        &mut self,
+        typ: &'ast str,
+        case: &'ast str,
+        values: &'ast [(String, ast::Expr)],
+    ) {
+        walk_adt_struct_constructor(self, typ, case, values);
+    }
+
+    fn visit_adt_tuple_constructor(
+        &mut self,
+        typ: &'ast str,
+        case: &'ast str,
+        values: &'ast [ast::Expr],
+    ) {
+        walk_adt_tuple_constructor(self, typ, case, values);
+    }
+
     fn visit_anon_type(&mut self, fields: &'ast [(String, ast::Expr)]) {
         walk_anon_type(self, fields);
     }
@@ -225,6 +243,16 @@ pub fn walk_expr_kind<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::ExprKi
         ast::ExprKind::ArrayLiteral { typ, size, init } => v.visit_array(size, typ, init),
         ast::ExprKind::IndexAccess { lhs, index } => v.visit_index_access(lhs, index),
         ast::ExprKind::Match { expr, cases } => v.visit_match(expr, cases),
+        ast::ExprKind::AdtStructConstructor {
+            typ,
+            constructor,
+            fields,
+        } => v.visit_adt_struct_constructor(typ, constructor, fields),
+        ast::ExprKind::AdtTupleConstructor {
+            typ,
+            constructor,
+            args,
+        } => v.visit_adt_tuple_constructor(typ, constructor, args),
     }
 }
 
@@ -442,4 +470,31 @@ pub fn walk_type_specific_pattern<'ast, V: Visitor<'ast>>(
 ) {
     v.visit_name(name);
     v.visit_pattern(pattern);
+}
+
+pub fn walk_adt_struct_constructor<'ast, V: Visitor<'ast>>(
+    v: &mut V,
+    typ: &'ast str,
+    case: &'ast str,
+    values: &'ast [(String, ast::Expr)],
+) {
+    v.visit_name(typ);
+    v.visit_name(case);
+    for (name, expr) in values {
+        v.visit_name(name);
+        v.visit_expr(expr);
+    }
+}
+
+pub fn walk_adt_tuple_constructor<'ast, V: Visitor<'ast>>(
+    v: &mut V,
+    typ: &'ast str,
+    case: &'ast str,
+    values: &'ast [ast::Expr],
+) {
+    v.visit_name(typ);
+    v.visit_name(case);
+    for expr in values {
+        v.visit_expr(expr);
+    }
 }
