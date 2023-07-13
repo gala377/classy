@@ -140,7 +140,8 @@ impl<'source> Parser<'source> {
                 });
             }
             if parser.match_token(TokenType::LBrace).is_ok() {
-                let fields = parser.parse_delimited(Parser::parse_typed_identifier, TokenType::Comma);
+                let fields =
+                    parser.parse_delimited(Parser::parse_typed_identifier, TokenType::Comma);
                 let _ = parser.expect_token(TokenType::RBrace)?;
                 let fields = fields
                     .into_iter()
@@ -959,6 +960,7 @@ impl<'source> Parser<'source> {
     }
 
     fn parse_pattern(&mut self) -> ParseRes<ast::Pattern> {
+        let beg = self.curr_pos();
         let tok = self.lexer.current().typ.clone();
         match tok {
             TokenType::Integer(val) => {
@@ -991,7 +993,6 @@ impl<'source> Parser<'source> {
                 let inner = self.parse_delimited(Self::parse_pattern, TokenType::Comma);
                 let _ = self.expect_token(TokenType::RBracket);
                 Ok(ast::Pattern::Tuple(inner))
-
             }
             TokenType::Identifier(name) => {
                 self.lexer.advance();
@@ -1011,13 +1012,23 @@ impl<'source> Parser<'source> {
                         fields: fields.into_iter().collect(),
                     });
                 }
+                if let Ok(_) = self.match_token(TokenType::Dot) {
+                    let case = self.parse_pattern()?;
+                    if !matches!(
+                        case,
+                        ast::Pattern::TupleStruct { .. } | ast::Pattern::Struct { .. }
+                    ) {
+                        return Err(self.error(beg..self.curr_pos(), "Expected a struct pattern"));
+                    }
+                    return Ok(ast::Pattern::TypeSpecifier(name, Box::new(case)));
+                }
                 if name == "_" {
                     return Ok(ast::Pattern::Wildcard);
                 }
                 Ok(ast::Pattern::Name(name))
             }
             TokenType::Star => {
-                self.lexer.advance(); 
+                self.lexer.advance();
                 let name = self.parse_identifier()?;
                 Ok(ast::Pattern::Rest(name))
             }

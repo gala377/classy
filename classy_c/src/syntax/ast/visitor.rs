@@ -119,6 +119,11 @@ pub trait Visitor<'ast>: Sized {
     fn visit_tuple_struct_pattern(&mut self, strct: &'ast str, fields: &'ast [ast::Pattern]) {
         walk_tuple_struct_pattern(self, strct, fields)
     }
+
+    fn visit_type_specific_pattern(&mut self, name: &'ast str, pattern: &'ast ast::Pattern) {
+        walk_type_specific_pattern(self, name, pattern)
+    }
+
     fn visit_unit_pattern(&mut self) {}
     fn visit_rest_pattern(&mut self, _name: &'ast str) {}
     fn visit_wildcard_pattern(&mut self) {}
@@ -388,6 +393,7 @@ pub fn walk_pattern<'ast, V: Visitor<'ast>>(v: &mut V, pattern: &'ast ast::Patte
         ast::Pattern::Int(i) => v.visit_int_pattern(*i),
         ast::Pattern::Bool(b) => v.visit_bool_pattern(*b),
         ast::Pattern::Rest(n) => v.visit_rest_pattern(n),
+        ast::Pattern::TypeSpecifier(name, pattern) => v.visit_type_specific_pattern(name, pattern),
     }
 }
 
@@ -423,4 +429,13 @@ pub fn walk_tuple_struct_pattern<'ast, V: Visitor<'ast>>(
     for field in fields {
         v.visit_pattern(field);
     }
+}
+
+pub fn walk_type_specific_pattern<'ast, V: Visitor<'ast>>(
+    v: &mut V,
+    name: &'ast str,
+    pattern: &'ast ast::Pattern,
+) {
+    v.visit_name(name);
+    v.visit_pattern(pattern);
 }

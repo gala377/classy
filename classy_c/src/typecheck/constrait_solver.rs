@@ -74,6 +74,9 @@ impl<'ctx> ConstraintSolver<'ctx> {
             Constraint::Eq(Type::Fresh(id1), Type::Fresh(id2)) if id1 == id2 => {}
             Constraint::Eq(Type::Struct { def: def_1, .. }, Type::Struct { def: def_2, .. })
                 if def_1 == def_2 => {}
+
+            Constraint::Eq(Type::ADT { def: def_1, .. }, Type::ADT { def: def_2, .. })
+                if def_1 == def_2 => {}
             Constraint::Eq(Type::Tuple(t_1), Type::Tuple(t_2)) => {
                 for (t1, t2) in t_1.iter().zip(t_2.iter()) {
                     constraints.push_back(Constraint::Eq(t1.clone(), t2.clone()));
@@ -122,93 +125,169 @@ impl<'ctx> ConstraintSolver<'ctx> {
                     constraints.push_back(Constraint::Eq(a1.clone(), a2.clone()));
                 }
             }
-            Constraint::Eq(f @ Type::Function { .. }, s @ Type::Scheme { .. }) => {
+            Constraint::Eq(
+                f @ (Type::Function { .. } | Type::ADT { .. } | Type::Struct { .. }),
+                s @ Type::Scheme { .. },
+            ) => {
                 constraints.push_back(Constraint::Eq(s, f));
             }
-            Constraint::Eq(Type::Scheme { prefex, typ }, func_1 @ Type::Function { .. }) => {
-                match *typ {
-                    func_2 @ Type::Function { .. } => {
-                        let args = prefex.iter().map(|_| self.fresh_type()).collect();
-                        constraints.push_back(Constraint::Eq(
-                            func_1,
-                            Type::App {
-                                typ: Box::new(Type::Scheme {
-                                    prefex,
-                                    typ: Box::new(func_2),
-                                }),
-                                args,
-                            },
-                        ));
-                    }
-                    _ => panic!("Cannot unify scheme that is not a function with a function"),
-                }
+            Constraint::Eq(
+                Type::Scheme { prefex, typ },
+                func_1 @ (Type::Function { .. } | Type::ADT { .. } | Type::Struct { .. }),
+            ) => {
+                let args = prefex.iter().map(|_| self.fresh_type()).collect();
+                constraints.push_back(Constraint::Eq(
+                    func_1,
+                    Type::App {
+                        typ: Box::new(Type::Scheme { prefex, typ }),
+                        args,
+                    },
+                ));
             }
+
             Constraint::Eq(Type::Array(t_1), Type::Array(t_2)) => {
                 constraints.push_back(Constraint::Eq(*t_1, *t_2));
             }
             Constraint::Eq(Type::Generic(d1, i1), Type::Generic(d2, i2))
                 if d1 == d2 && i1 == i2 => {}
-            Constraint::HasField { t, field, of_type } => match t {
-                Type::Struct { fields, .. } => {
-                    let f = fields
-                        .iter()
-                        .find(|(f, _)| f == &field)
-                        .expect("this field does not exists, constraint not met");
-                    constraints.push_back(Constraint::Eq(f.1.clone(), of_type));
-                }
-                Type::Alias(id) => {
-                    let Type::Struct { fields, .. } = self.tctx.resolve_alias(id) else {
-                        panic!("Expected a struct type got {t:?}");
+            Constraint::HasField {
+                t: Type::Struct { fields, .. },
+                field,
+                of_type,
+            } => {
+                let f = fields
+                    .iter()
+                    .find(|(f, _)| f == &field)
+                    .expect("this field does not exists, constraint not met");
+                constraints.push_back(Constraint::Eq(f.1.clone(), of_type));
+            }
+            Constraint::HasField {
+                t: Type::Alias(id),
+                field,
+                of_type,
+            } => {
+                let Type::Struct { fields, .. } = self.tctx.resolve_alias(id) else {
+                        panic!("Expected a struct type got");
                     };
-                    let f = fields
-                        .iter()
-                        .find(|(f, _)| f == &field)
-                        .expect("this field does not exists, constraint not met");
-                    constraints.push_back(Constraint::Eq(f.1.clone(), of_type));
+                let f = fields
+                    .iter()
+                    .find(|(f, _)| f == &field)
+                    .expect("this field does not exists, constraint not met");
+                constraints.push_back(Constraint::Eq(f.1.clone(), of_type));
+            }
+            Constraint::HasCase {
+                t: Type::Struct { def, fields },
+                case,
+                of_type,
+            } => {
+                let name = self.tctx.name_by_def_id(def);
+                if case != name {
+                    panic!("Cannot unify case {case} with {name}");
                 }
-                t => panic!("cannot infer struct type, {t:?}"),
-            },
-            Constraint::HasCase { t, case, of_type } => match t.clone() {
-                Type::Struct { def, .. } => {
-                    let name = self.tctx.name_by_def_id(def);
-                    if case != name {
-                        panic!("Cannot unify case {case} with {name}");
-                    }
-                    let Type::Struct { fields: pat_f, .. } = of_type else {
+                let Type::Struct { fields: pat_f, .. } = of_type else {
                         panic!("Expected a struct type in pattern got {of_type:?}");
                     };
-                    for (fname, ftyp) in pat_f {
-                        constraints.push_back(Constraint::HasField {
-                            t: t.clone(),
-                            field: fname.clone(),
-                            of_type: ftyp.clone(),
-                        });
-                    }
-                }
-                Type::ADT { constructors, .. } => {
-                    let c = constructors
-                        .iter()
-                        .find(|(c, _)| c == &case)
-                        .expect("this case does not exists, constraint not met");
-                    // TODO: the of_type is a dummy type so the struct does
-                    // not have an existing id
-                    constraints.push_back(Constraint::Eq(c.1.clone(), of_type));
-                }
-                Type::Alias(id) => {
-                    constraints.push_back(Constraint::HasCase {
-                        t: self.tctx.resolve_alias(id),
-                        case,
-                        of_type,
+                for (fname, ftyp) in pat_f {
+                    constraints.push_back(Constraint::HasField {
+                        t: Type::Struct {
+                            def,
+                            fields: fields.clone(),
+                        },
+                        field: fname.clone(),
+                        of_type: ftyp.clone(),
                     });
                 }
-                t => {
-                    println!("\n\nERRRRRORRRRRRR\n\n");
-                    println!("cannot infer ADT type {t:?} full constraint {cons:?}");
-                    for c in constraints.iter().rev() {
-                        println!("-> {c:?}");
+            }
+            Constraint::HasCase {
+                t: Type::ADT { constructors, .. },
+                case,
+                of_type,
+            } => {
+                let c = constructors
+                    .iter()
+                    .find(|(c, _)| c == &case)
+                    .expect(&format!("{case} case does not exists, constraint not met"));
+                // TODO: the of_type is a dummy type so the struct does
+                // not have an existing id
+                constraints.push_back(Constraint::Eq(c.1.clone(), of_type));
+            }
+
+            Constraint::HasCase {
+                t: Type::Alias(id),
+                case,
+                of_type,
+            } => {
+                constraints.push_back(Constraint::HasCase {
+                    t: self.tctx.resolve_alias(id),
+                    case,
+                    of_type,
+                });
+            }
+
+            Constraint::HasCase {
+                t: Type::Scheme { prefex, typ },
+                case,
+                of_type,
+            } => {
+                constraints.push_back(Constraint::HasCase {
+                    t: Type::App {
+                        args: prefex.iter().map(|_| self.fresh_type()).collect(),
+                        typ: Box::new(Type::Scheme { prefex, typ }),
+                    },
+                    case,
+                    of_type,
+                });
+            }
+
+            Constraint::HasCase {
+                t: Type::App { typ, args },
+                case,
+                of_type,
+            } => {
+                for a in &args {
+                    if let Some(false) = a.is_ref() {
+                        panic!("Cannot apply generic for non ref type {a:?}");
                     }
-                    panic!()
                 }
+                let app_t = match typ.as_ref() {
+                    Type::Alias(id) => self.tctx.resolve_alias(*id),
+                    t => t.clone(),
+                };
+                let Type::Scheme { prefex, typ: scheme_t } = app_t else {
+                        panic!("Expected a scheme type got {app_t:?}");
+                    };
+                assert!(prefex.len() == args.len());
+                let instantiated = instance(self.tctx, args, *scheme_t);
+                constraints.push_back(Constraint::HasCase {
+                    t: instantiated,
+                    case,
+                    of_type,
+                });
+            }
+            // If not case could be found to this point then look
+            // through records
+            Constraint::HasCase {
+                t: Type::Fresh(id),
+                case,
+                of_type: Type::Struct { fields, .. },
+            } => {
+                let t = self.tctx.get_type(&case).expect(&format!("Could not find type {case}"));
+                for (fname, ftyp) in fields {
+                    constraints.push_back(Constraint::HasField {
+                        t: Type::Fresh(id),
+                        field: fname.clone(),
+                        of_type: ftyp.clone(),
+                    });
+                }
+                constraints.push_back(Constraint::Eq(Type::Fresh(id), t));
+            }
+            Constraint::HasCase { t, .. } => {
+                println!("\n\nERRRRRORRRRRRR\n\n");
+                println!("cannot infer ADT type {t:?} full constraint {cons:?}");
+                for c in constraints.iter().rev() {
+                    println!("-> {c:?}");
+                }
+                panic!()
             }
             Constraint::Eq(Type::Generic(_, _), t) if t.is_ref().unwrap() => {}
             Constraint::Eq(t, Type::Generic(_, _)) if t.is_ref().unwrap() => {}

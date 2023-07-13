@@ -197,6 +197,10 @@ pub trait Folder: Sized {
     fn fold_rest_pattern(&mut self, name: String) -> Pattern {
         Pattern::Rest(name)
     }
+
+    fn fold_type_specified_pattern(&mut self, name: String, typ: Pattern) -> Pattern {
+        fold_type_specified_pattern(self, name, typ)
+    }
 }
 
 pub fn fold_program<F: Folder>(folder: &mut F, program: Program) -> Program {
@@ -493,5 +497,14 @@ pub fn fold_pattern(folder: &mut impl Folder, pat: Pattern) -> Pattern {
         Pattern::Struct { strct, fields } => fold_struct_pattern(folder, strct, fields),
         Pattern::TupleStruct { strct, fields } => fold_tuple_struct_pattern(folder, strct, fields),
         Pattern::Rest(name) => folder.fold_rest_pattern(name),
+        Pattern::TypeSpecifier(name, pat) => folder.fold_type_specified_pattern(name, *pat),
     }
+}
+
+pub fn fold_type_specified_pattern(
+    folder: &mut impl Folder,
+    name: String,
+    pattern: Pattern,
+) -> Pattern {
+    Pattern::TypeSpecifier(name, Box::new(folder.fold_pattern(pattern)))
 }

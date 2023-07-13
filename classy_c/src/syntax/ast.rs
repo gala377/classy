@@ -217,6 +217,11 @@ pub enum Pattern {
     /// accumulate rest of values in an array
     /// *name 
     Rest(String),
+
+    /// Patterns in form Type.Case pattern 
+    /// used when one wants to explicitly specify the type
+    /// to look for cases in
+    TypeSpecifier(String, Box<Pattern>),
 }
 
 #[derive(Debug, Clone)]
