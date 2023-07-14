@@ -1,8 +1,6 @@
 use core::panic;
 use std::collections::{HashMap, VecDeque};
 
-use serde::__private::de;
-
 use crate::typecheck::{
     constraints::Constraint,
     r#type::{Type, TypeFolder},
@@ -88,29 +86,7 @@ impl<'ctx> ConstraintSolver<'ctx> {
                 constraints.push_back(Constraint::Eq(t, app));
             }
             Constraint::Eq(t, Type::App { typ: app_t, args }) => {
-                constraints.push_back(Constraint::Eq(
-                    t,
-                    instance(self.tctx, args, *app_t),
-                ));
-                // for a in &args {
-                //     if let Some(false) = a.is_ref() {
-                //         panic!("Cannot apply generic for non ref type {a:?}");
-                //     }
-                // }
-                // let app_t = match app_t.as_ref() {
-                //     Type::Alias(id) => self.tctx.resolve_alias(*id),
-                //     t => t.clone(),
-                // };
-                // let Type::Scheme {
-                //     prefex,
-                //     typ: scheme_t,
-                // } = app_t
-                // else {
-                //     panic!("Expected a scheme type got {app_t:?}");
-                // };
-                // assert!(prefex.len() == args.len());
-                // let instantiated = instance(self.tctx, args, *scheme_t);
-                // constraints.push_back(Constraint::Eq(t, instantiated));
+                constraints.push_back(Constraint::Eq(t, instance(self.tctx, args, *app_t)));
             }
             Constraint::Eq(Type::Fresh(id1), other) => {
                 self.substitutions.push((id1, other.clone()));
@@ -303,31 +279,8 @@ impl<'ctx> ConstraintSolver<'ctx> {
                     case,
                     of_type,
                 });
-                // for a in &args {
-                //     if let Some(false) = a.is_ref() {
-                //         panic!("Cannot apply generic for non ref type {a:?}");
-                //     }
-                // }
-                // let app_t = match typ.as_ref() {
-                //     Type::Alias(id) => self.tctx.resolve_alias(*id),
-                //     t => t.clone(),
-                // };
-                // let Type::Scheme {
-                //     prefex,
-                //     typ: scheme_t,
-                // } = app_t
-                // else {
-                //     panic!("Expected a scheme type got {app_t:?}");
-                // };
-                // assert!(prefex.len() == args.len());
-                // let instantiated = instance(self.tctx, args, *scheme_t);
-                // constraints.push_back(Constraint::HasCase {
-                //     t: instantiated,
-                //     case,
-                //     of_type,
-                // });
             }
-            // If not case could be found to this point then look
+            // If no case could be found to this point then look
             // through records
             Constraint::HasCase {
                 t: Type::Fresh(id),
