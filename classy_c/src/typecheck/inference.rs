@@ -6,7 +6,7 @@ use crate::{
     syntax::ast::{self, Visitor},
     typecheck::{
         constraints::Constraint,
-        constrait_solver::{instance_with_starting_index, ConstraintSolver},
+        constrait_solver::{instance, ConstraintSolver},
         fix_fresh,
         r#type::{Type, TypeFolder},
         scope::Scope,
@@ -189,7 +189,7 @@ impl Inference {
             },
             Type::App { typ, args } => {
                 println!("INSTANTIATING {typ:?} with {args:?}");
-                let instantiated = instance_with_starting_index(DeBruijn(-1), tctx, args, *typ);
+                let instantiated = instance(tctx, args, *typ);
                 match instantiated {
                     Type::Function { args, ret } => (args, ret, vec![]),
                     t => panic!("Expected function type - got {t:?}"),

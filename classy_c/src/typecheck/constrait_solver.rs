@@ -1,6 +1,8 @@
 use core::panic;
 use std::collections::{HashMap, VecDeque};
 
+use serde::__private::de;
+
 use crate::typecheck::{
     constraints::Constraint,
     r#type::{Type, TypeFolder},
@@ -86,25 +88,29 @@ impl<'ctx> ConstraintSolver<'ctx> {
                 constraints.push_back(Constraint::Eq(t, app));
             }
             Constraint::Eq(t, Type::App { typ: app_t, args }) => {
-                for a in &args {
-                    if let Some(false) = a.is_ref() {
-                        panic!("Cannot apply generic for non ref type {a:?}");
-                    }
-                }
-                let app_t = match app_t.as_ref() {
-                    Type::Alias(id) => self.tctx.resolve_alias(*id),
-                    t => t.clone(),
-                };
-                let Type::Scheme {
-                    prefex,
-                    typ: scheme_t,
-                } = app_t
-                else {
-                    panic!("Expected a scheme type got {app_t:?}");
-                };
-                assert!(prefex.len() == args.len());
-                let instantiated = instance(self.tctx, args, *scheme_t);
-                constraints.push_back(Constraint::Eq(t, instantiated));
+                constraints.push_back(Constraint::Eq(
+                    t,
+                    instance(self.tctx, args, *app_t),
+                ));
+                // for a in &args {
+                //     if let Some(false) = a.is_ref() {
+                //         panic!("Cannot apply generic for non ref type {a:?}");
+                //     }
+                // }
+                // let app_t = match app_t.as_ref() {
+                //     Type::Alias(id) => self.tctx.resolve_alias(*id),
+                //     t => t.clone(),
+                // };
+                // let Type::Scheme {
+                //     prefex,
+                //     typ: scheme_t,
+                // } = app_t
+                // else {
+                //     panic!("Expected a scheme type got {app_t:?}");
+                // };
+                // assert!(prefex.len() == args.len());
+                // let instantiated = instance(self.tctx, args, *scheme_t);
+                // constraints.push_back(Constraint::Eq(t, instantiated));
             }
             Constraint::Eq(Type::Fresh(id1), other) => {
                 self.substitutions.push((id1, other.clone()));
@@ -182,7 +188,7 @@ impl<'ctx> ConstraintSolver<'ctx> {
                 of_type,
             } => {
                 constraints.push_back(Constraint::HasField {
-                    t: instance_with_starting_index(DeBruijn(-1), &self.tctx, args, *typ),
+                    t: instance(&self.tctx, args, *typ),
                     field,
                     of_type,
                 });
@@ -292,29 +298,34 @@ impl<'ctx> ConstraintSolver<'ctx> {
                 case,
                 of_type,
             } => {
-                for a in &args {
-                    if let Some(false) = a.is_ref() {
-                        panic!("Cannot apply generic for non ref type {a:?}");
-                    }
-                }
-                let app_t = match typ.as_ref() {
-                    Type::Alias(id) => self.tctx.resolve_alias(*id),
-                    t => t.clone(),
-                };
-                let Type::Scheme {
-                    prefex,
-                    typ: scheme_t,
-                } = app_t
-                else {
-                    panic!("Expected a scheme type got {app_t:?}");
-                };
-                assert!(prefex.len() == args.len());
-                let instantiated = instance(self.tctx, args, *scheme_t);
                 constraints.push_back(Constraint::HasCase {
-                    t: instantiated,
+                    t: instance(self.tctx, args, *typ),
                     case,
                     of_type,
                 });
+                // for a in &args {
+                //     if let Some(false) = a.is_ref() {
+                //         panic!("Cannot apply generic for non ref type {a:?}");
+                //     }
+                // }
+                // let app_t = match typ.as_ref() {
+                //     Type::Alias(id) => self.tctx.resolve_alias(*id),
+                //     t => t.clone(),
+                // };
+                // let Type::Scheme {
+                //     prefex,
+                //     typ: scheme_t,
+                // } = app_t
+                // else {
+                //     panic!("Expected a scheme type got {app_t:?}");
+                // };
+                // assert!(prefex.len() == args.len());
+                // let instantiated = instance(self.tctx, args, *scheme_t);
+                // constraints.push_back(Constraint::HasCase {
+                //     t: instantiated,
+                //     case,
+                //     of_type,
+                // });
             }
             // If not case could be found to this point then look
             // through records
@@ -434,22 +445,35 @@ impl<'ctx> TypeFolder for Instatiator<'ctx> {
     }
 }
 
+/// Instance scheme `scheme_t` with `args`. It is important to note
+/// that `scheme_t` must be a scheme type or an alias to a scheme.
 pub fn instance(tctx: &TypCtx, args: Vec<Type>, scheme_t: Type) -> Type {
-    instance_with_starting_index(DeBruijn::zero(), tctx, args, scheme_t)
-}
-
-pub fn instance_with_starting_index(
-    index: DeBruijn,
-    tctx: &TypCtx,
-    args: Vec<Type>,
-    scheme_t: Type,
-) -> Type {
+    assert!(
+        args.iter().map(|t| t.is_ref().unwrap_or(true)).all(|b| b),
+        "Cannot instantiate non ref types"
+    );
+    match &scheme_t {
+        Type::Scheme { prefex, .. } => {
+            assert_eq!(
+                prefex.len(),
+                args.len(),
+                "cannot saturate a type application"
+            );
+        }
+        Type::Alias(id) => {
+            let resolved = tctx.resolve_alias(*id);
+            return instance(tctx, args, resolved);
+        }
+        t => {
+            assert!(args.is_empty(), "type is empty, cannot instantiate: {t:?}");
+        }
+    }
     args.into_iter().enumerate().fold(scheme_t, |acc, (i, t)| {
         let mut replacer = Instatiator {
             for_gen: i,
             instatiated: t,
             tctx,
-            deruijn: index.clone(),
+            deruijn: DeBruijn(-1),
         };
         replacer.fold_type(acc)
     })
