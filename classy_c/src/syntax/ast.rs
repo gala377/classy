@@ -204,7 +204,7 @@ pub enum ExprKind {
     },
     Match {
         expr: Box<Expr>,
-        cases: Vec<(Pattern, Expr)>,
+        cases: Vec<(Pattern, Expr, Option<Box<Expr>>)>,
     },
 }
 

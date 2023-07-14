@@ -121,7 +121,11 @@ pub trait Visitor<'ast>: Sized {
         walk_index_access(self, lhs, index)
     }
 
-    fn visit_match(&mut self, expr: &'ast ast::Expr, cases: &'ast [(ast::Pattern, ast::Expr)]) {
+    fn visit_match(
+        &mut self,
+        expr: &'ast ast::Expr,
+        cases: &'ast [(ast::Pattern, ast::Expr, Option<Box<ast::Expr>>)],
+    ) {
         walk_match(self, expr, cases)
     }
 
@@ -415,12 +419,15 @@ pub fn walk_index_access<'ast, V: Visitor<'ast>>(
 pub fn walk_match<'ast, V: Visitor<'ast>>(
     v: &mut V,
     expr: &'ast ast::Expr,
-    cases: &'ast [(ast::Pattern, ast::Expr)],
+    cases: &'ast [(ast::Pattern, ast::Expr, Option<Box<ast::Expr>>)],
 ) {
     v.visit_expr(expr);
-    for (pattern, expr) in cases {
+    for (pattern, expr, guard) in cases {
         v.visit_pattern(pattern);
         v.visit_expr(expr);
+        if let Some(guard) = guard {
+            v.visit_expr(guard);
+        }
     }
 }
 

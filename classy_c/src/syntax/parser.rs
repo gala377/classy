@@ -442,10 +442,14 @@ impl<'source> Parser<'source> {
         let mut cases = Vec::new();
         while self.lexer.current().typ != TokenType::RBrace {
             let pattern = self.parse_pattern()?;
+            let guard = match self.match_token(TokenType::If) {
+                Ok(_) => Some(Box::new(self.parse_expr()?)),
+                _ => None,
+            };
             let _ = self.expect_token(TokenType::FatArrow);
             let body = self.parse_expr()?;
             let _ = self.match_token(TokenType::Semicolon);
-            cases.push((pattern, body));
+            cases.push((pattern, body, guard));
         }
         let _ = self.expect_token(TokenType::RBrace);
         Ok(mk_expr(ast::ExprKind::Match {

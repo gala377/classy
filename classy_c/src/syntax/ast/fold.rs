@@ -146,7 +146,11 @@ pub trait Folder: Sized {
         fold_index_access(self, lhs, index)
     }
 
-    fn fold_match(&mut self, expr: Expr, cases: Vec<(Pattern, Expr)>) -> ExprKind {
+    fn fold_match(
+        &mut self,
+        expr: Expr,
+        cases: Vec<(Pattern, Expr, Option<Box<Expr>>)>,
+    ) -> ExprKind {
         fold_match(self, expr, cases)
     }
 
@@ -500,11 +504,19 @@ pub fn fold_index_access(folder: &mut impl Folder, lhs: Expr, index: Expr) -> Ex
     ExprKind::IndexAccess { lhs, index }
 }
 
-pub fn fold_match(folder: &mut impl Folder, expr: Expr, cases: Vec<(Pattern, Expr)>) -> ExprKind {
+pub fn fold_match(
+    folder: &mut impl Folder,
+    expr: Expr,
+    cases: Vec<(Pattern, Expr, Option<Box<Expr>>)>,
+) -> ExprKind {
     let expr = Box::new(folder.fold_expr(expr));
     let mut new_cases = Vec::new();
-    for (pat, expr) in cases {
-        new_cases.push((folder.fold_pattern(pat), folder.fold_expr(expr)));
+    for (pat, expr, guard) in cases {
+        new_cases.push((
+            folder.fold_pattern(pat),
+            folder.fold_expr(expr),
+            guard.map(|e| Box::new(folder.fold_expr(*e))),
+        ));
     }
     ExprKind::Match {
         expr,
