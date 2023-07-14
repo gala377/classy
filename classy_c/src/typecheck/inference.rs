@@ -973,7 +973,7 @@ mod tests {
 
             main: () -> ()
             main {
-                let a = Foo(a = 1, b = "Hello")
+                let a = Foo{a = 1, b = "Hello"}
                 is_foo a
             }
         "#;
@@ -996,7 +996,7 @@ mod tests {
 
             main: () -> ()
             main {
-                let a = Foo(a = 1, b = "Hello")
+                let a = Foo{a = 1, b = "Hello"}
                 let anon = type { foo = a; bar = "World" }
                 is_foo anon.foo
                 is_string anon.bar
