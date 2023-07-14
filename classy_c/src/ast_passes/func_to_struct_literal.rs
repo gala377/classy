@@ -33,7 +33,7 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
                 kwargs,
             );
         };
-        let Some(fields) = resolve_fields(&self.tctx, &typ) else  {
+        let Some(fields) = resolve_fields(&self.tctx, &typ) else {
             println!("Function call {name} is not a struct, so no struct");
             return ast::fold::fold_function_call(
                 self,
@@ -45,19 +45,66 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
                 kwargs,
             );
         };
-        if fields.len() != kwargs.len() {
-            panic!("Not all fields on a struct literal {name} were filled in")
+
+        assert!(
+            kwargs.is_empty(),
+            "use struct {name} creation syntax, kwargs are deprecated"
+        );
+        let [ast::Expr {
+            kind:
+                ast::ExprKind::Lambda {
+                    parameters,
+                    body:
+                        box ast::Expr {
+                            kind: ast::ExprKind::Sequence(body),
+                            ..
+                        },
+                },
+            ..
+        }] = &args[..]
+        else {
+            panic!("struct {name} creation syntax expected a record literal")
         };
-        if !args.is_empty() {
-            panic!("Struct literals do not take positional arguments")
-        }
-        for (field, _) in &fields {
-            if !kwargs.contains_key(field) {
-                panic!("Struct literal {name} missing field: {}", field)
-            }
+        assert!(
+            parameters.is_empty(),
+            "struct {name} creation syntax expected a record literal"
+        );
+        let body = body
+            .iter()
+            .map(|e| match e {
+                ast::Expr {
+                    kind:
+                        ast::ExprKind::Assignment {
+                            lval:
+                                box ast::Expr {
+                                    kind: ast::ExprKind::Name(name),
+                                    ..
+                                },
+                            rval: value,
+                        },
+                    ..
+                } => (name.to_owned(), *value.clone()),
+                _ => panic!("struct {name} creation syntax expected a record literal"),
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            body.len(),
+            fields.len(),
+            "struct {name} syntax missing fields"
+        );
+        for (name, _) in &body {
+            assert!(
+                fields.iter().find(|(n, _)| &n == &name).is_some(),
+                "struct {name} syntax has unknown field: {}",
+                name
+            );
         }
         println!("Function call is a struct {name}, so promoting");
-        ast::fold::fold_struct_literal(self, ast::Path(vec![name.to_owned()]), kwargs)
+        ast::fold::fold_struct_literal(
+            self,
+            ast::Path(vec![name.to_owned()]),
+            body.into_iter().collect(),
+        )
     }
 
     fn try_to_resolve_adt(
@@ -158,11 +205,7 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
                         name
                     );
                 }
-                ast::ExprKind::AdtStructConstructor {
-                    typ: name.to_owned(),
-                    constructor: case.to_owned(),
-                    fields: body,
-                }
+                ast::fold::fold_adt_struct_constructor(self, name.to_owned(), case.to_owned(), body)
             }
             Type::Tuple(field_t) => {
                 assert!(kwargs.is_empty(), "tuple constructors do not that kwargs");
@@ -171,11 +214,7 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
                     field_t.len(),
                     "tuple constructors take exactly the number of arguments as there are fields"
                 );
-                ast::ExprKind::AdtTupleConstructor {
-                    typ: name.to_owned(),
-                    constructor: case.to_owned(),
-                    args: args,
-                }
+                ast::fold::fold_adt_tuple_constructor(self, name.to_owned(), case.to_owned(), args)
             }
             _ => ast::fold::fold_function_call(
                 self,
@@ -249,10 +288,7 @@ impl<'ctx> ast::fold::Folder for PromoteCallToStructLiteral<'ctx> {
             );
         };
         match t {
-            Type::Unit => ast::ExprKind::AdtUnitConstructor {
-                typ: name,
-                constructor: field,
-            },
+            Type::Unit => self.fold_adt_unit_constructor(name, field),
             _ => ast::fold::fold_access(
                 self,
                 ast::Expr {
@@ -284,7 +320,7 @@ fn resolve_case(tctx: &TypCtx, case: &str, typ: &Type) -> Option<Type> {
 fn resolve_fields(tctx: &TypCtx, t: &Type) -> Option<Vec<(String, Type)>> {
     match t {
         Type::Struct { fields, .. } => Some(fields.clone()),
-        Type::Scheme { typ, ..  } => resolve_fields(tctx, typ),
+        Type::Scheme { typ, .. } => resolve_fields(tctx, typ),
         Type::App { typ, .. } => resolve_fields(tctx, typ),
         Type::Alias(for_t) => {
             let typ = tctx.resolve_alias(*for_t);
