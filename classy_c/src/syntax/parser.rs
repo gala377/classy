@@ -988,11 +988,19 @@ impl<'source> Parser<'source> {
                 let _ = self.expect_token(TokenType::RParen);
                 Ok(ast::Pattern::Tuple(inner))
             }
-            TokenType::RBracket => {
+            TokenType::LBracket => {
                 self.lexer.advance();
                 let inner = self.parse_delimited(Self::parse_pattern, TokenType::Comma);
                 let _ = self.expect_token(TokenType::RBracket);
                 Ok(ast::Pattern::Tuple(inner))
+            }
+            TokenType::LBrace => {
+                self.lexer.advance();
+                let fields = self.parse_delimited(Self::parse_pattern_field, TokenType::Comma);
+                let _ = self.expect_token(TokenType::RBrace);
+                Ok(ast::Pattern::AnonStruct {
+                    fields: fields.into_iter().collect(),
+                })
             }
             TokenType::Identifier(name) => {
                 self.lexer.advance();

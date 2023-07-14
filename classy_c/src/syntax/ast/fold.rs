@@ -194,6 +194,10 @@ pub trait Folder: Sized {
         fold_tuple_struct_pattern(self, strct, fields)
     }
 
+    fn fold_anon_struct_pattern(&mut self, fields: HashMap<String, Pattern>) -> Pattern {
+        fold_anon_struct_pattern(self, fields)
+    }
+
     fn fold_rest_pattern(&mut self, name: String) -> Pattern {
         Pattern::Rest(name)
     }
@@ -202,11 +206,21 @@ pub trait Folder: Sized {
         fold_type_specified_pattern(self, name, typ)
     }
 
-    fn fold_adt_struct_constructor(&mut self, name: String, case: String, fields: Vec<(String, Expr)>) -> ExprKind {
+    fn fold_adt_struct_constructor(
+        &mut self,
+        name: String,
+        case: String,
+        fields: Vec<(String, Expr)>,
+    ) -> ExprKind {
         fold_adt_struct_constructor(self, name, case, fields)
     }
 
-    fn fold_adt_tuple_constructor(&mut self, name: String, case: String, fields: Vec<Expr>) -> ExprKind {
+    fn fold_adt_tuple_constructor(
+        &mut self,
+        name: String,
+        case: String,
+        fields: Vec<Expr>,
+    ) -> ExprKind {
         fold_adt_tuple_constructor(self, name, case, fields)
     }
 
@@ -299,9 +313,19 @@ pub fn fold_expr_kind(folder: &mut impl Folder, expr: ExprKind) -> ExprKind {
         ExprKind::ArrayLiteral { typ, size, init } => folder.fold_array(*size, typ, init),
         ExprKind::IndexAccess { lhs, index } => folder.fold_index_access(*lhs, *index),
         ExprKind::Match { expr, cases } => folder.fold_match(*expr, cases),
-        ExprKind::AdtStructConstructor { typ, constructor, fields } => folder.fold_adt_struct_constructor(typ, constructor, fields),
-        ExprKind::AdtTupleConstructor { typ, constructor, args } => folder.fold_adt_tuple_constructor(typ, constructor, args),
-        ExprKind::AdtUnitConstructor { typ, constructor } => folder.fold_adt_unit_constructor(typ, constructor),
+        ExprKind::AdtStructConstructor {
+            typ,
+            constructor,
+            fields,
+        } => folder.fold_adt_struct_constructor(typ, constructor, fields),
+        ExprKind::AdtTupleConstructor {
+            typ,
+            constructor,
+            args,
+        } => folder.fold_adt_tuple_constructor(typ, constructor, args),
+        ExprKind::AdtUnitConstructor { typ, constructor } => {
+            folder.fold_adt_unit_constructor(typ, constructor)
+        }
     }
 }
 
@@ -516,6 +540,7 @@ pub fn fold_pattern(folder: &mut impl Folder, pat: Pattern) -> Pattern {
         Pattern::TupleStruct { strct, fields } => fold_tuple_struct_pattern(folder, strct, fields),
         Pattern::Rest(name) => folder.fold_rest_pattern(name),
         Pattern::TypeSpecifier(name, pat) => folder.fold_type_specified_pattern(name, *pat),
+        Pattern::AnonStruct { fields } => fold_anon_struct_pattern(folder, fields),
     }
 }
 
@@ -559,4 +584,12 @@ pub fn fold_adt_tuple_constructor(
         constructor: case,
         args: new_fields,
     }
+}
+
+fn fold_anon_struct_pattern(folder: &mut impl Folder, fields: HashMap<String, Pattern>) -> Pattern {
+    let mut new_fields = HashMap::new();
+    for (name, field) in fields {
+        new_fields.insert(name, folder.fold_pattern(field));
+    }
+    Pattern::AnonStruct { fields: new_fields }
 }

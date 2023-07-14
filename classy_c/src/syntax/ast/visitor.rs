@@ -150,6 +150,10 @@ pub trait Visitor<'ast>: Sized {
         walk_type_specific_pattern(self, name, pattern)
     }
 
+    fn visit_anon_struct_pattern(&mut self, fields: &'ast HashMap<String, ast::Pattern>) {
+        walk_anon_struct_pattern(self, fields)
+    }
+
     fn visit_unit_pattern(&mut self) {}
     fn visit_rest_pattern(&mut self, _name: &'ast str) {}
     fn visit_wildcard_pattern(&mut self) {}
@@ -225,6 +229,7 @@ pub fn walk_expr_kind<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::ExprKi
         ast::ExprKind::StructLiteral { strct, values } => {
             v.visit_struct_literal(strct, values);
         }
+
         ast::ExprKind::While { cond, body } => {
             v.visit_while(cond, body);
         }
@@ -433,6 +438,7 @@ pub fn walk_pattern<'ast, V: Visitor<'ast>>(v: &mut V, pattern: &'ast ast::Patte
         ast::Pattern::Bool(b) => v.visit_bool_pattern(*b),
         ast::Pattern::Rest(n) => v.visit_rest_pattern(n),
         ast::Pattern::TypeSpecifier(name, pattern) => v.visit_type_specific_pattern(name, pattern),
+        ast::Pattern::AnonStruct { fields } => v.visit_anon_struct_pattern(fields),
     }
 }
 
@@ -513,4 +519,14 @@ pub fn walk_adt_unit_constructor<'ast, V: Visitor<'ast>>(
 ) {
     v.visit_name(typ);
     v.visit_name(case);
+}
+
+pub fn walk_anon_struct_pattern<'ast, V: Visitor<'ast>>(
+    v: &mut V,
+    fields: &'ast HashMap<String, ast::Pattern>,
+) {
+    for (name, pattern) in fields {
+        v.visit_name(name);
+        v.visit_pattern(pattern);
+    }
 }

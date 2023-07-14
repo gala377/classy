@@ -221,6 +221,9 @@ pub enum Pattern {
         strct: String,
         fields: Vec<Pattern>,
     },
+    AnonStruct {
+        fields: HashMap<String, Pattern>,
+    },
     Array(Vec<Pattern>),
     Wildcard,
     Unit,
