@@ -144,7 +144,7 @@ impl<'ctx> ConstraintSolver<'ctx> {
                 let f = fields
                     .iter()
                     .find(|(f, _)| f == &field)
-                    .expect("this field does not exists, constraint not met");
+                    .expect(&format!("field {field} does not exists on this struct"));
                 constraints.push_back(Constraint::Eq(f.1.clone(), of_type));
             }
             Constraint::HasField {
