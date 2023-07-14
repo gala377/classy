@@ -21,7 +21,7 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
         args: Vec<ast::Expr>,
         kwargs: std::collections::HashMap<String, ast::Expr>,
     ) -> ast::ExprKind {
-        let Some(mut typ) = self.tctx.get_type(name) else {
+        let Some(typ) = self.tctx.get_type(name) else {
             println!("Function call {name} is not a known name, so no struct");
             return ast::fold::fold_function_call(
                 self,
@@ -33,45 +33,17 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
                 kwargs,
             );
         };
-        if let Type::Alias(for_t) = typ {
-            println!("Function call type is an alias, so resolving");
-            typ = self.tctx.resolve_alias(for_t);
-        }
-        let fields = match typ {
-            Type::Struct { fields, .. } => {
-                println!("Function call {name} is a struct, so promoting");
-                fields
-            }
-            Type::Scheme { typ, .. } => match *typ {
-                Type::Struct { fields, .. } => {
-                    println!("Function call {name} is a scheme for a struct so promoting");
-                    fields
-                }
-                _ => {
-                    println!("Function call {name} is a scheme, but not a struct, so no struct");
-                    return ast::fold::fold_function_call(
-                        self,
-                        ast::Expr {
-                            id: expr_id,
-                            kind: ast::ExprKind::Name(name.to_owned()),
-                        },
-                        args,
-                        kwargs,
-                    );
-                }
-            },
-            _ => {
-                println!("Function call {name} is not a struct, so no struct");
-                return ast::fold::fold_function_call(
-                    self,
-                    ast::Expr {
-                        id: expr_id,
-                        kind: ast::ExprKind::Name(name.to_owned()),
-                    },
-                    args,
-                    kwargs,
-                );
-            }
+        let Some(fields) = resolve_fields(&self.tctx, &typ) else  {
+            println!("Function call {name} is not a struct, so no struct");
+            return ast::fold::fold_function_call(
+                self,
+                ast::Expr {
+                    id: expr_id,
+                    kind: ast::ExprKind::Name(name.to_owned()),
+                },
+                args,
+                kwargs,
+            );
         };
         if fields.len() != kwargs.len() {
             panic!("Not all fields on a struct literal {name} were filled in")
@@ -132,8 +104,65 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
             );
         };
         match t {
-            Type::Struct { .. } => {
-                todo!()
+            Type::Struct { fields, .. } => {
+                assert!(
+                    kwargs.is_empty(),
+                    "use struct {name} creation syntax, kwargs are deprecated"
+                );
+                let [ast::Expr {
+                    kind:
+                        ast::ExprKind::Lambda {
+                            parameters,
+                            body:
+                                box ast::Expr {
+                                    kind: ast::ExprKind::Sequence(body),
+                                    ..
+                                },
+                        },
+                    ..
+                }] = &args[..]
+                else {
+                    panic!("struct {name} creation syntax expected a record literal")
+                };
+                assert!(
+                    parameters.is_empty(),
+                    "struct {name} creation syntax expected a record literal"
+                );
+                let body = body
+                    .iter()
+                    .map(|e| match e {
+                        ast::Expr {
+                            kind:
+                                ast::ExprKind::Assignment {
+                                    lval:
+                                        box ast::Expr {
+                                            kind: ast::ExprKind::Name(name),
+                                            ..
+                                        },
+                                    rval: value,
+                                },
+                            ..
+                        } => (name.to_owned(), *value.clone()),
+                        _ => panic!("struct {name} creation syntax expected a record literal"),
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    body.len(),
+                    fields.len(),
+                    "struct {name} syntax missing fields"
+                );
+                for (name, _) in &body {
+                    assert!(
+                        fields.iter().find(|(n, _)| &n == &name).is_some(),
+                        "struct {name} syntax has unknown field: {}",
+                        name
+                    );
+                }
+                ast::ExprKind::AdtStructConstructor {
+                    typ: name.to_owned(),
+                    constructor: case.to_owned(),
+                    fields: body,
+                }
             }
             Type::Tuple(field_t) => {
                 assert!(kwargs.is_empty(), "tuple constructors do not that kwargs");
@@ -248,6 +277,19 @@ fn resolve_case(tctx: &TypCtx, case: &str, typ: &Type) -> Option<Type> {
             resolve_case(tctx, case, &typ)
         }
         Type::App { typ, .. } => resolve_case(tctx, case, typ),
+        _ => None,
+    }
+}
+
+fn resolve_fields(tctx: &TypCtx, t: &Type) -> Option<Vec<(String, Type)>> {
+    match t {
+        Type::Struct { fields, .. } => Some(fields.clone()),
+        Type::Scheme { typ, ..  } => resolve_fields(tctx, typ),
+        Type::App { typ, .. } => resolve_fields(tctx, typ),
+        Type::Alias(for_t) => {
+            let typ = tctx.resolve_alias(*for_t);
+            resolve_fields(tctx, &typ)
+        }
         _ => None,
     }
 }

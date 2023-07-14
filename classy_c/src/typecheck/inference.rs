@@ -366,65 +366,9 @@ impl Inference {
                     "structs with multiple path segments not implemented yet"
                 );
                 let name = strct.0[0].clone();
-                let strct_t = {
-                    let scope = self.scope.borrow();
-                    scope.lookup_type(&name).unwrap()
-                };
-                // TODO:
-                // We probably need a recurtsive function to extract the gields and
-                // generate the constraints at the same time so it look cleaner
-                let fields = match strct_t {
-                    Type::Scheme { prefex, typ } => {
-                        let args = prefex.iter().map(|_| self.fresh_type()).collect();
-                        self.constraints.push(Constraint::Eq(
-                            ret_t.clone(),
-                            Type::App {
-                                typ: Box::new(Type::Scheme {
-                                    prefex,
-                                    typ: typ.clone(),
-                                }),
-                                args,
-                            },
-                        ));
-                        match *typ {
-                            Type::Struct { fields, .. } => fields,
-                            _ => panic!("expected struct type"),
-                        }
-                    }
-                    Type::Struct { def, fields } => {
-                        self.constraints.push(Constraint::Eq(
-                            ret_t.clone(),
-                            Type::Struct {
-                                def,
-                                fields: fields.clone(),
-                            },
-                        ));
-                        fields
-                    }
-                    Type::App {
-                        typ:
-                            box Type::Scheme {
-                                prefex,
-                                typ: box Type::Struct { def, fields },
-                            },
-                        args,
-                    } => {
-                        self.constraints.push(Constraint::Eq(
-                            ret_t.clone(),
-                            Type::App {
-                                typ: Box::new(Type::Scheme {
-                                    prefex,
-                                    typ: Box::new(Type::Struct {
-                                        def,
-                                        fields: fields.clone(),
-                                    }),
-                                }),
-                                args,
-                            },
-                        ));
-                        fields
-                    }
-                    _ => panic!("expected struct type"),
+                let strct_t = self.scope.borrow().lookup_type(&name).unwrap();
+                let Some(fields) = extract_fields(self, strct_t.clone(), ret_t.clone(), true) else {
+                    panic!("expected truct type, got {strct_t:?}")
                 };
                 let args_t = values
                     .iter()
@@ -780,6 +724,60 @@ impl Inference {
             }
             ast::Typ::ToInfere => panic!("ToInfer types should not be present when typechecking"),
         }
+    }
+}
+
+fn extract_fields(
+    this: &mut Inference,
+    t: Type,
+    ret_t: Type,
+    push_constraint: bool,
+) -> Option<Vec<(String, Type)>> {
+    match t {
+        Type::Struct { def, fields } => {
+            if push_constraint {
+                this.constraints.push(Constraint::Eq(
+                    ret_t.clone(),
+                    Type::Struct {
+                        def,
+                        fields: fields.clone(),
+                    },
+                ));
+            }
+            Some(fields)
+        }
+        Type::Scheme { prefex, typ } => {
+            if push_constraint {
+                let args = prefex.iter().map(|_| this.fresh_type()).collect();
+                this.constraints.push(Constraint::Eq(
+                    ret_t.clone(),
+                    Type::App {
+                        typ: Box::new(Type::Scheme {
+                            prefex,
+                            typ: typ.clone(),
+                        }),
+                        args,
+                    },
+                ));
+            }
+            extract_fields(this,  *typ, ret_t, false)
+        }
+        Type::Alias(_) => {
+            panic!("Cannot extract fields from alias type");
+        }
+        Type::App { typ, args } => {
+            if push_constraint {
+                this.constraints.push(Constraint::Eq(
+                    ret_t.clone(),
+                    Type::App {
+                        typ: typ.clone(),
+                        args,
+                    },
+                ));
+            }
+            extract_fields(this,  *typ, ret_t, false)
+        }
+        _ => None,
     }
 }
 
