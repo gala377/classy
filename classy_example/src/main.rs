@@ -105,7 +105,7 @@ fn main() {
                 printi x = print (itos x)
 
                 print_either: (Either(Option(Integer), String)) -> ()
-                print_either a = match (a) {
+                print_either a = a match {
                     Either.Left(Option.Some(Integer { val: x })) => printi x
                     Either.Right(x) => print x
                 }

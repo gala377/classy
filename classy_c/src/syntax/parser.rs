@@ -402,7 +402,6 @@ impl<'source> Parser<'source> {
             TokenType::Return => self.parse_return(),
             TokenType::Let => self.parse_let(),
             TokenType::Type => self.parse_type_expr(),
-            TokenType::Match => self.parse_match(),
             _ => self.parse_assignment(),
         }
     }
@@ -421,7 +420,7 @@ impl<'source> Parser<'source> {
 
     fn parse_typed_expression(&mut self) -> ParseRes<ast::Expr> {
         let beg = self.curr_pos();
-        let expr = self.parse_fn_call()?;
+        let expr = self.parse_postfix_match()?;
         if self.match_token(TokenType::Colon).is_err() {
             return Ok(expr);
         }
@@ -431,6 +430,27 @@ impl<'source> Parser<'source> {
         Ok(mk_expr(ast::ExprKind::TypedExpr {
             expr: Box::new(expr),
             typ,
+        }))
+    }
+
+    fn parse_postfix_match(&mut self) -> ParseRes<ast::Expr> {
+        let expr = self.parse_fn_call()?;
+        if self.match_token(TokenType::Match).is_err() {
+            return Ok(expr);
+        }
+        let _ = self.expect_token(TokenType::LBrace);
+        let mut cases = Vec::new();
+        while self.lexer.current().typ != TokenType::RBrace {
+            let pattern = self.parse_pattern()?;
+            let _ = self.expect_token(TokenType::FatArrow);
+            let body = self.parse_expr()?;
+            let _ = self.match_token(TokenType::Semicolon);
+            cases.push((pattern, body));
+        }
+        let _ = self.expect_token(TokenType::RBrace);
+        Ok(mk_expr(ast::ExprKind::Match {
+            expr: Box::new(expr),
+            cases,
         }))
     }
 
@@ -938,26 +958,6 @@ impl<'source> Parser<'source> {
         }))
     }
 
-    fn parse_match(&mut self) -> ParseRes<ast::Expr> {
-        self.match_token(TokenType::Match)?;
-        let _ = self.match_token(TokenType::LParen);
-        let expr = self.parse_expr()?;
-        let _ = self.match_token(TokenType::RParen);
-        let _ = self.expect_token(TokenType::LBrace);
-        let mut cases = Vec::new();
-        while self.lexer.current().typ != TokenType::RBrace {
-            let pattern = self.parse_pattern()?;
-            let _ = self.expect_token(TokenType::FatArrow);
-            let body = self.parse_expr()?;
-            let _ = self.match_token(TokenType::Semicolon);
-            cases.push((pattern, body));
-        }
-        let _ = self.expect_token(TokenType::RBrace);
-        Ok(mk_expr(ast::ExprKind::Match {
-            expr: Box::new(expr),
-            cases,
-        }))
-    }
 
     fn parse_pattern(&mut self) -> ParseRes<ast::Pattern> {
         let beg = self.curr_pos();
