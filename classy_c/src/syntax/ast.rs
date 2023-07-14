@@ -171,6 +171,10 @@ pub enum ExprKind {
         constructor: String,
         fields: Vec<(String, Expr)>,
     },
+    AdtUnitConstructor {
+        typ: String,
+        constructor: String,
+    },
     While {
         cond: Box<Expr>,
         body: Box<Expr>,

@@ -209,6 +209,13 @@ pub trait Folder: Sized {
     fn fold_adt_tuple_constructor(&mut self, name: String, case: String, fields: Vec<Expr>) -> ExprKind {
         fold_adt_tuple_constructor(self, name, case, fields)
     }
+
+    fn fold_adt_unit_constructor(&mut self, name: String, case: String) -> ExprKind {
+        ExprKind::AdtUnitConstructor {
+            typ: name,
+            constructor: case,
+        }
+    }
 }
 
 pub fn fold_program<F: Folder>(folder: &mut F, program: Program) -> Program {
@@ -294,6 +301,7 @@ pub fn fold_expr_kind(folder: &mut impl Folder, expr: ExprKind) -> ExprKind {
         ExprKind::Match { expr, cases } => folder.fold_match(*expr, cases),
         ExprKind::AdtStructConstructor { typ, constructor, fields } => folder.fold_adt_struct_constructor(typ, constructor, fields),
         ExprKind::AdtTupleConstructor { typ, constructor, args } => folder.fold_adt_tuple_constructor(typ, constructor, args),
+        ExprKind::AdtUnitConstructor { typ, constructor } => folder.fold_adt_unit_constructor(typ, constructor),
     }
 }
 

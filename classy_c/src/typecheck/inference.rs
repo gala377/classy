@@ -371,8 +371,8 @@ impl Inference {
                     scope.lookup_type(&name).unwrap()
                 };
                 // TODO:
-                // This does not look well, surely there has to be an easier way
-                // to generate constraints on fields?
+                // We probably need a recurtsive function to extract the gields and
+                // generate the constraints at the same time so it look cleaner
                 let fields = match strct_t {
                     Type::Scheme { prefex, typ } => {
                         let args = prefex.iter().map(|_| self.fresh_type()).collect();
@@ -401,28 +401,29 @@ impl Inference {
                         ));
                         fields
                     }
-                    Type::App { typ, args } => match *typ {
-                        Type::Scheme { prefex, typ } => match *typ {
-                            Type::Struct { fields, def } => {
-                                self.constraints.push(Constraint::Eq(
-                                    ret_t.clone(),
-                                    Type::App {
-                                        typ: Box::new(Type::Scheme {
-                                            prefex,
-                                            typ: Box::new(Type::Struct {
-                                                def,
-                                                fields: fields.clone(),
-                                            }),
-                                        }),
-                                        args,
-                                    },
-                                ));
-                                fields
-                            }
-                            _ => panic!("expected struct type"),
-                        },
-                        _ => panic!("expected struct type"),
-                    },
+                    Type::App {
+                        typ:
+                            box Type::Scheme {
+                                prefex,
+                                typ: box Type::Struct { def, fields },
+                            },
+                        args,
+                    } => {
+                        self.constraints.push(Constraint::Eq(
+                            ret_t.clone(),
+                            Type::App {
+                                typ: Box::new(Type::Scheme {
+                                    prefex,
+                                    typ: Box::new(Type::Struct {
+                                        def,
+                                        fields: fields.clone(),
+                                    }),
+                                }),
+                                args,
+                            },
+                        ));
+                        fields
+                    }
                     _ => panic!("expected struct type"),
                 };
                 let args_t = values
@@ -575,7 +576,11 @@ impl Inference {
                 });
                 ret
             }
-            ast::ExprKind::AdtStructConstructor { typ, constructor, fields } => {
+            ast::ExprKind::AdtStructConstructor {
+                typ,
+                constructor,
+                fields,
+            } => {
                 let ret = self.fresh_type();
                 self.env.insert(id, ret.clone());
                 let t = self.scope.borrow().lookup_type(&typ).unwrap();
@@ -594,6 +599,18 @@ impl Inference {
                         def: 0,
                         fields: fields_t.into_iter().collect(),
                     },
+                });
+                ret
+            }
+            ast::ExprKind::AdtUnitConstructor { typ, constructor } => {
+                let ret = self.fresh_type();
+                self.env.insert(id, ret.clone());
+                let t = self.scope.borrow().lookup_type(&typ).unwrap();
+                self.constraints.push(Constraint::Eq(ret.clone(), t));
+                self.constraints.push(Constraint::HasCase {
+                    t: ret.clone(),
+                    case: constructor.clone(),
+                    of_type: Type::Unit,
                 });
                 ret
             }

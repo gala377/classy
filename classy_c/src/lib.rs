@@ -1,3 +1,5 @@
+#![feature(box_patterns)]
+
 pub mod ast_passes;
 pub mod code;
 pub mod emitter;

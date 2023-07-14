@@ -105,6 +105,10 @@ pub trait Visitor<'ast>: Sized {
         walk_adt_tuple_constructor(self, typ, case, values);
     }
 
+    fn visit_adt_unit_constructor(&mut self, typ: &'ast str, case: &'ast str) {
+        walk_adt_unit_constructor(self, typ, case);
+    }
+
     fn visit_anon_type(&mut self, fields: &'ast [(String, ast::Expr)]) {
         walk_anon_type(self, fields);
     }
@@ -253,6 +257,9 @@ pub fn walk_expr_kind<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::ExprKi
             constructor,
             args,
         } => v.visit_adt_tuple_constructor(typ, constructor, args),
+        ast::ExprKind::AdtUnitConstructor { typ, constructor } => {
+            v.visit_adt_unit_constructor(typ, constructor)
+        }
     }
 }
 
@@ -497,4 +504,13 @@ pub fn walk_adt_tuple_constructor<'ast, V: Visitor<'ast>>(
     for expr in values {
         v.visit_expr(expr);
     }
+}
+
+pub fn walk_adt_unit_constructor<'ast, V: Visitor<'ast>>(
+    v: &mut V,
+    typ: &'ast str,
+    case: &'ast str,
+) {
+    v.visit_name(typ);
+    v.visit_name(case);
 }
