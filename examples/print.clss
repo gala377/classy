@@ -1,0 +1,7 @@
+
+@runtime @empty
+print: (String) -> ()
+
+main {
+    print "Hello world"
+}

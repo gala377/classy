@@ -1,0 +1,18 @@
+
+
+
+@runtime @empty
+print: (String) -> ()
+
+map: ((a) -> b, [a]) -> [b]
+map (f, arr) {
+    array{ f(arr[0]) }
+}
+
+
+foo: (a, forall c => (c) -> b) -> b
+foo (a, f) = f a
+
+main {
+    print "works"
+}

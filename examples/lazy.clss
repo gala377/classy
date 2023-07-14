@@ -1,0 +1,37 @@
+
+type Void(a) = (a) -> ()
+
+@runtime @empty
+print: Void(String)
+
+type LazyInner(a) {
+    Evaled(a)
+    Suspended(() -> a)
+}
+
+type Lazy(a) {
+    val: LazyInner(a)
+}
+
+lazy f = Lazy { val = LazyInner.Suspended(f) }
+
+lazy_get: (Lazy(a)) -> a
+lazy_get l = l.val match {
+    Evaled(x) => x
+    Suspended(f) => {
+        let res = f()
+        l.val = LazyInner.Evaled(res)
+        res
+    } 
+}
+
+test_lazy {
+    print("Testing lazy")
+    "hello world"
+}
+
+main {
+    let a = lazy test_lazy
+    print (lazy_get a)
+    print (lazy_get a)
+}

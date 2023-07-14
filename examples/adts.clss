@@ -1,0 +1,43 @@
+
+@runtime @empty
+print: (String) -> ()
+
+type Foo {
+    A { a: String, b: String }
+    B(Int, String)
+    C
+}
+
+foo f = f match {
+    Foo.A { a: a, b: _ } => print(a)
+    Foo.B(_, x) => print(x)
+    Foo.C => print("C")
+}
+
+type A(a) {
+    a: a
+}
+
+type B(a) = A(a)
+type C(a) = B(a)
+type D(a) = C(String)
+
+
+main {
+    let a = Foo.A { a = "hello"; b = "world"; }
+    let b = Foo.B(1, "hello")
+    let c = Foo.C
+    foo a
+    foo b
+    foo c
+    let d = D { a="hello"; }
+    d match {
+        { a: x } => print x
+    }
+    let t = type { a="hello" } 
+    t match {
+        { a: x } => print x
+    }
+    print(d.a)
+}
+

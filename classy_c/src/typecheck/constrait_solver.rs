@@ -170,14 +170,37 @@ impl<'ctx> ConstraintSolver<'ctx> {
                 field,
                 of_type,
             } => {
-                let Type::Struct { fields, .. } = self.tctx.resolve_alias(id) else {
-                    panic!("Expected a struct type got");
-                };
-                let f = fields
-                    .iter()
-                    .find(|(f, _)| f == &field)
-                    .expect("this field does not exists, constraint not met");
-                constraints.push_back(Constraint::Eq(f.1.clone(), of_type));
+                constraints.push_back(Constraint::HasField {
+                    t: self.tctx.resolve_alias(id),
+                    field,
+                    of_type,
+                });
+            }
+            Constraint::HasField {
+                t: Type::App { typ, args },
+                field,
+                of_type,
+            } => {
+                constraints.push_back(Constraint::HasField {
+                    t: instance_with_starting_index(DeBruijn(-1), &self.tctx, args, *typ),
+                    field,
+                    of_type,
+                });
+            }
+            Constraint::HasField {
+                t: Type::Scheme { prefex, typ },
+                field,
+                of_type,
+            } => {
+                let args = prefex.iter().map(|_| self.fresh_type()).collect();
+                constraints.push_back(Constraint::HasField {
+                    t: Type::App {
+                        typ: Box::new(Type::Scheme { prefex, typ }),
+                        args,
+                    },
+                    field,
+                    of_type,
+                });
             }
             Constraint::HasCase {
                 t: Type::Struct { def, fields },
