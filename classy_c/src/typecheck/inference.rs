@@ -615,6 +615,24 @@ impl Inference {
                 });
                 typ
             }
+            ast::Pattern::AnonStruct { fields } => {
+                let typ = self.fresh_type();
+                let inner_types = fields
+                    .iter()
+                    .map(|(n, p)| {
+                        let typ = self.infer_in_pattern(p, prefex_scope);
+                        (n.clone(), typ)
+                    })
+                    .collect::<Vec<_>>();
+                for (name, t) in &inner_types {
+                    self.constraints.push(Constraint::HasField {
+                        t: typ.clone(),
+                        field: name.clone(),
+                        of_type: t.clone(),
+                    })
+                }
+                typ
+            }
             ast::Pattern::TupleStruct { strct, fields } => {
                 let typ = self.fresh_type();
                 let inner_types = fields
