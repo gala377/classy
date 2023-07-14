@@ -32,7 +32,7 @@ pub trait Folder: Sized {
     }
 
     fn fold_typ(&mut self, typ: Typ) -> Typ {
-        typ
+        fold_type(self, typ)
     }
 
     fn fold_name(&mut self, name: String) -> String {
@@ -229,6 +229,38 @@ pub trait Folder: Sized {
             typ: name,
             constructor: case,
         }
+    }
+
+    fn fold_unit_type(&mut self) -> Typ {
+        Typ::Unit
+    }
+
+    fn fold_name_type(&mut self, name: String) -> Typ {
+        Typ::Name(name)
+    }
+
+    fn fold_to_infere_type(&mut self) -> Typ {
+        Typ::ToInfere
+    }
+
+    fn fold_poly_type(&mut self, vars: Vec<String>, typ: Typ) -> Typ {
+        fold_poly_type(self, vars, typ)
+    }
+
+    fn fold_application_type(&mut self, callee: Typ, args: Vec<Typ>) -> Typ {
+        fold_application_type(self, callee, args)
+    }
+
+    fn fold_function_type(&mut self, generics: Vec<String>, args: Vec<Typ>, ret: Typ) -> Typ {
+        fold_function_type(self, generics, args, ret)
+    }
+
+    fn fold_tuple_type(&mut self, fields: Vec<Typ>) -> Typ {
+        fold_tuple_type(self, fields)
+    }
+
+    fn fold_array_type(&mut self, typ: Typ) -> Typ {
+        fold_array_type(self, typ)
     }
 }
 
@@ -586,10 +618,59 @@ pub fn fold_adt_tuple_constructor(
     }
 }
 
-fn fold_anon_struct_pattern(folder: &mut impl Folder, fields: HashMap<String, Pattern>) -> Pattern {
+pub fn fold_anon_struct_pattern(folder: &mut impl Folder, fields: HashMap<String, Pattern>) -> Pattern {
     let mut new_fields = HashMap::new();
     for (name, field) in fields {
         new_fields.insert(name, folder.fold_pattern(field));
     }
     Pattern::AnonStruct { fields: new_fields }
+}
+
+pub fn fold_type(folder: &mut impl Folder, typ: Typ) -> Typ {
+    match typ {
+        Typ::Unit => folder.fold_unit_type(),
+        Typ::Name(name) => folder.fold_name_type(name),
+        Typ::Function {
+            generics,
+            args,
+            ret,
+        } => folder.fold_function_type(generics, args, *ret),
+        Typ::Tuple(fields) => folder.fold_tuple_type(fields),
+        Typ::Array(inner) => folder.fold_array_type(*inner),
+        Typ::ToInfere => folder.fold_to_infere_type(),
+        Typ::Poly(vars, t) => folder.fold_poly_type(vars, *t),
+        Typ::Application { callee, args } => folder.fold_application_type(*callee, args),
+    }
+}
+
+pub fn fold_array_type(folder: &mut impl Folder, typ: Typ) -> Typ {
+    Typ::Array(Box::new(folder.fold_typ(typ)))
+}
+
+pub fn fold_function_type(
+    folder: &mut impl Folder,
+    generics: Vec<String>,
+    args: Vec<Typ>,
+    ret: Typ,
+) -> Typ {
+    Typ::Function {
+        generics,
+        args: args.into_iter().map(|t| folder.fold_typ(t)).collect(),
+        ret: Box::new(folder.fold_typ(ret)),
+    }
+}
+
+pub fn fold_poly_type(folder: &mut impl Folder, vars: Vec<String>, typ: Typ) -> Typ {
+    Typ::Poly(vars, Box::new(folder.fold_typ(typ)))
+}
+
+pub fn fold_application_type(folder: &mut impl Folder, callee: Typ, args: Vec<Typ>) -> Typ {
+    Typ::Application {
+        callee: Box::new(folder.fold_typ(callee)),
+        args: args.into_iter().map(|t| folder.fold_typ(t)).collect(),
+    }
+}
+
+pub fn fold_tuple_type(folder: &mut impl Folder, fields: Vec<Typ>) -> Typ {
+    Typ::Tuple(fields.into_iter().map(|t| folder.fold_typ(t)).collect())
 }

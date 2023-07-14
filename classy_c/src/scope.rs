@@ -45,7 +45,7 @@ where
     }
 
     pub fn position(&self, key: &K) -> Option<usize> {
-        for (i, scope) in self.stack.iter().enumerate().rev() {
+        for (i, scope) in self.stack.iter().rev().enumerate() {
             if scope.contains_key(key) {
                 return Some(i);
             }
@@ -69,5 +69,9 @@ where
 
     pub fn curr_scope_len(&self) -> usize {
         self.stack.last().unwrap().len()
+    }
+
+    pub fn contains(&self, key: &K) -> bool {
+        self.stack.iter().any(|s| s.contains_key(key))
     }
 }

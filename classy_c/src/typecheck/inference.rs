@@ -21,7 +21,7 @@ pub type TypeEnv = HashMap<usize, Type>;
 
 pub fn run(tctx: &mut TypCtx, ast: &ast::Program) -> TypeEnv {
     tctx.remove_to_infere_type();
-    let cons = Inference::infer_types(tctx, ast);
+    let mut cons = Inference::infer_types(tctx, ast);
 
     println!("{}", tctx.debug_string());
     // let mut substs = HashMap::new();
@@ -42,6 +42,7 @@ pub fn run(tctx: &mut TypCtx, ast: &ast::Program) -> TypeEnv {
     for (id, typ) in cons.env.iter() {
         println!("{} -> {:?}", id, typ);
     }
+    remove_aliases_in_env(&mut cons.env, tctx);
     cons.env
 }
 
@@ -810,6 +811,15 @@ impl TypeFolder for ReplaceInferTypes {
         let id = self.next_id;
         self.next_id += 1;
         Type::Fresh(id)
+    }
+}
+
+fn remove_aliases_in_env(env: &mut HashMap<usize, Type>, tctx: &TypCtx) {
+    for typ in env.values_mut() {
+        if let Type::Alias(for_type) = typ {
+            let resolved = tctx.resolve_alias(*for_type);
+            *typ = resolved;
+        }
     }
 }
 
