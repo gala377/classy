@@ -42,11 +42,11 @@ impl BumpAllocator {
         unsafe {
             let ptr = free.as_ptr().addr();
             let Some(ptr) = ptr.checked_add(align - 1) else {
-                return Ptr::null()
+                return Ptr::null();
             };
             let aligned = ptr & !(align - 1);
             let Some(ptr) = aligned.checked_add(size) else {
-                return Ptr::null()
+                return Ptr::null();
             };
             if ptr > end.as_ptr().addr() {
                 return Ptr::null();

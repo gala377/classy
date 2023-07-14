@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use crate::{
     scope::Scope,
     syntax::ast::{self, Folder},

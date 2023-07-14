@@ -3,10 +3,10 @@ use crate::{syntax::ast, typecheck::type_context::TypCtx};
 pub mod assign_expr_id;
 pub mod func_to_struct_literal;
 pub mod gather_runtime_functions;
+pub mod implicit_forall;
 pub mod order_functions;
 pub mod promote_local_types;
 pub mod verify_lvalues;
-pub mod implicit_forall;
 
 pub trait AstPass {
     fn run(&mut self, ast: ast::Program) -> ast::Program;

@@ -958,7 +958,6 @@ impl<'source> Parser<'source> {
         }))
     }
 
-
     fn parse_pattern(&mut self) -> ParseRes<ast::Pattern> {
         let beg = self.curr_pos();
         let tok = self.lexer.current().typ.clone();

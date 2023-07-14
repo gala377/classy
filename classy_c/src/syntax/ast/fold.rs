@@ -618,7 +618,10 @@ pub fn fold_adt_tuple_constructor(
     }
 }
 
-pub fn fold_anon_struct_pattern(folder: &mut impl Folder, fields: HashMap<String, Pattern>) -> Pattern {
+pub fn fold_anon_struct_pattern(
+    folder: &mut impl Folder,
+    fields: HashMap<String, Pattern>,
+) -> Pattern {
     let mut new_fields = HashMap::new();
     for (name, field) in fields {
         new_fields.insert(name, folder.fold_pattern(field));

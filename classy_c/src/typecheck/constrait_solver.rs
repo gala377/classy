@@ -95,7 +95,11 @@ impl<'ctx> ConstraintSolver<'ctx> {
                     Type::Alias(id) => self.tctx.resolve_alias(*id),
                     t => t.clone(),
                 };
-                let Type::Scheme { prefex, typ: scheme_t } = app_t else {
+                let Type::Scheme {
+                    prefex,
+                    typ: scheme_t,
+                } = app_t
+                else {
                     panic!("Expected a scheme type got {app_t:?}");
                 };
                 assert!(prefex.len() == args.len());
@@ -167,8 +171,8 @@ impl<'ctx> ConstraintSolver<'ctx> {
                 of_type,
             } => {
                 let Type::Struct { fields, .. } = self.tctx.resolve_alias(id) else {
-                        panic!("Expected a struct type got");
-                    };
+                    panic!("Expected a struct type got");
+                };
                 let f = fields
                     .iter()
                     .find(|(f, _)| f == &field)
@@ -185,8 +189,8 @@ impl<'ctx> ConstraintSolver<'ctx> {
                     panic!("Cannot unify case {case} with {name}");
                 }
                 let Type::Struct { fields: pat_f, .. } = of_type else {
-                        panic!("Expected a struct type in pattern got {of_type:?}");
-                    };
+                    panic!("Expected a struct type in pattern got {of_type:?}");
+                };
                 for (fname, ftyp) in pat_f {
                     constraints.push_back(Constraint::HasField {
                         t: Type::Struct {
@@ -274,9 +278,13 @@ impl<'ctx> ConstraintSolver<'ctx> {
                     Type::Alias(id) => self.tctx.resolve_alias(*id),
                     t => t.clone(),
                 };
-                let Type::Scheme { prefex, typ: scheme_t } = app_t else {
-                        panic!("Expected a scheme type got {app_t:?}");
-                    };
+                let Type::Scheme {
+                    prefex,
+                    typ: scheme_t,
+                } = app_t
+                else {
+                    panic!("Expected a scheme type got {app_t:?}");
+                };
                 assert!(prefex.len() == args.len());
                 let instantiated = instance(self.tctx, args, *scheme_t);
                 constraints.push_back(Constraint::HasCase {

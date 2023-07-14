@@ -128,8 +128,11 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
         let mut user_classes = UserClasses::new();
         for (name, tid) in names {
             let str_instance = self.intern_and_allocte_static_string(&name);
-            let Some(Type::Struct{ fields, .. }) = self.instance_until_struct(tctx, tid) else {
-                println!("Linking of {:?} skipped", tctx.definitions.get(&tid).unwrap());
+            let Some(Type::Struct { fields, .. }) = self.instance_until_struct(tctx, tid) else {
+                println!(
+                    "Linking of {:?} skipped",
+                    tctx.definitions.get(&tid).unwrap()
+                );
                 continue;
             };
             println!("Linking of struct {name}");

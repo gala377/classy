@@ -74,7 +74,7 @@ fn main() {
                 @runtime @empty 
                 print: (String) -> ()
                 @runtime @empty
-                header_data: forall a => (a) -> Int
+                header_data: (a) -> Int
                 @runtime @empty
                 itos: (Int) -> String
                 @runtime @empty
@@ -86,7 +86,7 @@ fn main() {
                 @runtime @empty
                 str_from_bytes: ([Byte]) -> String
                 @runtime @empty
-                class_name: forall a => (a) -> String
+                class_name: (a) -> String
 
                 type Option(a) {
                     Some(a)

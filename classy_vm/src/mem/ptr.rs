@@ -34,9 +34,7 @@ impl<T> Ptr<T> {
     /// No typechecking is done so user has to ensure
     /// That T is castable to U.
     pub unsafe fn cast<U>(&self) -> Ptr<U> {
-        let Some(ptr) = self.0 else {
-            return Ptr(None)
-        };
+        let Some(ptr) = self.0 else { return Ptr(None) };
         assert!(
             (ptr.as_ptr() as usize) % std::mem::align_of::<U>() == 0,
             "cannot cast pointer to type {} because the aligment is mismatched",

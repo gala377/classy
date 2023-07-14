@@ -88,7 +88,7 @@ pub trait ObjectAllocator {
         let mut header = Header::for_class(meta_class, fields.len());
         self.adjust_header(&mut header);
         let Some(ptr) = allocation.inner() else {
-            return std::ptr::null_mut()
+            return std::ptr::null_mut();
         };
         unsafe {
             let header_ptr = ptr.as_ptr() as *mut Header;
@@ -111,7 +111,7 @@ pub trait ObjectAllocator {
         }
         unsafe {
             let Some(ptr) = buff.inner() else {
-                return buff.cast()
+                return buff.cast();
             };
             std::ptr::copy_nonoverlapping(
                 val.as_ptr(),
@@ -126,7 +126,7 @@ pub trait ObjectAllocator {
         let mut header = Header::for_instance(cls);
         self.adjust_header(&mut header);
         let Some(ptr) = allocation.inner() else {
-            return std::ptr::null_mut()
+            return std::ptr::null_mut();
         };
         unsafe {
             let header_ptr = ptr.as_ptr() as *mut Header;
@@ -146,7 +146,7 @@ pub trait ObjectAllocator {
         let mut header = Header::for_array(array_cls, size);
         self.adjust_header(&mut header);
         let Some(ptr) = allocation.inner() else {
-            return std::ptr::null_mut()
+            return std::ptr::null_mut();
         };
         unsafe {
             let header_ptr = ptr.as_ptr() as *mut Header;

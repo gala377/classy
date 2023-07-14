@@ -360,7 +360,10 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 let lhs_id = lhs.id;
                 let val = self.emit_expr(lhs);
                 let Type::Array(inner_t) = self.env.get(&lhs_id).unwrap() else {
-                    panic!("Should be an array got {:?}", self.env.get(&lhs_id).unwrap());
+                    panic!(
+                        "Should be an array got {:?}",
+                        self.env.get(&lhs_id).unwrap()
+                    );
                 };
                 let index = self.emit_expr(index);
                 let res = self.new_temporary(match inner_t.is_ref() {
