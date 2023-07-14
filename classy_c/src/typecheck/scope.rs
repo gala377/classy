@@ -1,10 +1,11 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use super::{r#type::Type, type_context::TypCtx};
+use super::{r#type::Type, type_context::{TypCtx, TypeId}};
 
 pub struct Scope {
     resolved_types: HashMap<String, Type>,
     resolved_vars: HashMap<String, Type>,
+    type_ids: HashMap<usize, Type>,
     parent: Option<Rc<RefCell<Scope>>>,
 }
 
@@ -33,6 +34,7 @@ impl Scope {
         Self {
             resolved_types,
             resolved_vars,
+            type_ids: type_ctx.definitions.clone(),
             parent: None,
         }
     }
@@ -41,6 +43,7 @@ impl Scope {
         Rc::new(RefCell::new(Self {
             resolved_types: HashMap::new(),
             resolved_vars: HashMap::new(),
+            type_ids: HashMap::new(),
             parent: Some(parent),
         }))
     }
@@ -63,5 +66,13 @@ impl Scope {
 
     pub fn add_variable(&mut self, name: &str, typ: Type) {
         self.resolved_vars.insert(name.to_owned(), typ);
+    }
+
+    pub fn resolve_alias(&self, for_type: TypeId) -> Option<Type> {
+        self.type_ids.get(&for_type).cloned().or_else(|| {
+            self.parent
+                .as_ref()
+                .and_then(|parent| parent.borrow().resolve_alias(for_type))
+        })
     }
 }

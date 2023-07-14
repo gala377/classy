@@ -367,7 +367,7 @@ impl Inference {
                 );
                 let name = strct.0[0].clone();
                 let strct_t = self.scope.borrow().lookup_type(&name).unwrap();
-                let Some(fields) = extract_fields(self, strct_t.clone(), ret_t.clone(), true) else {
+                let Some(fields) = self.extract_fields(strct_t.clone(), ret_t.clone(), true) else {
                     panic!("expected truct type, got {strct_t:?}")
                 };
                 let args_t = values
@@ -725,59 +725,60 @@ impl Inference {
             ast::Typ::ToInfere => panic!("ToInfer types should not be present when typechecking"),
         }
     }
-}
 
-fn extract_fields(
-    this: &mut Inference,
-    t: Type,
-    ret_t: Type,
-    push_constraint: bool,
-) -> Option<Vec<(String, Type)>> {
-    match t {
-        Type::Struct { def, fields } => {
-            if push_constraint {
-                this.constraints.push(Constraint::Eq(
-                    ret_t.clone(),
-                    Type::Struct {
-                        def,
-                        fields: fields.clone(),
-                    },
-                ));
+    fn extract_fields(
+        &mut self,
+        t: Type,
+        ret_t: Type,
+        push_constraint: bool,
+    ) -> Option<Vec<(String, Type)>> {
+        match t {
+            Type::Struct { def, fields } => {
+                if push_constraint {
+                    self.constraints.push(Constraint::Eq(
+                        ret_t.clone(),
+                        Type::Struct {
+                            def,
+                            fields: fields.clone(),
+                        },
+                    ));
+                }
+                Some(fields)
             }
-            Some(fields)
-        }
-        Type::Scheme { prefex, typ } => {
-            if push_constraint {
-                let args = prefex.iter().map(|_| this.fresh_type()).collect();
-                this.constraints.push(Constraint::Eq(
-                    ret_t.clone(),
-                    Type::App {
-                        typ: Box::new(Type::Scheme {
-                            prefex,
+            Type::Scheme { prefex, typ } => {
+                if push_constraint {
+                    let args = prefex.iter().map(|_| self.fresh_type()).collect();
+                    self.constraints.push(Constraint::Eq(
+                        ret_t.clone(),
+                        Type::App {
+                            typ: Box::new(Type::Scheme {
+                                prefex,
+                                typ: typ.clone(),
+                            }),
+                            args,
+                        },
+                    ));
+                }
+                self.extract_fields(*typ, ret_t, false)
+            }
+            Type::Alias(for_type) => {
+                let resolved = self.scope.borrow().resolve_alias(for_type)?;
+                self.extract_fields(resolved, ret_t, push_constraint)
+            }
+            Type::App { typ, args } => {
+                if push_constraint {
+                    self.constraints.push(Constraint::Eq(
+                        ret_t.clone(),
+                        Type::App {
                             typ: typ.clone(),
-                        }),
-                        args,
-                    },
-                ));
+                            args,
+                        },
+                    ));
+                }
+                self.extract_fields(*typ, ret_t, false)
             }
-            extract_fields(this,  *typ, ret_t, false)
+            _ => None,
         }
-        Type::Alias(_) => {
-            panic!("Cannot extract fields from alias type");
-        }
-        Type::App { typ, args } => {
-            if push_constraint {
-                this.constraints.push(Constraint::Eq(
-                    ret_t.clone(),
-                    Type::App {
-                        typ: typ.clone(),
-                        args,
-                    },
-                ));
-            }
-            extract_fields(this,  *typ, ret_t, false)
-        }
-        _ => None,
     }
 }
 
