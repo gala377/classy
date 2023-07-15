@@ -676,6 +676,7 @@ impl Inference {
             ast::Pattern::Bool(_) => Type::Bool,
         }
     }
+
     fn fresh_type(&mut self) -> Type {
         let var = self.next_var;
         self.next_var += 1;
