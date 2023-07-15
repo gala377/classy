@@ -94,7 +94,7 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
         );
         for (name, _) in &body {
             assert!(
-                fields.iter().any(|(n, _)| &n == &name),
+                fields.iter().any(|(n, _)| n == name),
                 "struct {name} syntax has unknown field: {}",
                 name
             );
@@ -200,7 +200,7 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
                 );
                 for (name, _) in &body {
                     assert!(
-                        fields.iter().any(|(n, _)| &n == &name),
+                        fields.iter().any(|(n, _)| n == name),
                         "struct {name} syntax has unknown field: {}",
                         name
                     );

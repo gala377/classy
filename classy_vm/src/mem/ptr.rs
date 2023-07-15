@@ -65,7 +65,7 @@ impl<T> Ptr<T> {
 
 impl<T> Clone for Ptr<T> {
     fn clone(&self) -> Self {
-        Self(self.0)
+        *self
     }
 }
 
@@ -144,7 +144,7 @@ impl<T> NonNullPtr<T> {
 
 impl<T> Clone for NonNullPtr<T> {
     fn clone(&self) -> Self {
-        Self(self.0)
+        *self
     }
 }
 
