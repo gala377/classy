@@ -331,6 +331,12 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                     panic!("Constructor {constructor} not found");
                 };
                 assert!(matches!(ctyp, Type::Tuple(_)), "invariant");
+                self.current_block.push(Instruction::AllocCase {
+                    res: adt_address.clone(),
+                    size: args.len(),
+                    case: cpos,
+                    typ: tid,
+                });
                 for (offset, expr) in args.iter().enumerate() {
                     let expr_addr = self.emit_expr(expr);
                     self.current_block.push(Instruction::IndexSet {
@@ -339,12 +345,6 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                         value: expr_addr,
                     })
                 }
-                self.current_block.push(Instruction::AllocCase {
-                    res: adt_address.clone(),
-                    size: args.len(),
-                    case: cpos,
-                    typ: tid,
-                });
                 adt_address
             }
             ast::ExprKind::AdtStructConstructor {
@@ -370,6 +370,12 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 };
                 assert!(fields_t.len() == fields.len(), "invariant");
                 let fields_expr: HashMap<_, _> = fields.iter().cloned().collect();
+                self.current_block.push(Instruction::AllocCase {
+                    res: adt_address.clone(),
+                    size: fields.len(),
+                    case: cpos,
+                    typ: tid,
+                });
                 for (offset, (name, _)) in fields_t.iter().enumerate() {
                     let expr = &fields_expr[name];
                     let expr_addr = self.emit_expr(expr);
@@ -379,12 +385,6 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                         value: expr_addr,
                     })
                 }
-                self.current_block.push(Instruction::AllocCase {
-                    res: adt_address.clone(),
-                    size: fields.len(),
-                    case: cpos,
-                    typ: tid,
-                });
                 adt_address
             }
             ast::ExprKind::While { cond, body } => {

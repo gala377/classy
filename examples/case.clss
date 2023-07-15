@@ -1,0 +1,20 @@
+
+
+type Option(a) {
+    Some(a)
+    None
+}
+
+type Foo {
+    Error { msg: String, cause: String }
+    Nothing
+}
+
+main {
+    let a = Option.Some("hello")
+    let b = Option.None
+    let c = Foo.Error { 
+        cause = "I don't know" 
+        msg = "hello"
+    }
+}
