@@ -511,7 +511,7 @@ impl Inference {
             } => {
                 let ret = self.fresh_type();
                 self.env.insert(id, ret.clone());
-                let t = self.scope.borrow().lookup_type(&typ).unwrap();
+                let t = self.scope.borrow().lookup_type(typ).unwrap();
                 self.constraints.push(Constraint::Eq(ret.clone(), t));
                 let args_t = args
                     .iter()
@@ -531,7 +531,7 @@ impl Inference {
             } => {
                 let ret = self.fresh_type();
                 self.env.insert(id, ret.clone());
-                let t = self.scope.borrow().lookup_type(&typ).unwrap();
+                let t = self.scope.borrow().lookup_type(typ).unwrap();
                 self.constraints.push(Constraint::Eq(ret.clone(), t));
                 let fields_t = fields
                     .iter()
@@ -553,7 +553,7 @@ impl Inference {
             ast::ExprKind::AdtUnitConstructor { typ, constructor } => {
                 let ret = self.fresh_type();
                 self.env.insert(id, ret.clone());
-                let t = self.scope.borrow().lookup_type(&typ).unwrap();
+                let t = self.scope.borrow().lookup_type(typ).unwrap();
                 self.constraints.push(Constraint::Eq(ret.clone(), t));
                 self.constraints.push(Constraint::HasCase {
                     t: ret.clone(),

@@ -984,7 +984,7 @@ impl<'source> Parser<'source> {
             }
             TokenType::LParen => {
                 self.lexer.advance();
-                if let Ok(_) = self.match_token(TokenType::RParen) {
+                if self.match_token(TokenType::RParen).is_ok() {
                     return Ok(ast::Pattern::Unit);
                 }
                 let inner = self.parse_delimited(Self::parse_pattern, TokenType::Comma);
@@ -1007,7 +1007,7 @@ impl<'source> Parser<'source> {
             }
             TokenType::Identifier(name) => {
                 self.lexer.advance();
-                if let Ok(_) = self.match_token(TokenType::LParen) {
+                if self.match_token(TokenType::LParen).is_ok() {
                     let inner = self.parse_delimited(Self::parse_pattern, TokenType::Comma);
                     let _ = self.expect_token(TokenType::RParen);
                     return Ok(ast::Pattern::TupleStruct {
@@ -1015,7 +1015,7 @@ impl<'source> Parser<'source> {
                         fields: inner,
                     });
                 }
-                if let Ok(_) = self.match_token(TokenType::LBrace) {
+                if self.match_token(TokenType::LBrace).is_ok() {
                     let fields = self.parse_delimited(Self::parse_pattern_field, TokenType::Comma);
                     let _ = self.expect_token(TokenType::RBrace);
                     return Ok(ast::Pattern::Struct {
@@ -1023,7 +1023,7 @@ impl<'source> Parser<'source> {
                         fields: fields.into_iter().collect(),
                     });
                 }
-                if let Ok(_) = self.match_token(TokenType::Dot) {
+                if self.match_token(TokenType::Dot).is_ok() {
                     let case = self.parse_pattern()?;
                     if !matches!(
                         case,

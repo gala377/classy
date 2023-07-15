@@ -124,7 +124,7 @@ unsafe fn copy_to_space(
                 .as_ptr()
         }
     };
-    std::ptr::copy_nonoverlapping(header.as_ptr() as *const u8, ptr as *mut u8, size);
+    std::ptr::copy_nonoverlapping(header.as_ptr() as *const u8, ptr, size);
     let new_ptr = ptr.cast::<Header>().add(1);
     /*
     We are giving away strict provenance in the name of memory. We need to expose the address

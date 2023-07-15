@@ -83,7 +83,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
             Type::Function { args, .. } => args.clone(),
             Type::Scheme { typ, .. } => self.get_function_args(*typ.clone()),
             Type::App { typ, args } => {
-                self.get_function_args(instance(&self.tctx, args.clone(), *typ.clone()))
+                self.get_function_args(instance(self.tctx, args.clone(), *typ.clone()))
             }
             Type::Alias(for_type) => self.get_function_args(self.tctx.resolve_alias(for_type)),
             _ => panic!("Should be a function"),
@@ -102,8 +102,8 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 _ => panic!("expected a struct type"),
             }
         }
-        let t = self.tctx.get_type(&name).unwrap();
-        get_struct_type_impl(&self.tctx, t.clone())
+        let t = self.tctx.get_type(name).unwrap();
+        get_struct_type_impl(self.tctx, t.clone())
     }
 
     fn get_adt_type(&self, name: &str) -> (DefId, Vec<(String, Type)>) {
@@ -118,8 +118,8 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 _ => panic!("expected a struct type"),
             }
         }
-        let t = self.tctx.get_type(&name).unwrap();
-        get_adt_type_impl(&self.tctx, t.clone())
+        let t = self.tctx.get_type(name).unwrap();
+        get_adt_type_impl(self.tctx, t.clone())
     }
 
     pub fn emit_fn(mut self, func: &ast::FunctionDefinition) -> IrFunction {

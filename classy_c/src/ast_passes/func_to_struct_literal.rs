@@ -33,7 +33,7 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
                 kwargs,
             );
         };
-        let Some(fields) = resolve_fields(&self.tctx, &typ) else {
+        let Some(fields) = resolve_fields(self.tctx, &typ) else {
             println!("Function call {name} is not a struct, so no struct");
             return ast::fold::fold_function_call(
                 self,
@@ -94,7 +94,7 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
         );
         for (name, _) in &body {
             assert!(
-                fields.iter().find(|(n, _)| &n == &name).is_some(),
+                fields.iter().any(|(n, _)| &n == &name),
                 "struct {name} syntax has unknown field: {}",
                 name
             );
@@ -133,7 +133,7 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
                 kwargs,
             );
         };
-        let Some(t) = resolve_case(&self.tctx, case, &t) else {
+        let Some(t) = resolve_case(self.tctx, case, &t) else {
             return ast::fold::fold_function_call(
                 self,
                 ast::Expr {
@@ -200,7 +200,7 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
                 );
                 for (name, _) in &body {
                     assert!(
-                        fields.iter().find(|(n, _)| &n == &name).is_some(),
+                        fields.iter().any(|(n, _)| &n == &name),
                         "struct {name} syntax has unknown field: {}",
                         name
                     );
@@ -277,7 +277,7 @@ impl<'ctx> ast::fold::Folder for PromoteCallToStructLiteral<'ctx> {
                 field,
             );
         };
-        let Some(t) = resolve_case(&self.tctx, &field, &t) else {
+        let Some(t) = resolve_case(self.tctx, &field, &t) else {
             return ast::fold::fold_access(
                 self,
                 ast::Expr {

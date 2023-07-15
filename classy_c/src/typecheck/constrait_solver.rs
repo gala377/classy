@@ -154,7 +154,7 @@ impl<'ctx> ConstraintSolver<'ctx> {
                 let f = fields
                     .iter()
                     .find(|(f, _)| f == &field)
-                    .expect(&format!("field {field} does not exists on this struct"));
+                    .unwrap_or_else(|| panic!("field {field} does not exists on this struct"));
                 constraints.push_back(Constraint::Eq(f.1.clone(), of_type));
             }
             Constraint::HasField {
@@ -174,7 +174,7 @@ impl<'ctx> ConstraintSolver<'ctx> {
                 of_type,
             } => {
                 constraints.push_back(Constraint::HasField {
-                    t: instance(&self.tctx, args, *typ),
+                    t: instance(self.tctx, args, *typ),
                     field,
                     of_type,
                 });
@@ -225,18 +225,16 @@ impl<'ctx> ConstraintSolver<'ctx> {
                 let c = constructors
                     .iter()
                     .find(|(c, _)| c == &case)
-                    .expect(&format!("{case} case does not exists, constraint not met"));
+                    .unwrap_or_else(|| panic!("{case} case does not exists, constraint not met"));
                 match (c.1.clone(), of_type) {
                     (Type::Struct { fields: fs_1, .. }, Type::Struct { fields: fs_2, .. }) => {
                         for (n1, t1) in fs_1 {
                             let t2 = fs_2
                                 .iter()
                                 .find(|(n2, _)| &n1 == n2)
-                                .expect(&format!(
-                                    "Field {n1} does not exists in {case} case",
+                                .unwrap_or_else(|| panic!("Field {n1} does not exists in {case} case",
                                     n1 = n1,
-                                    case = case
-                                ))
+                                    case = case))
                                 .1
                                 .clone();
                             constraints.push_back(Constraint::Eq(t1.clone(), t2.clone()));
@@ -300,7 +298,7 @@ impl<'ctx> ConstraintSolver<'ctx> {
                 let t = self
                     .tctx
                     .get_type(&case)
-                    .expect(&format!("Could not find type {case}"));
+                    .unwrap_or_else(|| panic!("Could not find type {case}"));
                 for (fname, ftyp) in fields {
                     constraints.push_back(Constraint::HasField {
                         t: Type::Fresh(id),

@@ -41,7 +41,7 @@ impl ast::Folder for ImplicitForall {
     ) -> ast::FunctionDefinition {
         self.prefex.clear();
         let new_t = self.fold_typ(typ);
-        let new_t = if self.prefex.len() > 0 {
+        let new_t = if !self.prefex.is_empty() {
             match new_t {
                 ast::Typ::Function {
                     generics,
@@ -52,12 +52,12 @@ impl ast::Folder for ImplicitForall {
                         panic!("not all generics mentioned in the forall section")
                     }
                     ast::Typ::Function {
-                        generics: self.prefex.iter().cloned().collect(),
+                        generics: self.prefex.to_vec(),
                         args,
                         ret,
                     }
                 }
-                t => ast::Typ::Poly(self.prefex.iter().cloned().collect(), Box::new(t)),
+                t => ast::Typ::Poly(self.prefex.to_vec(), Box::new(t)),
             }
         } else {
             new_t
