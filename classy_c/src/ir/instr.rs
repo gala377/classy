@@ -133,6 +133,13 @@ pub enum Instruction {
         size: usize,
         typ: TypeId,
     },
+    // Allocate a new ADT case
+    AllocCase {
+        res: Address,
+        size: usize,
+        case: usize,
+        typ: TypeId,
+    },
     AllocArray {
         res: Address,
         elem_size: usize,
@@ -208,6 +215,12 @@ impl Debug for Instruction {
                 "{res:?} = {}[count={count:?}; is_ref={is_elem_ref}, elem_size={elem_size}; elem_align={elem_align}]",
                 "array".bold().green()
             ),
+            Self::AllocCase { res, size, case, typ } => write!(
+                f,
+                "{res:?} = {}[{size}] {} {case} {} {typ}",
+                "alloc_case".bold().green(),
+                "case".bold().green(),
+                "type".bold().green()),
             Self::Return(arg0) => write!(f, "{} {arg0:?}", "return".bold().green()),
         }
     }

@@ -106,6 +106,22 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
         get_struct_type_impl(&self.tctx, t.clone())
     }
 
+    fn get_adt_type(&self, name: &str) -> (DefId, Vec<(String, Type)>) {
+        fn get_adt_type_impl(tctx: &TypCtx, t: Type) -> (DefId, Vec<(String, Type)>) {
+            match t {
+                Type::ADT { def, constructors } => (def, constructors.clone()),
+                Type::Scheme { typ, .. } => get_adt_type_impl(tctx, *typ.clone()),
+                Type::App { typ, args } => {
+                    get_adt_type_impl(tctx, instance(tctx, args.clone(), *typ.clone()))
+                }
+                Type::Alias(for_type) => get_adt_type_impl(tctx, tctx.resolve_alias(for_type)),
+                _ => panic!("expected a struct type"),
+            }
+        }
+        let t = self.tctx.get_type(&name).unwrap();
+        get_adt_type_impl(&self.tctx, t.clone())
+    }
+
     pub fn emit_fn(mut self, func: &ast::FunctionDefinition) -> IrFunction {
         let func_name = func.name.clone();
         let func_t_id = self.tctx.variables.get(&func_name).unwrap();
@@ -278,6 +294,98 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                     })
                 }
                 struct_address
+            }
+            ast::ExprKind::AdtUnitConstructor { typ, constructor } => {
+                let (def, cons) = self.get_adt_type(typ);
+                let tid = self.tctx.def_id_to_typ_id(def);
+                let adt_address = self.new_temporary(IsRef::Ref);
+                let Some((cpos, (_, ctyp))) = cons
+                    .iter()
+                    .enumerate()
+                    .find(|(_, (name, _))| name == constructor)
+                else {
+                    panic!("Constructor {constructor} not found");
+                };
+                assert!(ctyp == &Type::Unit, "invariant");
+                self.current_block.push(Instruction::AllocCase {
+                    res: adt_address.clone(),
+                    size: 0,
+                    case: cpos,
+                    typ: tid,
+                });
+                adt_address
+            }
+            ast::ExprKind::AdtTupleConstructor {
+                typ,
+                constructor,
+                args,
+            } => {
+                let (def, cons) = self.get_adt_type(typ);
+                let tid = self.tctx.def_id_to_typ_id(def);
+                let adt_address = self.new_temporary(IsRef::Ref);
+                let Some((cpos, (_, ctyp))) = cons
+                    .iter()
+                    .enumerate()
+                    .find(|(_, (name, _))| name == constructor)
+                else {
+                    panic!("Constructor {constructor} not found");
+                };
+                assert!(matches!(ctyp, Type::Tuple(_)), "invariant");
+                for (offset, expr) in args.iter().enumerate() {
+                    let expr_addr = self.emit_expr(expr);
+                    self.current_block.push(Instruction::IndexSet {
+                        base: adt_address.clone(),
+                        offset: Address::ConstantInt(offset as isize),
+                        value: expr_addr,
+                    })
+                }
+                self.current_block.push(Instruction::AllocCase {
+                    res: adt_address.clone(),
+                    size: args.len(),
+                    case: cpos,
+                    typ: tid,
+                });
+                adt_address
+            }
+            ast::ExprKind::AdtStructConstructor {
+                typ,
+                constructor,
+                fields,
+            } => {
+                let (def, cons) = self.get_adt_type(typ);
+                let tid = self.tctx.def_id_to_typ_id(def);
+                let adt_address = self.new_temporary(IsRef::Ref);
+                let Some((cpos, (_, ctyp))) = cons
+                    .iter()
+                    .enumerate()
+                    .find(|(_, (name, _))| name == constructor)
+                else {
+                    panic!("Constructor {constructor} not found");
+                };
+                let Type::Struct {
+                    fields: fields_t, ..
+                } = ctyp
+                else {
+                    panic!("invariant")
+                };
+                assert!(fields_t.len() == fields.len(), "invariant");
+                let fields_expr: HashMap<_, _> = fields.iter().cloned().collect();
+                for (offset, (name, _)) in fields_t.iter().enumerate() {
+                    let expr = &fields_expr[name];
+                    let expr_addr = self.emit_expr(expr);
+                    self.current_block.push(Instruction::IndexSet {
+                        base: adt_address.clone(),
+                        offset: Address::ConstantInt(offset as isize),
+                        value: expr_addr,
+                    })
+                }
+                self.current_block.push(Instruction::AllocCase {
+                    res: adt_address.clone(),
+                    size: fields.len(),
+                    case: cpos,
+                    typ: tid,
+                });
+                adt_address
             }
             ast::ExprKind::While { cond, body } => {
                 let cond_label = self.new_label();

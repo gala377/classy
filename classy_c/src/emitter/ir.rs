@@ -119,6 +119,9 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
                 ir::Instruction::AllocArray { res, .. } => {
                     add_temp(tmps, res);
                 }
+                ir::Instruction::AllocCase { res, .. } => {
+                    add_temp(tmps, res);
+                }
                 ir::Instruction::Return(v) => {
                     add_temp(tmps, v);
                 }
@@ -358,6 +361,7 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
                     self.push_address(&mut code, v);
                     self.emit_instr(&mut code, OpCode::Return);
                 }
+                i => todo!("unimplemented {i:?}"),
             }
             index += 1;
         }
