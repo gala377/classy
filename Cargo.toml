@@ -4,3 +4,4 @@ members = [
     "classy_example",
     "classy_c",
 ]
+resolver = "2"

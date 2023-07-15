@@ -136,8 +136,16 @@ impl<'ctx> ConstraintSolver<'ctx> {
             }
             Constraint::Eq(Type::Generic(d1, i1), Type::Generic(d2, i2))
                 if d1 == d2 && i1 == i2 => {}
-            Constraint::Eq(Type::Scheme { prefex: p1, typ: t1 }, Type::Scheme { prefex: p2, typ: t2 })
-                if p1 == p2 && t1 == t2 => {}
+            Constraint::Eq(
+                Type::Scheme {
+                    prefex: p1,
+                    typ: t1,
+                },
+                Type::Scheme {
+                    prefex: p2,
+                    typ: t2,
+                },
+            ) if p1 == p2 && t1 == t2 => {}
             Constraint::HasField {
                 t: Type::Struct { fields, .. },
                 field,
