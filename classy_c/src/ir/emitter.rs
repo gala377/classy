@@ -545,6 +545,35 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
         match &pattern.kind {
             // name pattern always matches but adds a new binding to the current scope
             ast::PatternKind::Name(n) => {
+                if n.chars().take(1).all(|c| c.is_uppercase()) {
+                    let t = self.env.get(&id).unwrap();
+                    let constructor = self.get_constructors(t);
+                    let (cpos, ctyp) = constructor
+                        .iter()
+                        .enumerate()
+                        .find(|(_, (name, _))| name == n)
+                        .map(|(i, (_, t))| (i, t))
+                        .unwrap();
+                    assert!(matches!(ctyp, Type::Unit), "invariant");
+                    let val_case = self.new_temporary(IsRef::NoRef);
+                    self.current_block.push(Instruction::UnOpAssing(
+                        val_case.clone(),
+                        Op::HeaderData,
+                        to_match.clone(),
+                    ));
+                    let cond = self.new_temporary(IsRef::NoRef);
+                    self.current_block.push(Instruction::BinOpAssign(
+                        cond.clone(),
+                        val_case.clone(),
+                        Op::Eq,
+                        Address::ConstantInt(cpos as isize),
+                    ));
+                    self.current_block.push(Instruction::IfFalse {
+                        cond: cond.clone(),
+                        goto: next_label.clone(),
+                    });
+                    return;
+                }
                 self.add_to_scope(n, to_match);
             }
             ast::PatternKind::Tuple(patterns) => {

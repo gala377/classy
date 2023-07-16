@@ -27,6 +27,8 @@ main {
         Some(x) => {
             "is x"
         }
+        None => "is_none"
+        _ => "anything else"
     }
 }
 
