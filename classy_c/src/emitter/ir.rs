@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    mem::size_of,
+    mem::size_of, fmt::format,
 };
 
 use crate::{
@@ -355,6 +355,32 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
                     self.set_address(&mut code, res)
                         .map_err(|e| format!("line {index}, {debug_op:?} => {e}"))
                         .unwrap();
+                }
+                ir::Instruction::AllocCase { res, typ, case, .. } => {
+                    // alloc object
+                    self.export_stack_map(&mut code);
+                    self.emit_instr(&mut code, OpCode::AllocHeap);
+                    let name = self.type_ctx.get_name(typ).unwrap();
+                    let name = format!("{}@cons@{}", name, case);
+                    let id = self.constant_pool.add_entry(name.into());
+                    self.emit_word(&mut code, id as u64);
+                    self.stack_map_add_ref();
+                    // set header data to case
+                    self.set_address(&mut code, res.clone())
+                        .map_err(|e| format!("line {index}, {debug_op:?} => {e}"))
+                        .unwrap();
+                 
+                    self.push_address(&mut code, res.clone());
+                    
+                    let id = self.constant_pool.add_entry((case as isize).into());
+                    self.emit_instr(&mut code, OpCode::ConstLoadInteger);
+                    self.emit_word(&mut code, id as u64);
+                    self.emit_instr(&mut code, OpCode::SetOffsetNegative);
+                    self.emit_word(&mut code, 1);
+
+                    // One pop needed because set offset will pop both int and the object
+                    // we have just pushed
+                    self.stack_map_pop();
                 }
                 ir::Instruction::AllocArray {
                     res,

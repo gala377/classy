@@ -608,6 +608,18 @@ impl Thread {
                     }
                     instr += OpCode::SetOffset.argument_size();
                 }
+                OpCode::SetOffsetNegative => {
+                    instr += 1;
+                    let offset = read_word!();
+                    let value = pop!();
+                    let address = pop!();
+                    let address = address as *mut u64;
+                    unsafe {
+                        *address.sub(offset as usize) = value;
+                    }
+                    instr += OpCode::SetOffsetNegative.argument_size();
+                    
+                }
                 OpCode::PushOffsetDeref => {
                     instr += 1;
                     let offset = read_word!();
@@ -616,6 +628,21 @@ impl Thread {
                     let value = unsafe { address.add(offset as usize).read() };
                     push!(value);
                     instr += OpCode::PushOffsetDeref.argument_size();
+                }
+                OpCode::PushOffsetDerefNegative => {
+                    instr += 1;
+                    let offset = read_word!();
+                    let address = pop!();
+                    let address = address as *mut u64;
+                    let value = unsafe { address.sub(offset as usize).read() };
+                    push!(value);
+                    instr += OpCode::PushOffsetDerefNegative.argument_size();
+                }
+                OpCode::EqInteger => {
+                    instr += 1;
+                    let a = pop!();
+                    let b = pop!();
+                    push!(if a == b { 1 } else { 0 });
                 }
                 OpCode::PushUnit => {
                     push!(0);

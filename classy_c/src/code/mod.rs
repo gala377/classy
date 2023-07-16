@@ -124,12 +124,13 @@ pub enum OpCode {
     /// Same as push offset deref but the offset is read as negative.
     PushOffsetDerefNegative,
     /// Pop value from the top of the stack and also pop an address.
-    /// Then store the value at the address shifter by the offset.
+    /// Then store the value at the address shifted by the offset.
     ///
     /// Args:
     ///  - offset: Word
     SetOffset,
-
+    /// Same as set offset but the offset is read as negative.
+    SetOffsetNegative,
     /// Hach used to call a function defined in the vm by its symbol
     CallNative1,
     CallNative,
@@ -192,6 +193,7 @@ impl OpCode {
             OpCode::PushOffsetDeref => WORD,
             OpCode::PushOffsetDerefNegative => WORD,
             OpCode::SetOffset => WORD,
+            OpCode::SetOffsetNegative => WORD,
             OpCode::CallNative1 => WORD,
             OpCode::RuntimeCall => WORD,
             OpCode::AllocArray => WORD * 3,

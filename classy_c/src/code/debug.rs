@@ -147,6 +147,11 @@ pub fn debug_print_code(instrs: &Vec<u8>, cp: &constant_pool::ConstantPool) {
                 let i = read_word!();
                 ("push_offset_deref_neg", vec![i.to_string()])
             }
+            OpCode::SetOffsetNegative => {
+                index += 1;
+                let i = read_word!();
+                ("set_offset_neg", vec![i.to_string()])
+            }
             OpCode::SetOffset => {
                 index += 1;
                 let i = read_word!();
