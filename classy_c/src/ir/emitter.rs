@@ -561,7 +561,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                     self.current_block.push(Instruction::BinOpAssign(
                         cond.clone(),
                         val_case.clone(),
-                        Op::Eq,
+                        Op::IntEq,
                         Address::ConstantInt(cpos as isize),
                     ));
                     self.current_block.push(Instruction::IfFalse {
@@ -599,7 +599,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 self.current_block.push(Instruction::BinOpAssign(
                     len_cond.clone(),
                     arr_len.clone(),
-                    Op::Eq,
+                    Op::IntEq,
                     Address::ConstantInt(patterns.len() as isize),
                 ));
                 self.current_block.push(Instruction::IfFalse {
@@ -642,7 +642,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                         self.current_block.push(Instruction::BinOpAssign(
                             cond.clone(),
                             val_case.clone(),
-                            Op::Eq,
+                            Op::IntEq,
                             Address::ConstantInt(cpos as isize),
                         ));
                         self.current_block.push(Instruction::IfFalse {
@@ -694,7 +694,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 self.current_block.push(Instruction::BinOpAssign(
                     cond.clone(),
                     val_case.clone(),
-                    Op::Eq,
+                    Op::IntEq,
                     Address::ConstantInt(cpos as isize),
                 ));
                 self.current_block.push(Instruction::IfFalse {
@@ -766,7 +766,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 self.current_block.push(Instruction::BinOpAssign(
                     cond.clone(),
                     to_match,
-                    Op::Eq,
+                    Op::StringEq,
                     Address::ConstantString(s.clone()),
                 ));
                 self.current_block.push(Instruction::IfFalse {
@@ -779,7 +779,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 self.current_block.push(Instruction::BinOpAssign(
                     cond.clone(),
                     to_match,
-                    Op::Eq,
+                    Op::IntEq,
                     Address::ConstantInt(*i),
                 ));
                 self.current_block.push(Instruction::IfFalse {
@@ -792,7 +792,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 self.current_block.push(Instruction::BinOpAssign(
                     cond.clone(),
                     to_match,
-                    Op::Eq,
+                    Op::BoolEq,
                     Address::ConstantBool(*b),
                 ));
                 self.current_block.push(Instruction::IfFalse {

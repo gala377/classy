@@ -155,8 +155,25 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
             // TODO: remove later
             let debug_op = op.clone();
             match op {
-                ir::Instruction::BinOpAssign(_, _, _, _) => todo!(),
-                ir::Instruction::UnOpAssing(_, _, _) => todo!(),
+                ir::Instruction::BinOpAssign(res, l, ir::Op::IntEq | ir::Op::BoolEq, r) => {
+                    self.push_address(&mut code, l);
+                    self.push_address(&mut code, r);
+                    self.emit_instr(&mut code, OpCode::EqInteger);
+                    self.set_address(&mut code, res)
+                        .map_err(|e| format!("line {index}, {debug_op:?} => {e}"))
+                        .unwrap();
+                }
+                ir::Instruction::UnOpAssing(res, ir::Op::HeaderData, ptr) => {
+                    self.push_address(&mut code, ptr);
+                    // There is no need to pop or push anything to the gc map
+                    // as the set_address will pop the gc map already.
+                    // and no allocation can happen between the push and pop.
+                    self.emit_instr(&mut code, OpCode::PushOffsetDerefNegative);
+                    self.emit_word(&mut code, 1);
+                    self.set_address(&mut code, res)
+                        .map_err(|e| format!("line {index}, {debug_op:?} => {e}"))
+                        .unwrap();
+                },
                 ir::Instruction::CopyAssign(a1, a2) => {
                     self.push_address(&mut code, a2);
                     self.set_address(&mut code, a1)

@@ -30,6 +30,10 @@ pub fn debug_print_code(instrs: &Vec<u8>, cp: &constant_pool::ConstantPool) {
                 index += 1;
                 ("addi", vec![])
             }
+            OpCode::EqInteger => {
+                index += 1;
+                ("eqi", vec![])
+            }
             OpCode::AddFloat => {
                 index += 1;
                 ("addf", vec![])
@@ -137,6 +141,11 @@ pub fn debug_print_code(instrs: &Vec<u8>, cp: &constant_pool::ConstantPool) {
                 index += 1;
                 let i = read_word!();
                 ("push_offset_deref", vec![i.to_string()])
+            }
+            OpCode::PushOffsetDerefNegative => {
+                index += 1;
+                let i = read_word!();
+                ("push_offset_deref_neg", vec![i.to_string()])
             }
             OpCode::SetOffset => {
                 index += 1;

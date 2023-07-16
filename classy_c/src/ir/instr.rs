@@ -69,7 +69,10 @@ pub enum Op {
     FMul,
     FDiv,
     // Bool operations
-    Eq,
+    IntEq,
+    FloatEq,
+    StringEq,
+    BoolEq,
     Neq,
     GrEq,
     Gr,
@@ -231,7 +234,10 @@ impl Debug for Op {
             Self::FSub => write!(f, "-."),
             Self::FMul => write!(f, "*."),
             Self::FDiv => write!(f, "/."),
-            Self::Eq => write!(f, "{}", "==".bold().white()),
+            Self::BoolEq |
+            Self::FloatEq |
+            Self::StringEq |
+            Self::IntEq => write!(f, "{}", "==".bold().white()),
             Self::Neq => write!(f, "!="),
             Self::GrEq => write!(f, ">="),
             Self::Gr => write!(f, ">"),

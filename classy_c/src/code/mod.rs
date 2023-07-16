@@ -25,6 +25,9 @@ pub enum OpCode {
     /// and push the result on top of the stack.
     AddInteger,
     AddFloat,
+
+    /// Check if 2 integers on top of the stack are equal.
+    EqInteger,
     /// Load constant with the index following this instruction
     /// as a word. (Meaning push it on top of the stack)
     ///
@@ -118,6 +121,8 @@ pub enum OpCode {
     /// Args:
     ///  - offset: Word
     PushOffsetDeref,
+    /// Same as push offset deref but the offset is read as negative.
+    PushOffsetDerefNegative,
     /// Pop value from the top of the stack and also pop an address.
     /// Then store the value at the address shifter by the offset.
     ///
@@ -161,6 +166,7 @@ impl OpCode {
     pub fn argument_size(&self) -> usize {
         const WORD: usize = std::mem::size_of::<u64>();
         match self {
+            OpCode::EqInteger => 0,
             OpCode::AddInteger => 0,
             OpCode::AddFloat => 0,
             OpCode::ConstLoadInteger => WORD,
@@ -184,6 +190,7 @@ impl OpCode {
             OpCode::PushFalse => 0,
             OpCode::PushUnit => 0,
             OpCode::PushOffsetDeref => WORD,
+            OpCode::PushOffsetDerefNegative => WORD,
             OpCode::SetOffset => WORD,
             OpCode::CallNative1 => WORD,
             OpCode::RuntimeCall => WORD,
