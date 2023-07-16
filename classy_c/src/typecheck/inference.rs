@@ -566,9 +566,11 @@ impl Inference {
     }
 
     fn infer_in_pattern(&mut self, pattern: &ast::Pattern) -> Type {
-        match pattern {
-            ast::Pattern::Name(n) => {
+        let id = pattern.id;
+        match &pattern.kind {
+            ast::PatternKind::Name(n) => {
                 let typ = self.fresh_type();
+                self.env.insert(id, typ.clone());
                 if n.starts_with(char::is_uppercase) {
                     self.constraints.push(Constraint::HasCase {
                         t: typ.clone(),
@@ -580,7 +582,7 @@ impl Inference {
                 }
                 typ
             }
-            ast::Pattern::TypeSpecifier(tname, case) => {
+            ast::PatternKind::TypeSpecifier(tname, case) => {
                 let typ = self
                     .scope
                     .borrow()
@@ -588,10 +590,14 @@ impl Inference {
                     .expect("unknown type");
                 let case_t = self.infer_in_pattern(case);
                 self.constraints.push(Constraint::Eq(case_t, typ.clone()));
+
+                self.env.insert(id, typ.clone());
                 typ
             }
-            ast::Pattern::Tuple(inner) => {
+            ast::PatternKind::Tuple(inner) => {
                 let typ = self.fresh_type();
+
+                self.env.insert(id, typ.clone());
                 let inner_types = inner
                     .iter()
                     .map(|p| self.infer_in_pattern(p))
@@ -600,8 +606,10 @@ impl Inference {
                     .push(Constraint::Eq(typ.clone(), Type::Tuple(inner_types)));
                 typ
             }
-            ast::Pattern::Struct { strct, fields } => {
+            ast::PatternKind::Struct { strct, fields } => {
                 let typ = self.fresh_type();
+
+                self.env.insert(id, typ.clone());
                 let inner_types = fields
                     .iter()
                     .map(|(n, p)| {
@@ -619,8 +627,10 @@ impl Inference {
                 });
                 typ
             }
-            ast::Pattern::AnonStruct { fields } => {
+            ast::PatternKind::AnonStruct { fields } => {
                 let typ = self.fresh_type();
+
+                self.env.insert(id, typ.clone());
                 let inner_types = fields
                     .iter()
                     .map(|(n, p)| {
@@ -637,8 +647,10 @@ impl Inference {
                 }
                 typ
             }
-            ast::Pattern::TupleStruct { strct, fields } => {
+            ast::PatternKind::TupleStruct { strct, fields } => {
                 let typ = self.fresh_type();
+
+                self.env.insert(id, typ.clone());
                 let inner_types = fields
                     .iter()
                     .map(|p| self.infer_in_pattern(p))
@@ -650,8 +662,9 @@ impl Inference {
                 });
                 typ
             }
-            ast::Pattern::Array(patterns) => {
+            ast::PatternKind::Array(patterns) => {
                 let typ = self.fresh_type();
+                self.env.insert(id, typ.clone());
                 let inner_types = patterns
                     .iter()
                     .map(|p| self.infer_in_pattern(p))
@@ -666,14 +679,28 @@ impl Inference {
                 ));
                 typ
             }
-            ast::Pattern::Rest(_) => {
+            ast::PatternKind::Rest(_) => {
                 todo!("Rest patterns are kinds hard as they mess up tuple types a bit")
             }
-            ast::Pattern::Wildcard => self.fresh_type(),
-            ast::Pattern::Unit => Type::Unit,
-            ast::Pattern::String(_) => Type::String,
-            ast::Pattern::Int(_) => Type::Int,
-            ast::Pattern::Bool(_) => Type::Bool,
+            ast::PatternKind::Wildcard => self.fresh_type(),
+            ast::PatternKind::Unit => {
+                self.env.insert(id, Type::Unit);
+                Type::Unit
+            }
+            ast::PatternKind::String(_) => {
+                self.env.insert(id, Type::String);
+                Type::String
+            },
+            ast::PatternKind::Int(_) => {
+                self.env.insert(id, Type::Int);
+                Type::Int
+            },
+
+            ast::PatternKind::Bool(_) => {
+                self.env.insert(id, Type::Bool);
+                Type::Bool
+            },
+
         }
     }
 

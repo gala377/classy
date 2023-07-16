@@ -210,7 +210,14 @@ pub enum ExprKind {
 
 #[derive(Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq))]
-pub enum Pattern {
+pub struct Pattern {
+    pub id: usize,
+    pub kind: PatternKind,
+}
+
+#[derive(Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq))]
+pub enum PatternKind {
     Name(String),
     Tuple(Vec<Pattern>),
     Struct {

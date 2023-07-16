@@ -968,82 +968,82 @@ impl<'source> Parser<'source> {
         match tok {
             TokenType::Integer(val) => {
                 self.lexer.advance();
-                Ok(ast::Pattern::Int(val))
+                Ok(mk_pattern(ast::PatternKind::Int(val)))
             }
             TokenType::True => {
                 self.lexer.advance();
-                Ok(ast::Pattern::Bool(true))
+                Ok(mk_pattern(ast::PatternKind::Bool(true)))
             }
             TokenType::False => {
                 self.lexer.advance();
-                Ok(ast::Pattern::Bool(false))
+                Ok(mk_pattern(ast::PatternKind::Bool(false)))
             }
             TokenType::String(s) => {
                 self.lexer.advance();
-                Ok(ast::Pattern::String(s))
+                Ok(mk_pattern(ast::PatternKind::String(s)))
             }
             TokenType::LParen => {
                 self.lexer.advance();
                 if self.match_token(TokenType::RParen).is_ok() {
-                    return Ok(ast::Pattern::Unit);
+                    return Ok(mk_pattern(ast::PatternKind::Unit));
                 }
                 let inner = self.parse_delimited(Self::parse_pattern, TokenType::Comma);
                 let _ = self.expect_token(TokenType::RParen);
-                Ok(ast::Pattern::Tuple(inner))
+                Ok(mk_pattern(ast::PatternKind::Tuple(inner)))
             }
             TokenType::LBracket => {
                 self.lexer.advance();
                 let inner = self.parse_delimited(Self::parse_pattern, TokenType::Comma);
                 let _ = self.expect_token(TokenType::RBracket);
-                Ok(ast::Pattern::Tuple(inner))
+                Ok(mk_pattern(ast::PatternKind::Tuple(inner)))
             }
             TokenType::LBrace => {
                 self.lexer.advance();
                 let fields = self.parse_delimited(Self::parse_pattern_field, TokenType::Comma);
                 let _ = self.expect_token(TokenType::RBrace);
-                Ok(ast::Pattern::AnonStruct {
+                Ok(mk_pattern(ast::PatternKind::AnonStruct {
                     fields: fields.into_iter().collect(),
-                })
+                }))
             }
             TokenType::Identifier(name) => {
                 self.lexer.advance();
                 if self.match_token(TokenType::LParen).is_ok() {
                     let inner = self.parse_delimited(Self::parse_pattern, TokenType::Comma);
                     let _ = self.expect_token(TokenType::RParen);
-                    return Ok(ast::Pattern::TupleStruct {
+                    return Ok(mk_pattern(ast::PatternKind::TupleStruct {
                         strct: name,
                         fields: inner,
-                    });
+                    }));
                 }
                 if self.match_token(TokenType::LBrace).is_ok() {
                     let fields = self.parse_delimited(Self::parse_pattern_field, TokenType::Comma);
                     let _ = self.expect_token(TokenType::RBrace);
-                    return Ok(ast::Pattern::Struct {
+                    return Ok(mk_pattern(ast::PatternKind::Struct {
                         strct: name,
                         fields: fields.into_iter().collect(),
-                    });
+                    }));
                 }
                 if self.match_token(TokenType::Dot).is_ok() {
                     let case = self.parse_pattern()?;
                     if !matches!(
-                        case,
-                        ast::Pattern::TupleStruct { .. }
-                            | ast::Pattern::Struct { .. }
-                            | ast::Pattern::Name(_)
+                        &case.kind,
+                        ast::PatternKind::TupleStruct { .. }
+                            | ast::PatternKind::Struct { .. }
+                            | ast::PatternKind::Name(_)
                     ) {
                         return Err(self.error(beg..self.curr_pos(), "Expected a struct pattern"));
                     }
-                    return Ok(ast::Pattern::TypeSpecifier(name, Box::new(case)));
+                    return Ok(mk_pattern(ast::PatternKind::TypeSpecifier(name, Box::new(case))));
                 }
                 if name == "_" {
-                    return Ok(ast::Pattern::Wildcard);
+                    return Ok(mk_pattern(ast::PatternKind::Wildcard));
                 }
-                Ok(ast::Pattern::Name(name))
+                Ok(mk_pattern(ast::PatternKind::Name(name)))
             }
             TokenType::Star => {
                 self.lexer.advance();
                 let name = self.parse_identifier()?;
-                Ok(ast::Pattern::Rest(name))
+                Ok(mk_pattern(ast::PatternKind::Rest(name)))
             }
             t => panic!("Invalid pattern {:?}", t),
         }
@@ -1174,6 +1174,13 @@ impl<'source> Parser<'source> {
         } else {
             wrong_rule()
         }
+    }
+}
+
+fn mk_pattern(kind: ast::PatternKind) -> ast::Pattern {
+    ast::Pattern {
+        kind,
+        id: DUMMY_AST_ID,
     }
 }
 

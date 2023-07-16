@@ -133,6 +133,10 @@ pub trait Visitor<'ast>: Sized {
         walk_pattern(self, pattern)
     }
 
+    fn visit_pattern_kind(&mut self, pattern: &'ast ast::PatternKind) {
+        walk_pattern_kind(self, pattern)
+    }
+
     fn visit_tuple_pattern(&mut self, fields: &'ast [ast::Pattern]) {
         walk_tuple_pattern(self, fields)
     }
@@ -431,21 +435,21 @@ pub fn walk_match<'ast, V: Visitor<'ast>>(
     }
 }
 
-pub fn walk_pattern<'ast, V: Visitor<'ast>>(v: &mut V, pattern: &'ast ast::Pattern) {
+pub fn walk_pattern_kind<'ast, V: Visitor<'ast>>(v: &mut V, pattern: &'ast ast::PatternKind) {
     match pattern {
-        ast::Pattern::Name(n) => v.visit_name_pattern(n),
-        ast::Pattern::Tuple(fs) => v.visit_tuple_pattern(fs),
-        ast::Pattern::Struct { strct, fields } => v.visit_struct_pattern(strct, fields),
-        ast::Pattern::TupleStruct { strct, fields } => v.visit_tuple_struct_pattern(strct, fields),
-        ast::Pattern::Array(fs) => v.visit_array_pattern(fs),
-        ast::Pattern::Wildcard => v.visit_wildcard_pattern(),
-        ast::Pattern::Unit => v.visit_unit_pattern(),
-        ast::Pattern::String(s) => v.visit_string_pattern(s),
-        ast::Pattern::Int(i) => v.visit_int_pattern(*i),
-        ast::Pattern::Bool(b) => v.visit_bool_pattern(*b),
-        ast::Pattern::Rest(n) => v.visit_rest_pattern(n),
-        ast::Pattern::TypeSpecifier(name, pattern) => v.visit_type_specific_pattern(name, pattern),
-        ast::Pattern::AnonStruct { fields } => v.visit_anon_struct_pattern(fields),
+        ast::PatternKind::Name(n) => v.visit_name_pattern(n),
+        ast::PatternKind::Tuple(fs) => v.visit_tuple_pattern(fs),
+        ast::PatternKind::Struct { strct, fields } => v.visit_struct_pattern(strct, fields),
+        ast::PatternKind::TupleStruct { strct, fields } => v.visit_tuple_struct_pattern(strct, fields),
+        ast::PatternKind::Array(fs) => v.visit_array_pattern(fs),
+        ast::PatternKind::Wildcard => v.visit_wildcard_pattern(),
+        ast::PatternKind::Unit => v.visit_unit_pattern(),
+        ast::PatternKind::String(s) => v.visit_string_pattern(s),
+        ast::PatternKind::Int(i) => v.visit_int_pattern(*i),
+        ast::PatternKind::Bool(b) => v.visit_bool_pattern(*b),
+        ast::PatternKind::Rest(n) => v.visit_rest_pattern(n),
+        ast::PatternKind::TypeSpecifier(name, pattern) => v.visit_type_specific_pattern(name, pattern),
+        ast::PatternKind::AnonStruct { fields } => v.visit_anon_struct_pattern(fields),
     }
 }
 
@@ -536,4 +540,8 @@ pub fn walk_anon_struct_pattern<'ast, V: Visitor<'ast>>(
         v.visit_name(name);
         v.visit_pattern(pattern);
     }
+}
+
+pub fn walk_pattern<'ast, V: Visitor<'ast>>(v: &mut V, pattern: &'ast ast::Pattern) {
+    v.visit_pattern_kind(&pattern.kind)
 }

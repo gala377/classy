@@ -31,4 +31,11 @@ impl Folder for AssignExprId {
         self.id += 1;
         expr
     }
+
+    fn fold_pattern(&mut self, pat: ast::Pattern) -> ast::Pattern {
+        let mut pat = ast::fold::fold_pattern(self, pat);
+        pat.id = self.id;
+        self.id += 1;
+        pat
+    }
 }

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::syntax::ast::{
-    DefinedType, Expr, ExprKind, FunctionDefinition, Path, Pattern, Program, TopLevelItem, Typ,
+    DefinedType, Expr, ExprKind, FunctionDefinition, Path, Pattern, PatternKind, Program, TopLevelItem, Typ,
     TypeDefinition, TypeVariable, TypedName,
 };
 
@@ -154,59 +154,63 @@ pub trait Folder: Sized {
         fold_match(self, expr, cases)
     }
 
-    fn fold_pattern(&mut self, pat: Pattern) -> Pattern {
+    fn fold_pattern(&mut self, pat: Pattern) -> Pattern{
         fold_pattern(self, pat)
     }
 
-    fn fold_unit_pattern(&mut self) -> Pattern {
-        Pattern::Unit
+    fn fold_pattern_kind(&mut self, pat: PatternKind) -> PatternKind {
+        fold_pattern_kind(self, pat)
     }
 
-    fn fold_name_pattern(&mut self, name: String) -> Pattern {
-        Pattern::Name(name)
+    fn fold_unit_pattern(&mut self) -> PatternKind {
+        PatternKind::Unit
     }
 
-    fn fold_wildcard_pattern(&mut self) -> Pattern {
-        Pattern::Wildcard
+    fn fold_name_pattern(&mut self, name: String) -> PatternKind {
+        PatternKind::Name(name)
     }
 
-    fn fold_int_pattern(&mut self, val: isize) -> Pattern {
-        Pattern::Int(val)
+    fn fold_wildcard_pattern(&mut self) -> PatternKind {
+        PatternKind::Wildcard
     }
 
-    fn fold_bool_pattern(&mut self, val: bool) -> Pattern {
-        Pattern::Bool(val)
+    fn fold_int_pattern(&mut self, val: isize) -> PatternKind {
+        PatternKind::Int(val)
     }
 
-    fn fold_string_pattern(&mut self, val: String) -> Pattern {
-        Pattern::String(val)
+    fn fold_bool_pattern(&mut self, val: bool) -> PatternKind {
+        PatternKind::Bool(val)
     }
 
-    fn fold_tuple_pattern(&mut self, fields: Vec<Pattern>) -> Pattern {
+    fn fold_string_pattern(&mut self, val: String) -> PatternKind {
+        PatternKind::String(val)
+    }
+
+    fn fold_tuple_pattern(&mut self, fields: Vec<Pattern>) -> PatternKind {
         fold_tuple_pattern(self, fields)
     }
 
-    fn fold_array_pattern(&mut self, fields: Vec<Pattern>) -> Pattern {
+    fn fold_array_pattern(&mut self, fields: Vec<Pattern>) -> PatternKind {
         fold_array_pattern(self, fields)
     }
 
-    fn fold_struct_pattern(&mut self, strct: String, fields: HashMap<String, Pattern>) -> Pattern {
+    fn fold_struct_pattern(&mut self, strct: String, fields: HashMap<String, Pattern>) -> PatternKind {
         fold_struct_pattern(self, strct, fields)
     }
 
-    fn fold_tuple_struct_pattern(&mut self, strct: String, fields: Vec<Pattern>) -> Pattern {
+    fn fold_tuple_struct_pattern(&mut self, strct: String, fields: Vec<Pattern>) -> PatternKind {
         fold_tuple_struct_pattern(self, strct, fields)
     }
 
-    fn fold_anon_struct_pattern(&mut self, fields: HashMap<String, Pattern>) -> Pattern {
+    fn fold_anon_struct_pattern(&mut self, fields: HashMap<String, Pattern>) -> PatternKind {
         fold_anon_struct_pattern(self, fields)
     }
 
-    fn fold_rest_pattern(&mut self, name: String) -> Pattern {
-        Pattern::Rest(name)
+    fn fold_rest_pattern(&mut self, name: String) -> PatternKind {
+        PatternKind::Rest(name)
     }
 
-    fn fold_type_specified_pattern(&mut self, name: String, typ: Pattern) -> Pattern {
+    fn fold_type_specified_pattern(&mut self, name: String, typ: Pattern) -> PatternKind {
         fold_type_specified_pattern(self, name, typ)
     }
 
@@ -524,32 +528,32 @@ pub fn fold_match(
     }
 }
 
-pub fn fold_tuple_pattern(folder: &mut impl Folder, fields: Vec<Pattern>) -> Pattern {
+pub fn fold_tuple_pattern(folder: &mut impl Folder, fields: Vec<Pattern>) -> PatternKind {
     let mut new_fields = Vec::new();
     for field in fields {
         new_fields.push(folder.fold_pattern(field));
     }
-    Pattern::Tuple(new_fields)
+    PatternKind::Tuple(new_fields)
 }
 
-pub fn fold_array_pattern(folder: &mut impl Folder, fields: Vec<Pattern>) -> Pattern {
+pub fn fold_array_pattern(folder: &mut impl Folder, fields: Vec<Pattern>) -> PatternKind {
     let mut new_fields = Vec::new();
     for field in fields {
         new_fields.push(folder.fold_pattern(field));
     }
-    Pattern::Array(new_fields)
+    PatternKind::Array(new_fields)
 }
 
 pub fn fold_struct_pattern(
     folder: &mut impl Folder,
     strct: String,
     fields: HashMap<String, Pattern>,
-) -> Pattern {
+) -> PatternKind {
     let mut new_fields = Vec::new();
     for (name, field) in fields {
         new_fields.push((name, folder.fold_pattern(field)));
     }
-    Pattern::Struct {
+    PatternKind::Struct {
         strct,
         fields: new_fields.into_iter().collect(),
     }
@@ -559,32 +563,32 @@ pub fn fold_tuple_struct_pattern(
     folder: &mut impl Folder,
     strct: String,
     fields: Vec<Pattern>,
-) -> Pattern {
+) -> PatternKind {
     let mut new_fields = Vec::new();
     for field in fields {
         new_fields.push(folder.fold_pattern(field));
     }
-    Pattern::TupleStruct {
+    PatternKind::TupleStruct {
         strct,
         fields: new_fields,
     }
 }
 
-pub fn fold_pattern(folder: &mut impl Folder, pat: Pattern) -> Pattern {
+pub fn fold_pattern_kind(folder: &mut impl Folder, pat: PatternKind) -> PatternKind {
     match pat {
-        Pattern::Unit => folder.fold_unit_pattern(),
-        Pattern::Name(name) => folder.fold_name_pattern(name),
-        Pattern::Wildcard => folder.fold_wildcard_pattern(),
-        Pattern::Int(val) => folder.fold_int_pattern(val),
-        Pattern::Bool(val) => folder.fold_bool_pattern(val),
-        Pattern::String(val) => folder.fold_string_pattern(val),
-        Pattern::Tuple(fields) => fold_tuple_pattern(folder, fields),
-        Pattern::Array(fields) => fold_array_pattern(folder, fields),
-        Pattern::Struct { strct, fields } => fold_struct_pattern(folder, strct, fields),
-        Pattern::TupleStruct { strct, fields } => fold_tuple_struct_pattern(folder, strct, fields),
-        Pattern::Rest(name) => folder.fold_rest_pattern(name),
-        Pattern::TypeSpecifier(name, pat) => folder.fold_type_specified_pattern(name, *pat),
-        Pattern::AnonStruct { fields } => fold_anon_struct_pattern(folder, fields),
+        PatternKind::Unit => folder.fold_unit_pattern(),
+        PatternKind::Name(name) => folder.fold_name_pattern(name),
+        PatternKind::Wildcard => folder.fold_wildcard_pattern(),
+        PatternKind::Int(val) => folder.fold_int_pattern(val),
+        PatternKind::Bool(val) => folder.fold_bool_pattern(val),
+        PatternKind::String(val) => folder.fold_string_pattern(val),
+        PatternKind::Tuple(fields) => fold_tuple_pattern(folder, fields),
+        PatternKind::Array(fields) => fold_array_pattern(folder, fields),
+        PatternKind::Struct { strct, fields } => fold_struct_pattern(folder, strct, fields),
+        PatternKind::TupleStruct { strct, fields } => fold_tuple_struct_pattern(folder, strct, fields),
+        PatternKind::Rest(name) => folder.fold_rest_pattern(name),
+        PatternKind::TypeSpecifier(name, pat) => folder.fold_type_specified_pattern(name, *pat),
+        PatternKind::AnonStruct { fields } => fold_anon_struct_pattern(folder, fields),
     }
 }
 
@@ -592,8 +596,8 @@ pub fn fold_type_specified_pattern(
     folder: &mut impl Folder,
     name: String,
     pattern: Pattern,
-) -> Pattern {
-    Pattern::TypeSpecifier(name, Box::new(folder.fold_pattern(pattern)))
+) -> PatternKind {
+    PatternKind::TypeSpecifier(name, Box::new(folder.fold_pattern(pattern)))
 }
 
 pub fn fold_adt_struct_constructor(
@@ -633,12 +637,12 @@ pub fn fold_adt_tuple_constructor(
 pub fn fold_anon_struct_pattern(
     folder: &mut impl Folder,
     fields: HashMap<String, Pattern>,
-) -> Pattern {
+) -> PatternKind {
     let mut new_fields = HashMap::new();
     for (name, field) in fields {
         new_fields.insert(name, folder.fold_pattern(field));
     }
-    Pattern::AnonStruct { fields: new_fields }
+    PatternKind::AnonStruct { fields: new_fields }
 }
 
 pub fn fold_type(folder: &mut impl Folder, typ: Typ) -> Typ {
@@ -688,4 +692,11 @@ pub fn fold_application_type(folder: &mut impl Folder, callee: Typ, args: Vec<Ty
 
 pub fn fold_tuple_type(folder: &mut impl Folder, fields: Vec<Typ>) -> Typ {
     Typ::Tuple(fields.into_iter().map(|t| folder.fold_typ(t)).collect())
+}
+
+pub fn fold_pattern(folder: &mut impl Folder, pat: Pattern) -> Pattern {
+    Pattern {
+        id: pat.id,
+        kind: folder.fold_pattern_kind(pat.kind),
+    }
 }
