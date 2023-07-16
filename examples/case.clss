@@ -17,4 +17,16 @@ main {
         cause = "I don't know" 
         msg = "hello"
     }
+    Option.Some(1) match {
+        Some(2) => {
+            "is 2"
+        }
+        Some(3) => {
+            "is 3"
+        }
+        Some(x) => {
+            "is x"
+        }
+    }
 }
+

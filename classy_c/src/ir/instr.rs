@@ -54,7 +54,7 @@ impl Debug for Address {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum Op {
     // Int operations
     Add,
@@ -80,6 +80,8 @@ pub enum Op {
     // References
     Deref,
     Ref,
+    // Retrieve the header data
+    HeaderData,
 }
 
 pub struct Code {
@@ -154,19 +156,10 @@ pub enum Instruction {
 impl Debug for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::BinOpAssign(arg0, arg1, arg2, arg3) => f
-                .debug_tuple("BinOpAssign")
-                .field(arg0)
-                .field(arg1)
-                .field(arg2)
-                .field(arg3)
-                .finish(),
-            Self::UnOpAssing(arg0, arg1, arg2) => f
-                .debug_tuple("UnOpAssing")
-                .field(arg0)
-                .field(arg1)
-                .field(arg2)
-                .finish(),
+            Self::BinOpAssign(arg0, arg1, arg2, arg3) =>
+                write!(f, "{arg0:?} = {arg1:?} {arg2:?} {arg3:?}", ),
+            Self::UnOpAssing(arg0, arg1, arg2) => 
+                write!(f, "{arg0:?} = {arg1:?} {arg2:?}",),
             Self::CopyAssign(arg0, arg1) => write!(f, "{arg0:?} = {arg1:?}"),
             Self::IndexCopy { res, base, offset } => write!(f, "{res:?} = {base:?}[{offset:?}]"),
 
@@ -222,6 +215,33 @@ impl Debug for Instruction {
                 "case".bold().green(),
                 "type".bold().green()),
             Self::Return(arg0) => write!(f, "{} {arg0:?}", "return".bold().green()),
+        }
+    }
+}
+
+impl Debug for Op {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Add => write!(f, "{}", "+".bold().white()),
+            Self::Sub => write!(f, "{}", "-".bold().white()),
+            Self::Mul => write!(f, "{}", "*".bold().white()),
+            Self::Div => write!(f, "{}", "/".bold().white()),
+            Self::Mod => write!(f, "{}", "%".bold().white()),
+            Self::Neg => write!(f, "{}", "-".bold().white()),
+            Self::FAdd => write!(f, "+."),
+            Self::FSub => write!(f, "-."),
+            Self::FMul => write!(f, "*."),
+            Self::FDiv => write!(f, "/."),
+            Self::Eq => write!(f, "{}", "==".bold().white()),
+            Self::Neq => write!(f, "!="),
+            Self::GrEq => write!(f, ">="),
+            Self::Gr => write!(f, ">"),
+            Self::LeEq => write!(f, "<="),
+            Self::Le => write!(f, "<"),
+            Self::Not => write!(f, "!"),
+            Self::Deref => write!(f, "*"),
+            Self::Ref => write!(f, "&"),
+            Self::HeaderData => write!(f, "{}", "header_data".bold().white()),
         }
     }
 }

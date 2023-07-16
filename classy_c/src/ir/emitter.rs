@@ -10,7 +10,7 @@ use crate::{
     },
 };
 
-use super::instr::{Address, Block, Instruction, IsRef, Label};
+use super::instr::{Address, Block, Instruction, IsRef, Label, Op};
 
 type Scope = HashMap<String, Address>;
 
@@ -512,7 +512,267 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
             ast::ExprKind::AnonType { .. } => {
                 panic!("should not exist at this point")
             }
-            _ => todo!(),
+            ast::ExprKind::Match { expr, cases } => {
+                let t = self.env.get(&expr.id).unwrap();
+                let res = self.new_temporary(match t.is_ref() {
+                    None => panic!(),
+                    Some(true) => IsRef::Ref,
+                    Some(false) => IsRef::NoRef,
+                });
+                let expr = self.emit_expr(expr);
+                let labels = cases
+                    .iter()
+                    .map(|_| self.new_label())
+                    .collect::<Vec<_>>();
+                let exit_label = self.new_label();
+                for (case, label) in cases.iter().zip(labels.iter()) {
+                    self.emit_pattern(expr.clone(), &case.0, label.clone());
+                    let body = self.emit_expr(&case.1);
+                    self.current_block
+                        .push(Instruction::CopyAssign(res.clone(), body));
+                    self.current_block
+                        .push(Instruction::GoTo(exit_label.clone()));
+                    self.current_block.push(Instruction::Label(label.0));
+                }
+                self.current_block.push(Instruction::Label(exit_label.0));
+                res
+            }
+        }
+    }
+
+    fn emit_pattern(&mut self, to_match: Address, pattern: &ast::Pattern, next_label: Label) {
+        let id = pattern.id;
+        match &pattern.kind {
+            // name pattern always matches but adds a new binding to the current scope
+            ast::PatternKind::Name(n) => {
+                self.add_to_scope(n, to_match);
+            }
+            ast::PatternKind::Tuple(patterns) => {
+                for (i, p) in patterns.iter().enumerate() {
+                    let field_t = self.env.get(&p.id).unwrap();
+                    let val = self.new_temporary(match field_t.is_ref() {
+                        None => panic!(),
+                        Some(true) => IsRef::Ref,
+                        Some(false) => IsRef::NoRef,
+                    });
+                    self.current_block.push(Instruction::IndexCopy {
+                        res: val.clone(),
+                        base: to_match.clone(),
+                        offset: Address::ConstantInt(i as isize),
+                    });
+                    self.emit_pattern(val, p, next_label.clone());
+                }
+            }
+            ast::PatternKind::Array(patterns) => {
+                let arr_len = self.new_temporary(IsRef::NoRef);
+                self.current_block.push(Instruction::UnOpAssing(
+                    arr_len.clone(),
+                    Op::HeaderData,
+                    to_match.clone(),
+                ));
+                let len_cond = self.new_temporary(IsRef::NoRef);
+                self.current_block.push(Instruction::BinOpAssign(
+                    len_cond.clone(),
+                    arr_len.clone(),
+                    Op::Eq,
+                    Address::ConstantInt(patterns.len() as isize),
+                ));
+                self.current_block.push(Instruction::IfFalse {
+                    cond: len_cond.clone(),
+                    goto: next_label.clone(),
+                });
+                for (i, p) in patterns.iter().enumerate() {
+                    let field_t = self.env.get(&p.id).unwrap();
+                    let val = self.new_temporary(match field_t.is_ref() {
+                        None => panic!(),
+                        Some(true) => IsRef::Ref,
+                        Some(false) => IsRef::NoRef,
+                    });
+                    self.current_block.push(Instruction::IndexCopy {
+                        res: val.clone(),
+                        base: to_match.clone(),
+                        offset: Address::ConstantInt(i as isize),
+                    });
+                    self.emit_pattern(val, p, next_label.clone());
+                }
+            }
+            ast::PatternKind::Struct { strct, fields } => {
+                let t = self.env.get(&id).unwrap();
+                let struct_fields = match t {
+                    Type::Struct { fields, .. } => fields.clone(),
+                    Type::ADT { constructors, .. } => {
+                        let (cpos, ctyp) = constructors
+                            .iter()
+                            .enumerate()
+                            .find(|(_, (name, _))| name == strct)
+                            .map(|(i, (_, t))| (i, t))
+                            .unwrap();
+                        let val_case = self.new_temporary(IsRef::NoRef);
+                        self.current_block.push(Instruction::UnOpAssing(
+                            val_case.clone(),
+                            Op::HeaderData,
+                            to_match.clone(),
+                        ));
+                        let cond = self.new_temporary(IsRef::NoRef);
+                        self.current_block.push(Instruction::BinOpAssign(
+                            cond.clone(),
+                            val_case.clone(),
+                            Op::Eq,
+                            Address::ConstantInt(cpos as isize),
+                        ));
+                        self.current_block.push(Instruction::IfFalse {
+                            cond: cond.clone(),
+                            goto: next_label.clone(),
+                        });
+                        let Type::Struct {fields, .. } = ctyp else {
+                            panic!("invarian {ctyp:?}")
+                        };
+                        fields.clone()
+                    }
+                    t => panic!("Expected struct or adt, got {t:?}")
+                };
+                for (i, (field_name, field_type)) in struct_fields.iter().enumerate() {
+                    let field_type = if let Type::Alias(for_t) = field_type {
+                        self.tctx.resolve_alias(*for_t)
+                    } else {
+                        field_type.clone()
+                    };
+                    let val = self.new_temporary(match field_type.is_ref() {
+                        None => panic!(),
+                        Some(true) => IsRef::Ref,
+                        Some(false) => IsRef::NoRef,
+                    });
+                    self.current_block.push(Instruction::IndexCopy {
+                        res: val.clone(),
+                        base: to_match.clone(),
+                        offset: Address::ConstantInt(i as isize),
+                    });
+                    let field_pattern = fields.get(field_name).unwrap();
+                    self.emit_pattern(val, field_pattern, next_label.clone());
+                }
+            },
+            ast::PatternKind::TupleStruct { strct, fields } => {
+                let constructors = self.get_constructors(self.env.get(&id).unwrap());
+                let (cpos, ctyp) = constructors
+                    .iter()
+                    .enumerate()
+                    .find(|(_, (name, _))| name == strct)
+                    .map(|(i, (_, t))| (i, t))
+                    .unwrap();
+                let val_case = self.new_temporary(IsRef::NoRef);
+                self.current_block.push(Instruction::UnOpAssing(
+                    val_case.clone(),
+                    Op::HeaderData,
+                    to_match.clone(),
+                ));
+                let cond = self.new_temporary(IsRef::NoRef);
+                self.current_block.push(Instruction::BinOpAssign(
+                    cond.clone(),
+                    val_case.clone(),
+                    Op::Eq,
+                    Address::ConstantInt(cpos as isize),
+                ));
+                self.current_block.push(Instruction::IfFalse {
+                    cond: cond.clone(),
+                    goto: next_label.clone(),
+                });
+                let Type::Tuple(fields_t) = ctyp else {
+                    panic!("invarian {ctyp:?}")
+                };
+                for (i, field_type) in fields_t.iter().enumerate() {
+                    let field_type = if let Type::Alias(for_t) = field_type {
+                        self.tctx.resolve_alias(*for_t)
+                    } else {
+                        field_type.clone()
+                    };
+                    let val = self.new_temporary(match field_type.is_ref() {
+                        None => panic!(),
+                        Some(true) => IsRef::Ref,
+                        Some(false) => IsRef::NoRef,
+                    });
+                    self.current_block.push(Instruction::IndexCopy {
+                        res: val.clone(),
+                        base: to_match.clone(),
+                        offset: Address::ConstantInt(i as isize),
+                    });
+                    self.emit_pattern(val, &fields[i], next_label.clone());
+                }
+            },
+            ast::PatternKind::AnonStruct { fields } => {
+                let Type::Struct { fields: struct_fields, .. } = self.env.get(&id).unwrap() else {
+                    panic!("Should be a struct");
+                };
+                for (i, (field_name, field_type)) in struct_fields.iter().enumerate() {
+                    let field_type = if let Type::Alias(for_t) = field_type {
+                        self.tctx.resolve_alias(*for_t)
+                    } else {
+                        field_type.clone()
+                    };
+                    let val = self.new_temporary(match field_type.is_ref() {
+                        None => panic!(),
+                        Some(true) => IsRef::Ref,
+                        Some(false) => IsRef::NoRef,
+                    });
+                    self.current_block.push(Instruction::IndexCopy {
+                        res: val.clone(),
+                        base: to_match.clone(),
+                        offset: Address::ConstantInt(i as isize),
+                    });
+                    let field_pattern = fields.get(field_name).unwrap();
+                    self.emit_pattern(val, field_pattern, next_label.clone());
+                }
+                
+            },
+            ast::PatternKind::TypeSpecifier(_, p) => {
+                // todo: I think this is correct as p should have a type assigned
+                // at this point
+                self.emit_pattern(to_match, p, next_label)
+            },
+            // TODO: I think that unit type always matches as there is only one possible
+            // value for it so there is not point in checking it
+            ast::PatternKind::Unit => {}
+            // The same for wildcard, it always matches so there is nothing to do for us
+            ast::PatternKind::Wildcard => {},
+            ast::PatternKind::String(s) => {
+                let cond = self.new_temporary(IsRef::NoRef);
+                self.current_block.push(Instruction::BinOpAssign(
+                    cond.clone(),
+                    to_match,
+                    Op::Eq,
+                    Address::ConstantString(s.clone()),
+                ));
+                self.current_block.push(Instruction::IfFalse {
+                    cond: cond.clone(),
+                    goto: next_label,
+                });
+            }
+            ast::PatternKind::Int(i) => {
+                let cond = self.new_temporary(IsRef::NoRef);
+                self.current_block.push(Instruction::BinOpAssign(
+                    cond.clone(),
+                    to_match,
+                    Op::Eq,
+                    Address::ConstantInt(*i),
+                ));
+                self.current_block.push(Instruction::IfFalse {
+                    cond: cond.clone(),
+                    goto: next_label,
+                });
+            }
+            ast::PatternKind::Bool(b) => {
+                let cond = self.new_temporary(IsRef::NoRef);
+                self.current_block.push(Instruction::BinOpAssign(
+                    cond.clone(),
+                    to_match,
+                    Op::Eq,
+                    Address::ConstantBool(*b),
+                ));
+                self.current_block.push(Instruction::IfFalse {
+                    cond: cond.clone(),
+                    goto: next_label,
+                });
+            }
+            ast::PatternKind::Rest(_) => todo!(),
         }
     }
 
@@ -550,6 +810,26 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
             }
         }
         None
+    }
+
+    fn get_constructors(&self, t: &Type) -> Vec<(String, Type)> {
+        match t {
+            Type::ADT { constructors, .. } => constructors.clone(),
+            Type::Alias(for_t) => self.get_constructors(&self.tctx.resolve_alias(*for_t)),
+            Type::Scheme { typ, .. } => self.get_constructors(typ),
+            Type::App { typ, .. } => self.get_constructors(typ),
+            _ => panic!("Expected adt got {t:?}"),
+        }
+    }
+
+    fn get_fields(&self, t: &Type) -> Vec<(String, Type)> {
+        match t {
+            Type::Struct { fields, .. } => fields.clone(),
+            Type::Alias(for_t) => self.get_fields(&self.tctx.resolve_alias(*for_t)),
+            Type::Scheme { typ, .. } => self.get_fields(typ),
+            Type::App { typ, .. } => self.get_fields(typ),
+            _ => panic!("Expected struct got {t:?}"),
+        }
     }
 
     fn is_ref(&self, addr: &Address) -> IsRef {
