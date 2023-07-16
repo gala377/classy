@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
-    mem::size_of, fmt::format,
+    fmt::format,
+    mem::size_of,
 };
 
 use crate::{
@@ -173,7 +174,7 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
                     self.set_address(&mut code, res)
                         .map_err(|e| format!("line {index}, {debug_op:?} => {e}"))
                         .unwrap();
-                },
+                }
                 ir::Instruction::CopyAssign(a1, a2) => {
                     self.push_address(&mut code, a2);
                     self.set_address(&mut code, a1)
@@ -369,9 +370,9 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
                     self.set_address(&mut code, res.clone())
                         .map_err(|e| format!("line {index}, {debug_op:?} => {e}"))
                         .unwrap();
-                 
+
                     self.push_address(&mut code, res.clone());
-                    
+
                     let id = self.constant_pool.add_entry((case as isize).into());
                     self.emit_instr(&mut code, OpCode::ConstLoadInteger);
                     self.emit_word(&mut code, id as u64);

@@ -618,7 +618,6 @@ impl Thread {
                         *address.sub(offset as usize) = value;
                     }
                     instr += OpCode::SetOffsetNegative.argument_size();
-                    
                 }
                 OpCode::PushOffsetDeref => {
                     instr += 1;
