@@ -520,10 +520,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                     Some(false) => IsRef::NoRef,
                 });
                 let expr = self.emit_expr(expr);
-                let labels = cases
-                    .iter()
-                    .map(|_| self.new_label())
-                    .collect::<Vec<_>>();
+                let labels = cases.iter().map(|_| self.new_label()).collect::<Vec<_>>();
                 let exit_label = self.new_label();
                 for (case, label) in cases.iter().zip(labels.iter()) {
                     self.emit_pattern(expr.clone(), &case.0, label.clone());
@@ -652,12 +649,12 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                             cond: cond.clone(),
                             goto: next_label.clone(),
                         });
-                        let Type::Struct {fields, .. } = ctyp else {
+                        let Type::Struct { fields, .. } = ctyp else {
                             panic!("invarian {ctyp:?}")
                         };
                         fields.clone()
                     }
-                    t => panic!("Expected struct or adt, got {t:?}")
+                    t => panic!("Expected struct or adt, got {t:?}"),
                 };
                 for (i, (field_name, field_type)) in struct_fields.iter().enumerate() {
                     let field_type = if let Type::Alias(for_t) = field_type {
@@ -678,7 +675,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                     let field_pattern = fields.get(field_name).unwrap();
                     self.emit_pattern(val, field_pattern, next_label.clone());
                 }
-            },
+            }
             ast::PatternKind::TupleStruct { strct, fields } => {
                 let constructors = self.get_constructors(self.env.get(&id).unwrap());
                 let (cpos, ctyp) = constructors
@@ -725,9 +722,13 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                     });
                     self.emit_pattern(val, &fields[i], next_label.clone());
                 }
-            },
+            }
             ast::PatternKind::AnonStruct { fields } => {
-                let Type::Struct { fields: struct_fields, .. } = self.env.get(&id).unwrap() else {
+                let Type::Struct {
+                    fields: struct_fields,
+                    ..
+                } = self.env.get(&id).unwrap()
+                else {
                     panic!("Should be a struct");
                 };
                 for (i, (field_name, field_type)) in struct_fields.iter().enumerate() {
@@ -749,18 +750,17 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                     let field_pattern = fields.get(field_name).unwrap();
                     self.emit_pattern(val, field_pattern, next_label.clone());
                 }
-                
-            },
+            }
             ast::PatternKind::TypeSpecifier(_, p) => {
                 // todo: I think this is correct as p should have a type assigned
                 // at this point
                 self.emit_pattern(to_match, p, next_label)
-            },
+            }
             // TODO: I think that unit type always matches as there is only one possible
             // value for it so there is not point in checking it
             ast::PatternKind::Unit => {}
             // The same for wildcard, it always matches so there is nothing to do for us
-            ast::PatternKind::Wildcard => {},
+            ast::PatternKind::Wildcard => {}
             ast::PatternKind::String(s) => {
                 let cond = self.new_temporary(IsRef::NoRef);
                 self.current_block.push(Instruction::BinOpAssign(

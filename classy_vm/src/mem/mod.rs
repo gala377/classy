@@ -50,8 +50,7 @@ pub trait ObjectAllocator {
     ) -> Ptr<Class> {
         // there is no padding between header, class and fields as all
         // are sure to be word aligned.
-        let size =
-            size_of::<Header>() + size_of::<Class>() + std::mem::size_of_val(fields);
+        let size = size_of::<Header>() + size_of::<Class>() + std::mem::size_of_val(fields);
         let layout = Layout::from_size_align(size, align_of::<Header>()).unwrap();
         let allocation = self.try_allocate(layout);
         if allocation.is_null() {

@@ -232,9 +232,13 @@ impl<'ctx> ConstraintSolver<'ctx> {
                             let t2 = fs_2
                                 .iter()
                                 .find(|(n2, _)| &n1 == n2)
-                                .unwrap_or_else(|| panic!("Field {n1} does not exists in {case} case",
-                                    n1 = n1,
-                                    case = case))
+                                .unwrap_or_else(|| {
+                                    panic!(
+                                        "Field {n1} does not exists in {case} case",
+                                        n1 = n1,
+                                        case = case
+                                    )
+                                })
                                 .1
                                 .clone();
                             constraints.push_back(Constraint::Eq(t1.clone(), t2.clone()));

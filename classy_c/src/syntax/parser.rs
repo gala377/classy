@@ -1033,7 +1033,10 @@ impl<'source> Parser<'source> {
                     ) {
                         return Err(self.error(beg..self.curr_pos(), "Expected a struct pattern"));
                     }
-                    return Ok(mk_pattern(ast::PatternKind::TypeSpecifier(name, Box::new(case))));
+                    return Ok(mk_pattern(ast::PatternKind::TypeSpecifier(
+                        name,
+                        Box::new(case),
+                    )));
                 }
                 if name == "_" {
                     return Ok(mk_pattern(ast::PatternKind::Wildcard));

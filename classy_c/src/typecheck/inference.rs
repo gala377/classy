@@ -690,17 +690,16 @@ impl Inference {
             ast::PatternKind::String(_) => {
                 self.env.insert(id, Type::String);
                 Type::String
-            },
+            }
             ast::PatternKind::Int(_) => {
                 self.env.insert(id, Type::Int);
                 Type::Int
-            },
+            }
 
             ast::PatternKind::Bool(_) => {
                 self.env.insert(id, Type::Bool);
                 Type::Bool
-            },
-
+            }
         }
     }
 

@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::syntax::ast::{
-    DefinedType, Expr, ExprKind, FunctionDefinition, Path, Pattern, PatternKind, Program, TopLevelItem, Typ,
-    TypeDefinition, TypeVariable, TypedName,
+    DefinedType, Expr, ExprKind, FunctionDefinition, Path, Pattern, PatternKind, Program,
+    TopLevelItem, Typ, TypeDefinition, TypeVariable, TypedName,
 };
 
 /// TODO: Not all travelsal methods are implemented yet.
@@ -154,7 +154,7 @@ pub trait Folder: Sized {
         fold_match(self, expr, cases)
     }
 
-    fn fold_pattern(&mut self, pat: Pattern) -> Pattern{
+    fn fold_pattern(&mut self, pat: Pattern) -> Pattern {
         fold_pattern(self, pat)
     }
 
@@ -194,7 +194,11 @@ pub trait Folder: Sized {
         fold_array_pattern(self, fields)
     }
 
-    fn fold_struct_pattern(&mut self, strct: String, fields: HashMap<String, Pattern>) -> PatternKind {
+    fn fold_struct_pattern(
+        &mut self,
+        strct: String,
+        fields: HashMap<String, Pattern>,
+    ) -> PatternKind {
         fold_struct_pattern(self, strct, fields)
     }
 
@@ -585,7 +589,9 @@ pub fn fold_pattern_kind(folder: &mut impl Folder, pat: PatternKind) -> PatternK
         PatternKind::Tuple(fields) => fold_tuple_pattern(folder, fields),
         PatternKind::Array(fields) => fold_array_pattern(folder, fields),
         PatternKind::Struct { strct, fields } => fold_struct_pattern(folder, strct, fields),
-        PatternKind::TupleStruct { strct, fields } => fold_tuple_struct_pattern(folder, strct, fields),
+        PatternKind::TupleStruct { strct, fields } => {
+            fold_tuple_struct_pattern(folder, strct, fields)
+        }
         PatternKind::Rest(name) => folder.fold_rest_pattern(name),
         PatternKind::TypeSpecifier(name, pat) => folder.fold_type_specified_pattern(name, *pat),
         PatternKind::AnonStruct { fields } => fold_anon_struct_pattern(folder, fields),

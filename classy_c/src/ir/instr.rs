@@ -157,12 +157,11 @@ impl Debug for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::BinOpAssign(arg0, arg1, arg2, arg3) =>
-                write!(f, "{arg0:?} = {arg1:?} {arg2:?} {arg3:?}", ),
-            Self::UnOpAssing(arg0, arg1, arg2) => 
-                write!(f, "{arg0:?} = {arg1:?} {arg2:?}",),
+                write!(f, "{arg0:?} = {arg1:?} {arg2:?} {arg3:?}"),
+            Self::UnOpAssing(arg0, arg1, arg2) =>
+                write!(f, "{arg0:?} = {arg1:?} {arg2:?}"),
             Self::CopyAssign(arg0, arg1) => write!(f, "{arg0:?} = {arg1:?}"),
             Self::IndexCopy { res, base, offset } => write!(f, "{res:?} = {base:?}[{offset:?}]"),
-
             Self::IndexSet {
                 base,
                 offset,
