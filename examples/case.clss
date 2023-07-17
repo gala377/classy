@@ -1,4 +1,5 @@
-
+@runtime @empty
+print: (String) -> ()
 
 type Option(a) {
     Some(a)
@@ -10,6 +11,12 @@ type Foo {
     Nothing
 }
 
+default: (Option(a), a) -> a
+default (opt, def) = opt match {
+    Some(x) => x
+    None => def
+}
+
 main {
     let a = Option.Some("hello")
     let b = Option.None
@@ -17,9 +24,11 @@ main {
         cause = "I don't know" 
         msg = "hello"
     }
-    Option.Some(1) match {
-        Some(2) => {
-            "is 2"
+    let a = Option.Some("a")
+    let b = Option.Some(1)
+    let res = Option.Some(1) match {
+        Some(1) => {
+            "is 1"
         }
         Some(3) => {
             "is 3"
@@ -30,5 +39,6 @@ main {
         None => "is_none"
         _ => "anything else"
     }
+    print res
 }
 

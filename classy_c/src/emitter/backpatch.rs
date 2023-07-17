@@ -19,6 +19,7 @@ impl Backpatcher {
             let instr = OpCode::from(instrs[index]);
             match instr {
                 OpCode::JumpFront | OpCode::JumpFrontIfFalse => {
+                    println!("BACKPATCHING, CURRENT LINE IS {}", index);
                     index += 1;
                     let label_val = u64::from_le_bytes(
                         instrs[index..index + std::mem::size_of::<u64>()]
@@ -30,12 +31,13 @@ impl Backpatcher {
                     if (LABEL_BACKPATCH_MASK & label_val) > 0 {
                         // requires backpatching
                         let label = Label((label_val & (!LABEL_BACKPATCH_MASK)) as usize);
-
                         let label_line = match self.labels.get(&label) {
                             Some(line) => *line,
                             None => panic!("Label {:?} not found", label),
                         };
-                        let offset = label_line - index - 1;
+                        println!("Found label {:?} at line {}", label, label_line);
+                        let offset = label_line - (index - 1);
+                        println!("The jumpo from {} to {} is {}", index-1, label_line, offset);
                         instrs[index..index + std::mem::size_of::<u64>()]
                             .copy_from_slice(&offset.to_le_bytes());
                     }

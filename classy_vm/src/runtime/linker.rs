@@ -81,10 +81,11 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
         self.replace_symbolic_references_in_code(code);
     }
 
-    fn instance_until_struct(&self, tctx: &TypCtx, tid: usize) -> Option<Type> {
+    fn instance_until_class(&self, tctx: &TypCtx, tid: usize) -> Option<Type> {
         fn implementation(tctx: &TypCtx, t: Type) -> Option<Type> {
             match t {
                 t @ Type::Struct { .. } => Some(t),
+                t @ Type::ADT { .. } => Some(t),
                 Type::Scheme { typ, .. } => implementation(tctx, *typ),
                 Type::App { typ, .. } => implementation(tctx, *typ),
                 Type::Alias(for_t) => {
@@ -128,47 +129,93 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
         let mut user_classes = UserClasses::new();
         for (name, tid) in names {
             let str_instance = self.intern_and_allocte_static_string(&name);
-            let Some(Type::Struct { fields, .. }) = self.instance_until_struct(tctx, tid) else {
-                println!(
-                    "Linking of {:?} skipped",
-                    tctx.definitions.get(&tid).unwrap()
-                );
-                continue;
-            };
-            println!("Linking of struct {name}");
-            let class = Class {
-                name: unsafe { std::mem::transmute(str_instance) },
-                drop: None,
-                trace: class::instance_trace,
-                instance_size: std::mem::size_of::<usize>() * fields.len(),
-                instance_align: std::mem::align_of::<usize>(),
-                actual_instance_size: None,
-                kind: class::Kind::Instance,
-            };
-            let sym_fields = fields
-                .iter()
-                .enumerate()
-                .map(|(i, (name, typ))| {
-                    let field_name =
-                        unsafe { std::mem::transmute(self.intern_and_allocte_static_string(name)) };
-                    let sym_t_name = Self::get_type_name(tctx, typ.clone());
-                    let sym_t_name = self.intern_and_allocte_static_string(&sym_t_name);
-                    class::Field {
-                        name: field_name,
-                        offset: i as isize,
-                        class: unsafe { std::mem::transmute(sym_t_name) },
-                        reference: typ.is_ref().unwrap(),
-                    }
-                })
-                .collect::<Vec<_>>();
-            let cls_ptr = self.vm.permament_heap.lock().unwrap().allocate_class(
-                class,
-                &sym_fields,
-                self.vm.runtime.classes.klass,
-            );
-            user_classes.add_class(str_instance as usize, NonNullPtr::from_ptr(cls_ptr));
+            match self.instance_until_class(tctx, tid) {
+                Some(Type::Struct { fields, .. }) => {
+                    println!("Linking struct {name:?}");
+                    self.create_struct_class(str_instance, &fields, tctx, &mut user_classes);
+                }
+                Some(Type::ADT { constructors, .. }) => {
+                    println!("Linking ADT {name:?}");
+                    self.create_adt_class(str_instance, tctx, &mut user_classes, constructors, name);
+                }
+                _ => {
+                    println!(
+                        "Linking of {:?} skipped",
+                        tctx.definitions.get(&tid).unwrap()
+                    );
+                    continue;
+                }
+            }
         }
         user_classes
+    }
+
+    fn create_adt_class(&mut self, str_instance: u64, tctx: &TypCtx, user_classes: &mut UserClasses, constructors: Vec<(String, Type)>, name: String) {
+        self.create_struct_class(str_instance, &[], tctx, user_classes);
+        for (pos, (_, t)) in constructors.iter().enumerate() {
+            let name = format!("{}@cons@{}", name, pos);
+            let str_instance = self.intern_and_allocte_static_string(&name);
+            match t {
+                Type::Unit => {
+                    self.create_struct_class(str_instance, &[], tctx, user_classes)
+                }
+                Type::Struct { fields, .. } => self.create_struct_class(
+                    str_instance,
+                    fields,
+                    tctx,
+                    user_classes,
+                ),
+                Type::Tuple(fields) => {
+                    let fields = fields
+                        .iter()
+                        .enumerate()
+                        .map(|(i, t)| (format!("{}", i), t.clone()))
+                        .collect::<Vec<_>>();
+                    self.create_struct_class(str_instance, &fields, tctx, user_classes);
+                }
+                _ => panic!("Unexpected type in ADT constructor"),
+            }
+        }
+    }
+
+    fn create_struct_class(
+        &mut self,
+        str_instance: u64,
+        fields: &[(String, Type)],
+        tctx: &TypCtx,
+        user_classes: &mut UserClasses,
+    ) {
+        let class = Class {
+            name: unsafe { std::mem::transmute(str_instance) },
+            drop: None,
+            trace: class::instance_trace,
+            instance_size: std::mem::size_of::<usize>() * fields.len(),
+            instance_align: std::mem::align_of::<usize>(),
+            actual_instance_size: None,
+            kind: class::Kind::Instance,
+        };
+        let sym_fields = fields
+            .iter()
+            .enumerate()
+            .map(|(i, (name, typ))| {
+                let field_name =
+                    unsafe { std::mem::transmute(self.intern_and_allocte_static_string(name)) };
+                let sym_t_name = Self::get_type_name(tctx, typ.clone());
+                let sym_t_name = self.intern_and_allocte_static_string(&sym_t_name);
+                class::Field {
+                    name: field_name,
+                    offset: i as isize,
+                    class: unsafe { std::mem::transmute(sym_t_name) },
+                    reference: typ.is_ref().unwrap(),
+                }
+            })
+            .collect::<Vec<_>>();
+        let cls_ptr = self.vm.permament_heap.lock().unwrap().allocate_class(
+            class,
+            &sym_fields,
+            self.vm.runtime.classes.klass,
+        );
+        user_classes.add_class(str_instance as usize, NonNullPtr::from_ptr(cls_ptr));
     }
 
     fn resolve_symbolic_references_in_classes(&mut self, user_classes: &mut UserClasses) {
@@ -347,7 +394,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
             .vm
             .interned_strings
             .get(&str)
-            .expect("expected type symbols to already be allocated");
+            .expect(&format!("expected type symbols to already be allocated {str}"));
         let cls_ptr = self
             .vm
             .runtime

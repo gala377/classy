@@ -647,6 +647,27 @@ impl Thread {
                     push!(0);
                     instr += 1;
                 }
+                OpCode::JumpFrontIfFalse => {
+                    instr += 1;
+                    let offset = read_word!();
+                    let value = pop!();
+                    if value == 0 {
+                        instr += offset as usize - 1;
+                    } else {
+                        instr += OpCode::JumpFrontIfFalse.argument_size();
+                    }
+                }
+                OpCode::JumpFront => {
+                    instr += 1;
+                    let offset = read_word!();
+                    instr += offset as usize - 1;
+                }
+                // OpCode::AddInteger => {
+                //     instr += 1;
+                //     let a = pop!();
+                //     let b = pop!();
+                //     push!(a + b);
+                // }
                 i => todo!("Instruction not supported yet {i:?}"),
             }
         }

@@ -368,6 +368,7 @@ impl Inference {
                 );
                 let name = strct.0[0].clone();
                 let strct_t = self.scope.borrow().lookup_type(&name).unwrap();
+                let strct_t = self.instance_if_possible(&strct_t);
                 let Some(fields) = self.extract_fields(strct_t.clone(), ret_t.clone(), true) else {
                     panic!("expected truct type, got {strct_t:?}")
                 };
@@ -511,7 +512,13 @@ impl Inference {
             } => {
                 let ret = self.fresh_type();
                 self.env.insert(id, ret.clone());
+                // TODO: This is a bit of a problem because creating any struct
+                // or case actually creates an application.
+                // So probably befor we create this type we should check if its a scheme
+                // and if it is we should instance it. Thats the same for any other case
+                // even structure creation.
                 let t = self.scope.borrow().lookup_type(typ).unwrap();
+                let t = self.instance_if_possible(&t);
                 self.constraints.push(Constraint::Eq(ret.clone(), t));
                 let args_t = args
                     .iter()
@@ -532,6 +539,7 @@ impl Inference {
                 let ret = self.fresh_type();
                 self.env.insert(id, ret.clone());
                 let t = self.scope.borrow().lookup_type(typ).unwrap();
+                let t = self.instance_if_possible(&t);
                 self.constraints.push(Constraint::Eq(ret.clone(), t));
                 let fields_t = fields
                     .iter()
@@ -554,6 +562,7 @@ impl Inference {
                 let ret = self.fresh_type();
                 self.env.insert(id, ret.clone());
                 let t = self.scope.borrow().lookup_type(typ).unwrap();
+                let t = self.instance_if_possible(&t);
                 self.constraints.push(Constraint::Eq(ret.clone(), t));
                 self.constraints.push(Constraint::HasCase {
                     t: ret.clone(),
@@ -588,6 +597,7 @@ impl Inference {
                     .borrow()
                     .lookup_type(tname)
                     .expect("unknown type");
+                let typ = self.instance_if_possible(&typ);
                 let case_t = self.infer_in_pattern(case);
                 self.constraints.push(Constraint::Eq(case_t, typ.clone()));
 
@@ -707,6 +717,29 @@ impl Inference {
         let var = self.next_var;
         self.next_var += 1;
         Type::Fresh(var)
+    }
+
+    fn instance_if_possible(&mut self, t: &Type) -> Type {
+        match t {
+            Type::Scheme { prefex, typ } => {
+                if prefex.is_empty() {
+                    return *typ.clone();
+                }
+                let args = prefex.iter().map(|_| self.fresh_type()).collect();
+                Type::App {
+                    typ: Box::new(Type::Scheme {
+                        prefex: prefex.clone(),
+                        typ: typ.clone(),
+                    }),
+                    args,
+                }
+            }
+            Type::Alias(for_type) => {
+                let resolved = self.scope.borrow().resolve_alias(*for_type).unwrap();
+                self.instance_if_possible(&resolved)
+            }
+            t => t.clone(),
+        }
     }
 
     fn ast_type_to_type(scope: &Scope, prefex_scope: &mut PrefexScope, typ: &ast::Typ) -> Type {
