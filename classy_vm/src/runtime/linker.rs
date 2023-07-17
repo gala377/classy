@@ -136,7 +136,13 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                 }
                 Some(Type::ADT { constructors, .. }) => {
                     println!("Linking ADT {name:?}");
-                    self.create_adt_class(str_instance, tctx, &mut user_classes, constructors, name);
+                    self.create_adt_class(
+                        str_instance,
+                        tctx,
+                        &mut user_classes,
+                        constructors,
+                        name,
+                    );
                 }
                 _ => {
                     println!(
@@ -150,21 +156,23 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
         user_classes
     }
 
-    fn create_adt_class(&mut self, str_instance: u64, tctx: &TypCtx, user_classes: &mut UserClasses, constructors: Vec<(String, Type)>, name: String) {
+    fn create_adt_class(
+        &mut self,
+        str_instance: u64,
+        tctx: &TypCtx,
+        user_classes: &mut UserClasses,
+        constructors: Vec<(String, Type)>,
+        name: String,
+    ) {
         self.create_struct_class(str_instance, &[], tctx, user_classes);
         for (pos, (_, t)) in constructors.iter().enumerate() {
             let name = format!("{}@cons@{}", name, pos);
             let str_instance = self.intern_and_allocte_static_string(&name);
             match t {
-                Type::Unit => {
-                    self.create_struct_class(str_instance, &[], tctx, user_classes)
+                Type::Unit => self.create_struct_class(str_instance, &[], tctx, user_classes),
+                Type::Struct { fields, .. } => {
+                    self.create_struct_class(str_instance, fields, tctx, user_classes)
                 }
-                Type::Struct { fields, .. } => self.create_struct_class(
-                    str_instance,
-                    fields,
-                    tctx,
-                    user_classes,
-                ),
                 Type::Tuple(fields) => {
                     let fields = fields
                         .iter()
@@ -390,11 +398,9 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
             .constant_pool
             .get::<String>(index as usize)
             .expect("checked by instruction");
-        let type_name = *self
-            .vm
-            .interned_strings
-            .get(&str)
-            .expect(&format!("expected type symbols to already be allocated {str}"));
+        let type_name = *self.vm.interned_strings.get(&str).expect(&format!(
+            "expected type symbols to already be allocated {str}"
+        ));
         let cls_ptr = self
             .vm
             .runtime

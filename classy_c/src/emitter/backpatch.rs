@@ -37,7 +37,12 @@ impl Backpatcher {
                         };
                         println!("Found label {:?} at line {}", label, label_line);
                         let offset = label_line - (index - 1);
-                        println!("The jumpo from {} to {} is {}", index-1, label_line, offset);
+                        println!(
+                            "The jumpo from {} to {} is {}",
+                            index - 1,
+                            label_line,
+                            offset
+                        );
                         instrs[index..index + std::mem::size_of::<u64>()]
                             .copy_from_slice(&offset.to_le_bytes());
                     }
