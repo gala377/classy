@@ -10,12 +10,11 @@ pub mod scope;
 pub mod r#type;
 pub mod type_context;
 
-use std::{collections::HashMap, hash::Hash};
-
 use crate::syntax::{
     self,
     ast::{self, Visitor},
 };
+use std::collections::HashMap;
 
 use add_types::AddTypes;
 use alias_resolver::AliasResolver;

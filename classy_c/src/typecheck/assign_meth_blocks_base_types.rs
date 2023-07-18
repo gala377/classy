@@ -1,4 +1,4 @@
-use std::{any::TypeId, collections::HashMap};
+use std::collections::HashMap;
 
 use super::{
     r#type::Type,
