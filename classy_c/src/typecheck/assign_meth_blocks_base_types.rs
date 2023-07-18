@@ -7,7 +7,6 @@ use super::{
 
 pub fn assign_base_types(mut tctx: TypCtx) -> TypCtx {
     let mut new_method_blocks = HashMap::new();
-    println!("\n\n\n\n\nASSIGNING BASE TYPES\n\n\n\n\n");
     for (typ_id, old_sets) in &tctx.methods {
         let base_typ = get_base_type(&tctx, &tctx.resolve_alias(*typ_id), *typ_id);
         let sets: &mut HashMap<usize, HashMap<String, usize>> =
