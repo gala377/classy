@@ -107,13 +107,39 @@ impl ast::Folder for ImplicitForall {
     }
 
     fn fold_methods_block(&mut self, meths: ast::MethodsBlock) -> ast::MethodsBlock {
+        let typ = self.fold_methods_type(meths.typ);
+        let generics = match &typ {
+            ast::Typ::Poly(generics, _) => generics.clone(),
+            ast::Typ::Function { generics, .. } => generics.clone(),
+            _ => vec![],
+        };
+        self.ignore_names.new_scope();
+        for name in &generics {
+            self.ignore_names.add(name.clone(), ());
+        }
+        let methods = meths
+            .methods
+            .into_iter()
+            .map(|def| ast::fold::fold_function_definition(self, def))
+            .collect();
+        self.ignore_names.pop_scope();
+
         ast::MethodsBlock {
-            typ: ast::fold::fold_type(self, meths.typ),
-            methods: meths
-                .methods
-                .into_iter()
-                .map(|def| ast::fold::fold_function_definition(self, def))
-                .collect(),
+            name: meths.name,
+            typ,
+            methods,
+        }
+    }
+}
+
+impl ImplicitForall {
+    fn fold_methods_type(&mut self, typ: ast::Typ) -> ast::Typ {
+        self.prefex.clear();
+        let new_t = self.fold_typ(typ);
+        if !self.prefex.is_empty() {
+            ast::Typ::Poly(self.prefex.to_vec(), Box::new(new_t))
+        } else {
+            new_t
         }
     }
 }

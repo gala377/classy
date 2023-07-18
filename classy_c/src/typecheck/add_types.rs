@@ -33,6 +33,10 @@ impl<'ast, 'ctx> ast::Visitor<'ast> for AddTypes<'ctx> {
         let type_id = self.ctx.reserve_id();
         self.ctx.add_type_name(node.name.clone(), type_id);
     }
+
+    fn visit_methods_block(&mut self, meth: &'ast ast::MethodsBlock) {
+        let _id = self.ctx.add_methods_block_node(meth);
+    }
 }
 
 pub fn insert_primitive_types(ctx: &mut TypCtx) {

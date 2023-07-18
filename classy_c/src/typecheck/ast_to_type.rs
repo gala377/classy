@@ -24,65 +24,15 @@ impl PrefexScope {
 
 pub fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String) {
     let mut resolver = TypeResolver::new(ctx);
-    match typ {
-        ast::Typ::Function {
-            args,
-            ret,
-            generics,
-        } => {
-            let mut scope = PrefexScope::new();
-            scope.add_type_vars(generics);
-            let resolved_args: Vec<_> = args
-                .iter()
-                .map(|t| resolver.resolve_type(&mut scope, t))
-                .collect();
-            let resolved_ret = resolver.resolve_type(&mut scope, ret);
-            let function_t = ctx.mk_function_scheme(generics.clone(), &resolved_args, resolved_ret);
-            assert!(
-                ctx.variables.insert(name.clone(), function_t).is_some(),
-                "updating type definition for funtion that does not exist {}",
-                name
-            );
-        }
-        ast::Typ::Name(_) => {
-            let resolved = resolver.resolve_type(&mut PrefexScope::new(), typ);
-            let t = ctx.add_type(resolved);
-            assert!(
-                ctx.variables.insert(name.clone(), t).is_some(),
-                "updating type definition for funtion that does not exist {}",
-                name
-            );
-        }
-        ast::Typ::Application { callee, args } => {
-            let mut scope = PrefexScope::new();
-            let resolved_callee = resolver.resolve_type(&mut scope, callee);
-            let resolved_args: Vec<_> = args
-                .iter()
-                .map(|t| resolver.resolve_type(&mut scope, t))
-                .collect();
-            let t = ctx.add_type(Type::App {
-                typ: Box::new(resolved_callee),
-                args: resolved_args,
-            });
-            assert!(
-                ctx.variables.insert(name.clone(), t).is_some(),
-                "updating type definition for funtion that does not exist {}",
-                name
-            );
-        }
-        ast::Typ::Poly(generics, t) => {
-            let mut scope = PrefexScope::new();
-            scope.add_type_vars(generics);
-            let resolved = resolver.resolve_type(&mut scope, t);
-            let t = ctx.add_type(resolved);
-            assert!(
-                ctx.variables.insert(name.clone(), t).is_some(),
-                "updating type definition for funtion that does not exist {}",
-                name
-            );
-        }
-        _ => panic!("invalid type for function definition {} => {:?}", name, typ),
-    }
+    let mut scope = PrefexScope::new();
+    let Type::Alias(typ) = resolver.resolve_type(&mut scope, typ) else {
+        panic!("Alias resolver should only return aliases")
+    };
+    assert!(
+        ctx.variables.insert(name.clone(), typ).is_some(),
+        "updating type definition for funtion that does not exist {}",
+        name
+    );
 }
 
 pub fn resolve_top_level_type(
@@ -187,6 +137,74 @@ pub fn resolve_top_level_type(
             "Redefinition of type: {} => {}, previous value {:?}",
             type_id, name, t
         );
+    }
+}
+
+pub fn resolve_methods_block(
+    for_t: &ast::Typ,
+    ctx: &mut TypCtx,
+    methods: &[ast::FunctionDefinition],
+) {
+    let mut resolver = TypeResolver::new(ctx);
+    let mut scope = PrefexScope::new();
+    let resolved_for_t = resolver.resolve_type(&mut scope, for_t);
+    let generics = match for_t {
+        ast::Typ::Poly(generics, _) => generics.clone(),
+        ast::Typ::Function { generics, .. } => generics.clone(),
+        _ => vec![],
+    };
+    if !generics.is_empty() {
+        scope.new_scope();
+        scope.add_type_vars(&generics);
+    }
+
+    for meth in methods {}
+
+    if !generics.is_empty() {
+        scope.pop_scope();
+    }
+}
+
+pub fn resolve_methods_block_type(typ: &ast::Typ, ctx: &mut TypCtx) -> TypeId {
+    let mut resolver = TypeResolver::new(ctx);
+    match typ {
+        ast::Typ::Function {
+            args,
+            ret,
+            generics,
+        } => {
+            let mut scope = PrefexScope::new();
+            scope.add_type_vars(generics);
+            let resolved_args: Vec<_> = args
+                .iter()
+                .map(|t| resolver.resolve_type(&mut scope, t))
+                .collect();
+            let resolved_ret = resolver.resolve_type(&mut scope, ret);
+            ctx.mk_function_scheme(generics.clone(), &resolved_args, resolved_ret)
+        }
+        ast::Typ::Name(_) => {
+            let resolved = resolver.resolve_type(&mut PrefexScope::new(), typ);
+            ctx.add_type(resolved)
+        }
+        ast::Typ::Application { callee, args } => {
+            let mut scope = PrefexScope::new();
+            let resolved_callee = resolver.resolve_type(&mut scope, callee);
+            let resolved_args: Vec<_> = args
+                .iter()
+                .map(|t| resolver.resolve_type(&mut scope, t))
+                .collect();
+            ctx.add_type(Type::App {
+                typ: Box::new(resolved_callee),
+                args: resolved_args,
+            })
+        }
+        ast::Typ::Poly(generics, t) => {
+            let mut scope = PrefexScope::new();
+            scope.add_type_vars(generics);
+            let resolved = resolver.resolve_type(&mut scope, t);
+            ctx.add_type(resolved)
+        }
+        _ => panic!("invalid type for methods definition {:?}", typ),
     }
 }
 

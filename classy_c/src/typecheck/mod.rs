@@ -68,11 +68,23 @@ pub fn resolve_type_names(mut ctx: TypCtx) -> TypCtx {
             ast::TopLevelItem::FunctionDefinition(ast::FunctionDefinition {
                 name, typ, ..
             }) => ast_to_type::resolve_fn_def(typ, &mut ctx, name),
-            def => unimplemented!("{def:?}"),
+            _ => {}
         }
     }
     for (id, t) in type_updates {
         ctx.update_type_def(id, t)
+    }
+    for (_, def) in &nodes {
+        match def {
+            ast::TopLevelItem::MethodsBlock(ast::MethodsBlock {
+                name: _name,
+                typ,
+                methods,
+            }) => {
+                ast_to_type::resolve_methods_block(typ, &mut ctx, methods);
+            }
+            _ => {}
+        }
     }
     ctx
 }

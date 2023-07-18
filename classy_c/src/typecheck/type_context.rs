@@ -11,7 +11,7 @@ pub struct MethodSet {
     pub specialisation: Type,
     // A map from a name to a method type.
     pub methods: HashMap<Name, Type>,
-}   
+}
 
 pub type TypeId = usize;
 pub type DefId = usize;
@@ -108,6 +108,29 @@ impl TypCtx {
         self.add_type_definition(at, typ)
     }
 
+    pub fn init_methods_block(
+        &mut self,
+        for_type: TypeId,
+        specialisation: TypeId,
+        methods: Vec<(Name, TypeId)>,
+    ) {
+        let methods = methods
+            .into_iter()
+            .map(|(name, id)| (name, Type::Alias(id)))
+            .collect();
+        let specialisation = Type::Alias(specialisation);
+        let meth_set = MethodSet {
+            specialisation,
+            methods,
+        };
+        match self.methods.get_mut(&for_type) {
+            Some(sets) => sets.push(meth_set),
+            None => {
+                self.methods.insert(for_type, vec![meth_set]);
+            }
+        }
+    }
+
     pub fn update_type_def(&mut self, at: TypeId, typ: Type) {
         self.add_type_definition(at, typ)
     }
@@ -178,6 +201,13 @@ impl TypCtx {
         let id = self.next_id();
         self.nodes
             .insert(id, ast::TopLevelItem::TypeDefinition(node.clone()));
+        id
+    }
+
+    pub fn add_methods_block_node(&mut self, node: &ast::MethodsBlock) -> DefId {
+        let id = self.next_id();
+        self.nodes
+            .insert(id, ast::TopLevelItem::MethodsBlock(node.clone()));
         id
     }
 
