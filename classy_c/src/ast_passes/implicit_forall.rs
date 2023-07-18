@@ -105,4 +105,15 @@ impl ast::Folder for ImplicitForall {
         self.ignore_names.pop_scope();
         res
     }
+
+    fn fold_methods_block(&mut self, meths: ast::MethodsBlock) -> ast::MethodsBlock {
+        ast::MethodsBlock {
+            typ: ast::fold::fold_type(self, meths.typ),
+            methods: meths
+                .methods
+                .into_iter()
+                .map(|def| ast::fold::fold_function_definition(self, def))
+                .collect(),
+        }
+    }
 }

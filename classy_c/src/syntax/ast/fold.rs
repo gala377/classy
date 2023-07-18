@@ -5,6 +5,8 @@ use crate::syntax::ast::{
     TopLevelItem, Typ, TypeDefinition, TypeVariable, TypedName,
 };
 
+use super::MethodsBlock;
+
 /// TODO: Not all travelsal methods are implemented yet.
 pub trait Folder: Sized {
     fn fold_program(&mut self, program: Program) -> Program {
@@ -17,6 +19,10 @@ pub trait Folder: Sized {
 
     fn fold_function_definition(&mut self, def: FunctionDefinition) -> FunctionDefinition {
         fold_function_definition(self, def)
+    }
+
+    fn fold_methods_block(&mut self, meths: MethodsBlock) -> MethodsBlock {
+        fold_methods_block(self, meths)
     }
 
     fn fold_type_definition(&mut self, def: TypeDefinition) -> TypeDefinition {
@@ -291,6 +297,9 @@ pub fn fold_top_level_item<F: Folder>(folder: &mut F, item: TopLevelItem) -> Top
         }
         TopLevelItem::TypeDefinition(def) => {
             TopLevelItem::TypeDefinition(folder.fold_type_definition(def))
+        }
+        TopLevelItem::MethodsBlock(meths) => {
+            TopLevelItem::MethodsBlock(folder.fold_methods_block(meths))
         }
     }
 }
@@ -704,5 +713,17 @@ pub fn fold_pattern(folder: &mut impl Folder, pat: Pattern) -> Pattern {
     Pattern {
         id: pat.id,
         kind: folder.fold_pattern_kind(pat.kind),
+    }
+}
+
+pub fn fold_methods_block(folder: &mut impl Folder, meths: MethodsBlock) -> MethodsBlock {
+    MethodsBlock {
+        name: meths.name,
+        typ: folder.fold_typ(meths.typ),
+        methods: meths
+            .methods
+            .into_iter()
+            .map(|def| folder.fold_function_definition(def))
+            .collect(),
     }
 }

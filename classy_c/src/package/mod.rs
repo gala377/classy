@@ -186,6 +186,7 @@ fn serialize_type(tctx: &TypCtx, typ: &typecheck::r#type::Type, top_level: bool)
                     crate::syntax::ast::TopLevelItem::FunctionDefinition(_) => {
                         panic!("No struct node should map to a function definition")
                     }
+                    def => unimplemented!("{def:?}"),
                 }
             }
         }

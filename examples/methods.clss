@@ -1,0 +1,49 @@
+@empty @runtime
+print: (String) -> ()
+
+
+type Option(a) {
+    Some(a)
+    None
+}
+
+methods Option {
+    or other = this match {
+        Some(x) => Some(x)
+        None => other
+    }
+
+    and other = this match {
+        None => None
+        _ => other
+    }
+
+    default val = this match {
+        Some(x) => x
+        None => val
+    }
+
+    default_f f = this match {
+        Some(x) => x
+        None => f()
+    }
+
+    map f = this match {
+        Some(x) => Some(f x)
+        None => None
+    }
+}
+
+static x = "world"
+
+main {
+    let a = Option.
+        Some("hello").
+        map(static).
+        or(Option.Some("and some"))
+    a match {
+        Some("world") => print("it is world")
+        _ => print("anything else")
+    }
+}
+

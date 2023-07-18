@@ -15,6 +15,10 @@ pub trait Visitor<'ast>: Sized {
         walk_function_def(self, def)
     }
 
+    fn visit_methods_block(&mut self, meth: &'ast ast::MethodsBlock) {
+        walk_methods_block(self, meth)
+    }
+
     fn visit_type_def(&mut self, _node: &'ast ast::TypeDefinition) {}
 
     fn visit_expr(&mut self, node: &'ast ast::Expr) {
@@ -190,6 +194,7 @@ pub fn walk_top_level_item<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::T
     match node {
         ast::TopLevelItem::FunctionDefinition(fn_def) => v.visit_fn_def(fn_def),
         ast::TopLevelItem::TypeDefinition(t_def) => v.visit_type_def(t_def),
+        ast::TopLevelItem::MethodsBlock(meth) => v.visit_methods_block(meth),
     }
 }
 
@@ -548,4 +553,11 @@ pub fn walk_anon_struct_pattern<'ast, V: Visitor<'ast>>(
 
 pub fn walk_pattern<'ast, V: Visitor<'ast>>(v: &mut V, pattern: &'ast ast::Pattern) {
     v.visit_pattern_kind(&pattern.kind)
+}
+
+fn walk_methods_block<'ast, V: Visitor<'ast>>(v: &mut V, meth: &'ast ast::MethodsBlock) {
+    v.visit_typ(&meth.typ);
+    for method in &meth.methods {
+        v.visit_fn_def(method);
+    }
 }

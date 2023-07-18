@@ -63,6 +63,8 @@ impl<'source> Parser<'source> {
                 items.push(ast::TopLevelItem::TypeDefinition(str_def));
             } else if let Ok(fun_def) = self.parse_function_definition() {
                 items.push(ast::TopLevelItem::FunctionDefinition(fun_def));
+            } else if let Ok(meth_block) = self.parse_methods_block() {
+                items.push(ast::TopLevelItem::MethodsBlock(meth_block));
             } else {
                 self.error(
                     self.lexer.current().span.clone(),
@@ -75,6 +77,25 @@ impl<'source> Parser<'source> {
                 return Err(self.errors.clone());
             }
         }
+    }
+
+    fn parse_methods_block(&mut self) -> ParseRes<ast::MethodsBlock> {
+        let beg = self.curr_pos();
+        self.match_token(TokenType::Methods)?;
+        let typ = self.parse_type().error(self, beg, "Expected a type")?;
+        let _ = self.expect_token(TokenType::LBrace);
+        let mut methods = Vec::new();
+        while self.lexer.current().typ != TokenType::RBrace {
+            let method = self.parse_function_definition()?;
+            methods.push(method);
+        }
+        let _ = self.expect_token(TokenType::RBrace);
+        let _ = self.expect_token(TokenType::Semicolon);
+        Ok(ast::MethodsBlock {
+            name: None,
+            typ,
+            methods,
+        })
     }
 
     fn parse_type_definition(&mut self) -> ParseRes<ast::TypeDefinition> {
@@ -434,7 +455,7 @@ impl<'source> Parser<'source> {
     }
 
     fn parse_postfix_match(&mut self) -> ParseRes<ast::Expr> {
-        let expr = self.parse_fn_call()?;
+        let expr = self.parse_postfix_operators()?;
         if self.match_token(TokenType::Match).is_err() {
             return Ok(expr);
         }
@@ -458,9 +479,8 @@ impl<'source> Parser<'source> {
         }))
     }
 
-    fn parse_fn_call(&mut self) -> ParseRes<ast::Expr> {
+    fn parse_fn_call(&mut self, func: ast::Expr) -> ParseRes<ast::Expr> {
         let beg = self.curr_pos();
-        let func = self.parse_postfix_operators()?;
         let args: Vec<ast::Expr> = if self.match_token(TokenType::LParen).is_ok() {
             // this is a function call with arguments passed in parentheses
             // or a function call in a special form:
@@ -574,7 +594,7 @@ impl<'source> Parser<'source> {
             // form of func arg
             // if there is no name, rbrace following then its just a normal expression
             let mut check_for_trailing_lambda = false;
-            let mut args = match self.parse_postfix_operators().map(|e| e.kind) {
+            let mut args = match self.parse_term().map(|e| e.kind) {
                 // no name or brace following, just a normal expression
                 Err(ParseErr::WrongRule) => return Ok(func),
                 Err(e) => return Err(e),
@@ -718,6 +738,14 @@ impl<'source> Parser<'source> {
                     field,
                 });
                 continue;
+            }
+            let curr = self.lexer.current().typ.clone();
+            match curr {
+                TokenType::LParen | TokenType::LBrace | TokenType::Identifier(_) => {
+                    lhs = self.parse_fn_call(lhs)?;
+                    continue;
+                }
+                _ => {}
             }
             break;
         }

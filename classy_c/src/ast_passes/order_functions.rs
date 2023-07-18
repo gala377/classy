@@ -2,6 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::syntax::ast;
 
+/// TODO: Involve methods into the ordering
+
 enum Mode {
     GatherFunctions,
     BuildGraph,
@@ -19,6 +21,9 @@ pub struct FunctionsOrderer {
     /// and the count of arguments (annotation not needed if only return type has
     /// has to be inferred)
     functions: HashMap<String, (usize, bool, usize)>,
+
+    // TODO: Change it to scope so that the variables get removed
+    // when they go aout of scope of match, if, while and so on
     /// Variables defined within the current function
     variables: HashSet<String>,
     order: Vec<String>,

@@ -25,6 +25,7 @@ pub struct Program {
 pub enum TopLevelItem {
     TypeDefinition(TypeDefinition),
     FunctionDefinition(FunctionDefinition),
+    MethodsBlock(MethodsBlock),
 }
 #[derive(Debug, Clone)]
 pub struct TypeDefinition {
@@ -90,6 +91,14 @@ pub struct FunctionDefinition {
     pub parameters: Vec<String>,
     pub body: Expr,
     pub attributes: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq))]
+pub struct MethodsBlock {
+    pub name: Option<String>,
+    pub typ: Typ,
+    pub methods: Vec<FunctionDefinition>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
