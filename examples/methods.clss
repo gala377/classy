@@ -22,7 +22,9 @@ methods Option(a) {
         Some(x) => x
         None => val
     }
+}
 
+methods Option(a) {
     default_f f = this match {
         Some(x) => x
         None => f()
@@ -32,6 +34,16 @@ methods Option(a) {
         Some(x) => Some(f x)
         None => None
     }
+}
+
+
+methods Option(Int) {
+    print a = print("hello")
+}
+
+
+methods Int {
+    print_int = print(this)
 }
 
 static x = "world"

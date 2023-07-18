@@ -10,10 +10,28 @@ pub fn assign_base_types(mut tctx: TypCtx) -> TypCtx {
     println!("\n\n\n\n\nASSIGNING BASE TYPES\n\n\n\n\n");
     for (typ_id, old_sets) in &tctx.methods {
         let base_typ = get_base_type(&tctx, &tctx.resolve_alias(*typ_id), *typ_id);
-        let sets: &mut Vec<MethodSet> = new_method_blocks.entry(base_typ).or_default();
-        sets.extend_from_slice(old_sets);
+        let sets: &mut HashMap<usize, HashMap<String, usize>> =
+            new_method_blocks.entry(base_typ).or_default();
+        for set in old_sets {
+            let methods: &mut HashMap<String, usize> = sets.entry(set.specialisation).or_default();
+            for (name, typ) in &set.methods {
+                if methods.insert(name.clone(), *typ).is_some() {
+                    panic!("redefinition of method: {name}");
+                }
+            }
+        }
     }
-    tctx.methods = new_method_blocks;
+    let mut tmp = HashMap::new();
+    for (id, methods_set) in new_method_blocks {
+        let sets: &mut Vec<_> = tmp.entry(id).or_default();
+        for (specialisation, methods) in methods_set {
+            sets.push(MethodSet {
+                specialisation,
+                methods,
+            });
+        }
+    }
+    tctx.methods = tmp;
     tctx
 }
 

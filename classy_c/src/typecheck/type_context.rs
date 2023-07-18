@@ -275,13 +275,15 @@ impl TypCtx {
         }
         s += "\n\n\tmethod blocks:";
         for (id, sets) in &self.methods {
-            s = s + &format!("\n\t\t{}:", id);
+            s = s + &format!("\n\t\t{} => {{", id);
             for set in sets {
-                s = s + &format!("\n\t\t\t{:?}", set.specialisation);
+                s = s + &format!("\n\t\t\t{:?} => {{", set.specialisation);
                 for (name, typ) in &set.methods {
                     s = s + &format!("\n\t\t\t\t{} -> {:?}", name, typ);
                 }
+                s += "\n\t\t\t}";
             }
+            s += "\n\t\t}";
         }
         s += "\n}\n";
         s
