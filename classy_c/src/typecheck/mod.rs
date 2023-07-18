@@ -1,5 +1,6 @@
 pub mod add_types;
 pub mod alias_resolver;
+pub mod assign_meth_blocks_base_types;
 pub mod ast_to_type;
 pub mod constraints;
 pub mod constrait_solver;
@@ -9,7 +10,7 @@ pub mod scope;
 pub mod r#type;
 pub mod type_context;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, hash::Hash};
 
 use crate::syntax::{
     self,
@@ -32,6 +33,7 @@ pub fn prepare_for_typechecking(program: &syntax::ast::Program) -> TypCtx {
     tctx = resolve_type_names(tctx);
     AliasResolver::resolve(&mut tctx);
     dedup_trivially_eq_types(&mut tctx);
+    tctx = assign_meth_blocks_base_types::assign_base_types(tctx);
     tctx
 }
 
@@ -68,14 +70,6 @@ pub fn resolve_type_names(mut ctx: TypCtx) -> TypCtx {
             ast::TopLevelItem::FunctionDefinition(ast::FunctionDefinition {
                 name, typ, ..
             }) => ast_to_type::resolve_fn_def(typ, &mut ctx, name),
-            _ => {}
-        }
-    }
-    for (id, t) in type_updates {
-        ctx.update_type_def(id, t)
-    }
-    for (_, def) in &nodes {
-        match def {
             ast::TopLevelItem::MethodsBlock(ast::MethodsBlock {
                 name: _name,
                 typ,
@@ -83,8 +77,10 @@ pub fn resolve_type_names(mut ctx: TypCtx) -> TypCtx {
             }) => {
                 ast_to_type::resolve_methods_block(typ, &mut ctx, methods);
             }
-            _ => {}
         }
+    }
+    for (id, t) in type_updates {
+        ctx.update_type_def(id, t)
     }
     ctx
 }
@@ -135,6 +131,30 @@ pub fn dedup_trivially_eq_types(ctx: &mut TypCtx) {
             *id = *new_id;
         }
     }
+    // update method blocks, their types and their methods types
+    // to point to a common type
+    // note that base types have still not been resolved.
+    let mut new_methods_entry = HashMap::new();
+    for (id, sets) in &ctx.methods {
+        let new_id = duplicates.get(id).unwrap_or(id);
+        let mut new_method_sets = Vec::new();
+        for set in sets {
+            let mut new_methods = HashMap::new();
+            for (meth_name, meth_type) in &set.methods {
+                let new_type = duplicates.get(meth_type).unwrap_or(meth_type);
+                new_methods.insert(meth_name.clone(), *new_type);
+            }
+            new_method_sets.push(MethodSet {
+                specialisation: *new_id,
+                methods: new_methods,
+            })
+        }
+        let existing_set: &mut Vec<MethodSet> = new_methods_entry.entry(*new_id).or_default();
+        existing_set.append(&mut new_method_sets);
+    }
+    ctx.methods = new_methods_entry;
+
+    // Remove unnecessary definitions
     ctx.definitions.retain(|k, _| !duplicates.contains_key(k));
     for (_, typ) in ctx.definitions.iter_mut() {
         *typ = replace_aliases_with_map(typ, &duplicates)

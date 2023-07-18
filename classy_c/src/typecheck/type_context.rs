@@ -5,12 +5,13 @@ use crate::{
     typecheck::r#type::{Type, TypeFolder},
 };
 
+#[derive(Debug, Clone)]
 pub struct MethodSet {
     // A full type (along with bounds and applications)
     // that the following methods apply to.
-    pub specialisation: Type,
+    pub specialisation: TypeId,
     // A map from a name to a method type.
-    pub methods: HashMap<Name, Type>,
+    pub methods: HashMap<Name, TypeId>,
 }
 
 pub type TypeId = usize;
@@ -114,14 +115,9 @@ impl TypCtx {
         specialisation: TypeId,
         methods: Vec<(Name, TypeId)>,
     ) {
-        let methods = methods
-            .into_iter()
-            .map(|(name, id)| (name, Type::Alias(id)))
-            .collect();
-        let specialisation = Type::Alias(specialisation);
         let meth_set = MethodSet {
             specialisation,
-            methods,
+            methods: methods.into_iter().collect(),
         };
         match self.methods.get_mut(&for_type) {
             Some(sets) => sets.push(meth_set),
@@ -277,16 +273,17 @@ impl TypCtx {
         for (id, name) in tmp {
             s = s + &format!("\n\t\t{id}: {name}");
         }
-        s += "\n\tnodes:";
-
-        let mut tmp = Vec::new();
-        for (id, def) in &self.nodes {
-            tmp.push((id, def));
+        s += "\n\n\tmethod blocks:";
+        for (id, sets) in &self.methods {
+            s = s + &format!("\n\t\t{}:", id);
+            for set in sets {
+                s = s + &format!("\n\t\t\t{:?}", set.specialisation);
+                for (name, typ) in &set.methods {
+                    s = s + &format!("\n\t\t\t\t{} -> {:?}", name, typ);
+                }
+            }
         }
-        tmp.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
-        for (id, type_def) in tmp {
-            s = s + &format!("\n\t\t{id}: {type_def:?}");
-        }
+        s += "\n}\n";
         s
     }
 

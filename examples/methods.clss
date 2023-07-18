@@ -7,7 +7,7 @@ type Option(a) {
     None
 }
 
-methods Option {
+methods Option(a) {
     or other = this match {
         Some(x) => Some(x)
         None => other

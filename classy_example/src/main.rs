@@ -135,8 +135,7 @@ fn compile(
         classy_c::syntax::parser::Parser::new(classy_c::syntax::lexer::Lexer::new(source));
     let ast = parser.parse().unwrap();
     let ast = classy_c::ast_passes::run_befor_type_context_passes(ast);
-    let tctx = classy_c::typecheck::type_context::TypCtx::new();
-    let mut tctx = prepare_type_ctx(tctx, &ast);
+    let mut tctx = typecheck::prepare_for_typechecking(&ast);
     println!("Type ctxt: {}", tctx.debug_string());
     let res = run_before_typechecking_passes(&tctx, ast);
     //println!("AST: {:#?}", res);

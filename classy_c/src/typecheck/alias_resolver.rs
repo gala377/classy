@@ -5,6 +5,8 @@ use crate::typecheck::{
     type_context::{TypCtx, TypeId},
 };
 
+use super::type_context::MethodSet;
+
 pub struct AliasResolver {
     resolved: HashMap<TypeId, TypeId>,
 }
@@ -15,6 +17,7 @@ impl AliasResolver {
         resolver.resolve_aliases(ctx);
         resolver.update_names(ctx);
         resolver.update_variables(ctx);
+        resolver.update_methods_blocks(ctx);
         resolver.resolve_aliases_shallow(ctx);
         resolver.remove_top_level_aliases(ctx);
     }
@@ -83,6 +86,44 @@ impl AliasResolver {
         }
         for (name, tid) in updates {
             ctx.variables.insert(name, tid);
+        }
+    }
+
+    fn update_methods_blocks(&mut self, ctx: &mut TypCtx) {
+        let mut block_type_updates = Vec::<(usize, usize)>::new();
+        let mut method_type_updates = Vec::<(String, usize)>::new();
+        for (typ_id, sets) in &ctx.methods {
+            if let Type::Alias(for_type) = ctx.definitions.get(typ_id).unwrap() {
+                block_type_updates.push((*typ_id, *for_type));
+            }
+            for MethodSet { methods, .. } in sets {
+                for (name, typ_id) in methods {
+                    if let Type::Alias(for_type) = ctx.definitions.get(typ_id).unwrap() {
+                        method_type_updates.push((name.clone(), *for_type));
+                    }
+                }
+            }
+        }
+        for (old_id, new_id) in block_type_updates {
+            let mut old = ctx.methods.remove(&old_id).unwrap();
+            assert!(old.len() == 1, "invariant");
+            old.last_mut().unwrap().specialisation = new_id;
+            match ctx.methods.get_mut(&new_id) {
+                Some(sets) => sets.append(&mut old),
+                None => {
+                    ctx.methods.insert(new_id, old);
+                }
+            }
+        }
+        for sets in ctx.methods.values_mut() {
+            for method_set in sets {
+                for (name, new_id) in &method_type_updates {
+                    let Some(val) = method_set.methods.get_mut(name) else {
+                        panic!("Updating type of nonexisting method {name}");
+                    };
+                    *val = *new_id;
+                }
+            }
         }
     }
 

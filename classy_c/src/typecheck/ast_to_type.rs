@@ -4,7 +4,7 @@ use crate::syntax::ast;
 
 use super::{
     r#type::{DeBruijn, Type},
-    type_context::{TypCtx, TypeId, MethodSet},
+    type_context::{MethodSet, TypCtx, TypeId},
 };
 use crate::scope::Scope;
 
@@ -161,22 +161,22 @@ pub fn resolve_methods_block(
     scope.new_scope();
 
     let mut resolved_meths = HashMap::new();
-    for ast::FunctionDefinition{ name, typ, .. } in methods {
-        let typ = resolver.resolve_type(&mut scope, typ);
-        resolved_meths.insert(name.clone(), typ).expect(&format!("redefinition of method: {name}"));
-    }
-    match ctx.methods.get_mut(&resolved_for_t) {
-        Some(sets) => sets.push(MethodSet {
-            specialisation: Type::Alias(resolved_for_t),
-            methods: resolved_meths,
-        }),
-        None => {
-            ctx.methods.insert(resolved_for_t, vec![MethodSet {
-                specialisation: Type::Alias(resolved_for_t),
-                methods: resolved_meths,
-            }]);
+    for ast::FunctionDefinition { name, typ, .. } in methods {
+        let Type::Alias(typ) = resolver.resolve_type(&mut scope, typ) else {
+            panic!("Alias resolver should only return aliases")
+        };
+        if resolved_meths.insert(name.clone(), typ).is_some() {
+            panic!("redefinition of method: {name}");
         }
     }
+    let meth_set = MethodSet {
+        specialisation: resolved_for_t,
+        methods: resolved_meths,
+    };
+    ctx.methods
+        .entry(resolved_for_t)
+        .or_default()
+        .push(meth_set);
 }
 
 struct TypeResolver<'ctx> {
