@@ -4,7 +4,7 @@ use crate::syntax::ast;
 
 use super::{
     r#type::{DeBruijn, Type},
-    type_context::{TypCtx, TypeId},
+    type_context::{TypCtx, TypeId, MethodSet},
 };
 use crate::scope::Scope;
 
@@ -43,8 +43,10 @@ pub fn resolve_top_level_type(
     type_variables: &Vec<ast::TypeVariable>,
     updates: &mut HashMap<usize, Type>,
 ) {
-    let exp_msg = format!("the types should have been prepopulated: {name}");
-    let type_id = *ctx.types.get(name).expect(&exp_msg);
+    let type_id = *ctx
+        .types
+        .get(name)
+        .expect(&(format!("the types should have been prepopulated: {name}")));
     let mut scope = PrefexScope::new();
     for generic in type_variables {
         scope.add_type_var(generic.name.clone());
@@ -147,64 +149,33 @@ pub fn resolve_methods_block(
 ) {
     let mut resolver = TypeResolver::new(ctx);
     let mut scope = PrefexScope::new();
-    let resolved_for_t = resolver.resolve_type(&mut scope, for_t);
+    let Type::Alias(resolved_for_t) = resolver.resolve_type(&mut scope, for_t) else {
+        panic!("Alias resolver should only return aliases")
+    };
     let generics = match for_t {
         ast::Typ::Poly(generics, _) => generics.clone(),
         ast::Typ::Function { generics, .. } => generics.clone(),
         _ => vec![],
     };
-    if !generics.is_empty() {
-        scope.new_scope();
-        scope.add_type_vars(&generics);
+    scope.add_type_vars(&generics);
+    scope.new_scope();
+
+    let mut resolved_meths = HashMap::new();
+    for ast::FunctionDefinition{ name, typ, .. } in methods {
+        let typ = resolver.resolve_type(&mut scope, typ);
+        resolved_meths.insert(name.clone(), typ).expect(&format!("redefinition of method: {name}"));
     }
-
-    for meth in methods {}
-
-    if !generics.is_empty() {
-        scope.pop_scope();
-    }
-}
-
-pub fn resolve_methods_block_type(typ: &ast::Typ, ctx: &mut TypCtx) -> TypeId {
-    let mut resolver = TypeResolver::new(ctx);
-    match typ {
-        ast::Typ::Function {
-            args,
-            ret,
-            generics,
-        } => {
-            let mut scope = PrefexScope::new();
-            scope.add_type_vars(generics);
-            let resolved_args: Vec<_> = args
-                .iter()
-                .map(|t| resolver.resolve_type(&mut scope, t))
-                .collect();
-            let resolved_ret = resolver.resolve_type(&mut scope, ret);
-            ctx.mk_function_scheme(generics.clone(), &resolved_args, resolved_ret)
+    match ctx.methods.get_mut(&resolved_for_t) {
+        Some(sets) => sets.push(MethodSet {
+            specialisation: Type::Alias(resolved_for_t),
+            methods: resolved_meths,
+        }),
+        None => {
+            ctx.methods.insert(resolved_for_t, vec![MethodSet {
+                specialisation: Type::Alias(resolved_for_t),
+                methods: resolved_meths,
+            }]);
         }
-        ast::Typ::Name(_) => {
-            let resolved = resolver.resolve_type(&mut PrefexScope::new(), typ);
-            ctx.add_type(resolved)
-        }
-        ast::Typ::Application { callee, args } => {
-            let mut scope = PrefexScope::new();
-            let resolved_callee = resolver.resolve_type(&mut scope, callee);
-            let resolved_args: Vec<_> = args
-                .iter()
-                .map(|t| resolver.resolve_type(&mut scope, t))
-                .collect();
-            ctx.add_type(Type::App {
-                typ: Box::new(resolved_callee),
-                args: resolved_args,
-            })
-        }
-        ast::Typ::Poly(generics, t) => {
-            let mut scope = PrefexScope::new();
-            scope.add_type_vars(generics);
-            let resolved = resolver.resolve_type(&mut scope, t);
-            ctx.add_type(resolved)
-        }
-        _ => panic!("invalid type for methods definition {:?}", typ),
     }
 }
 
