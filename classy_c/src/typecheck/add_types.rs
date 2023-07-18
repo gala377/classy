@@ -18,6 +18,8 @@ impl<'ctx> AddTypes<'ctx> {
     }
 }
 
+/// TODO: We need more complex logic for methods here
+
 impl<'ast, 'ctx> ast::Visitor<'ast> for AddTypes<'ctx> {
     fn visit_fn_def(&mut self, node: &'ast ast::FunctionDefinition) {
         let _id = self.ctx.add_fn_node(node);

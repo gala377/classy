@@ -5,6 +5,14 @@ use crate::{
     typecheck::r#type::{Type, TypeFolder},
 };
 
+pub struct MethodSet {
+    // A full type (along with bounds and applications)
+    // that the following methods apply to.
+    pub specialisation: Type,
+    // A map from a name to a method type.
+    pub methods: HashMap<Name, Type>,
+}   
+
 pub type TypeId = usize;
 pub type DefId = usize;
 pub type Name = String;
@@ -19,6 +27,10 @@ pub struct TypCtx {
     /// Associates names of items, that are not types, like variables or
     /// functions with their type.
     pub variables: HashMap<Name, TypeId>,
+    /// Associates a base type (after resolving aliases and deapplying the type)
+    /// with its method sets. Each methods set consists of specialisation and a
+    /// list of methods within this specialisation.
+    pub methods: HashMap<TypeId, Vec<MethodSet>>,
 
     pub next_id: TypeId,
 
@@ -36,6 +48,7 @@ impl TypCtx {
             types: HashMap::new(),
             nodes: HashMap::new(),
             variables: HashMap::new(),
+            methods: HashMap::new(),
         }
     }
 
