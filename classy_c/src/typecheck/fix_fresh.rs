@@ -15,24 +15,9 @@ pub fn fix_types_after_inference(
     global_scope: Rc<RefCell<Scope>>,
 ) {
     fix_types_in_env(substitutions, env);
-    // if name == "make_ref" {
-    //     println!("\n\nAFTER FOX TYPES\n\n{}", tctx.debug_string());
-    // }
     fix_fresh_vars_in_substitutions(substitutions, tctx);
-
-    // if name == "make_ref" {
-    //     println!("\n\nAFTER FIX FRESH\n\n{}", tctx.debug_string());
-    // }
     fix_nested_types(substitutions, tctx);
-
-    // if name == "make_ref" {
-    //     println!("\n\nAFTER FOX NESTED\n\n{}", tctx.debug_string());
-    // }
     generalize_types(tctx, name, global_scope, env);
-
-    // if name == "make_ref" {
-    //     println!("\n\nAFTER GEN\n\n{}", tctx.debug_string());
-    // }
 }
 
 fn generalize_types(

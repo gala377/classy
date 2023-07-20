@@ -18,8 +18,8 @@ impl Default for Mode {
 pub struct FunctionsOrderer {
     /// Top level function names
     /// Also information if it has type annotation
-    /// and the count of arguments (annotation not needed if only return type has
-    /// has to be inferred)
+    /// and the count of arguments (annotation not needed if only return type
+    /// has has to be inferred)
     functions: HashMap<String, (usize, bool, usize)>,
 
     // TODO: Change it to scope so that the variables get removed

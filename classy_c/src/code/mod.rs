@@ -46,7 +46,8 @@ pub enum OpCode {
     Return,
     /// Call function with no arguments. The function is on top of the stack.
     Call0,
-    /// Call function with one argument that is on top of the stack. And the function is below it.
+    /// Call function with one argument that is on top of the stack. And the
+    /// function is below it.
     Call1,
     /// Call function on the top of the stack with "N"
     /// arguments where "n" is stored as a word the
@@ -92,7 +93,7 @@ pub enum OpCode {
     /// following this instruction and push it to the top of the stack
     ///
     /// Args:
-    ///   - offset: Word  
+    ///   - offset: Word
     StackCopyBottom,
 
     /// Allocate space on a stack for a number of words
@@ -115,8 +116,8 @@ pub enum OpCode {
     PushUnit,
 
     /// Take the pointer from the top of the stack offset it and derefernce it.
-    /// Put this value on top of the stack. The offset is following this instruction
-    /// as a word.
+    /// Put this value on top of the stack. The offset is following this
+    /// instruction as a word.
     ///
     /// Args:
     ///  - offset: Word
@@ -140,9 +141,9 @@ pub enum OpCode {
     RuntimeCall,
 
     /// Allocate an array on the the heap
-    /// The arguments following are the size, align of the element and if the element is a reference.
-    /// The top of the stack holds the number of elements.
-    /// Args:
+    /// The arguments following are the size, align of the element and if the
+    /// element is a reference. The top of the stack holds the number of
+    /// elements. Args:
     ///  - size: Word
     ///  - align: Word
     ///  - is_ref: Word

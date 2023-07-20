@@ -56,7 +56,8 @@ impl Header {
 
     /// # Safety
     ///
-    /// `ptr` has to be allocated on the managed heap and contain a valid header.
+    /// `ptr` has to be allocated on the managed heap and contain a valid
+    /// header.
     pub unsafe fn data_from_nonnull<T>(ptr: NonNullPtr<T>) -> usize {
         (*ptr.get().cast::<Header>().sub(1)).data
     }

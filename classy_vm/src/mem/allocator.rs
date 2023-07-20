@@ -34,8 +34,8 @@ impl Allocator {
     /// # Safety
     ///
     /// Unsafe because the returned page does not have a set owner.
-    /// Because of it trying to access memory of this page might lead to data races.
-    /// To get a page that is already associated with some thread use
+    /// Because of it trying to access memory of this page might lead to data
+    /// races. To get a page that is already associated with some thread use
     /// `allocate_page_for`
     pub unsafe fn allocate_custom_page_unowned(&mut self, size: usize, align: usize) -> Ptr<Page> {
         if self.bytes_allocated + size > self.allocated_limit {
@@ -73,9 +73,9 @@ impl Allocator {
         page_ptr
     }
 
-    /// Same as `allocate_custom_page` however immediately sets the owner of the page.
-    /// This way the page cannot be given to other thread, which migh have requested
-    /// for it with the `get_page` method.
+    /// Same as `allocate_custom_page` however immediately sets the owner of the
+    /// page. This way the page cannot be given to other thread, which migh
+    /// have requested for it with the `get_page` method.
     pub fn allocate_custom_page(
         &mut self,
         owner: ThreadId,
@@ -104,16 +104,17 @@ impl Allocator {
         self.allocate_custom_page(owner, self.page_size, self.page_align)
     }
 
-    /// Releases the page from the current owner. The page has to be owned by the
-    /// `owner` thread.
+    /// Releases the page from the current owner. The page has to be owned by
+    /// the `owner` thread.
     pub fn release_page(&mut self, owner: ThreadId, page: NonNull<Page>) {
         unsafe {
             let current_owner = (*page.as_ptr()).owner;
             match current_owner {
-                Some(co) if co == owner =>
-                    (*page.as_ptr()).owner = None,
-                Some(other_owner) =>
-                    panic!("thread {owner:?} is trying to release a page of an other thread {other_owner:?}"),
+                Some(co) if co == owner => (*page.as_ptr()).owner = None,
+                Some(other_owner) => panic!(
+                    "thread {owner:?} is trying to release a page of an other thread \
+                     {other_owner:?}"
+                ),
                 None => panic!("thread {owner:?} releasing unassigned memory page"),
             }
         }

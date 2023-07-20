@@ -40,5 +40,6 @@ main {
         _ => "anything else"
     }
     print res
+    print(default(Option.Some("x"), "hello"))
 }
 

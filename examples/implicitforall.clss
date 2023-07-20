@@ -14,5 +14,5 @@ foo: (a, forall c => (c) -> b) -> b
 foo (a, f) = f a
 
 main {
-    print "works"
+    print("works")
 }

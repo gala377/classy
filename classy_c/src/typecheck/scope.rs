@@ -13,6 +13,30 @@ pub struct Scope {
 }
 
 impl Scope {
+    pub fn get_global(scope: Rc<RefCell<Scope>>) -> Rc<RefCell<Scope>> {
+        let mut current = scope.clone();
+        return loop {
+            let parent = current.borrow().parent.clone();
+            if parent.is_none() {
+                break current;
+            }
+            current = parent.unwrap();
+        };
+    }
+
+    pub fn is_global(&self, name: &str) -> bool {
+        if self.resolved_vars.contains_key(name) {
+            if self.parent.is_none() {
+                return true;
+            }
+            return false;
+        }
+        if self.parent.is_none() {
+            return false;
+        }
+        self.parent.as_ref().unwrap().borrow().is_global(name)
+    }
+
     pub fn from_type_ctx(type_ctx: &TypCtx) -> Self {
         let resolved_vars = {
             type_ctx

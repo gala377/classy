@@ -23,8 +23,8 @@ use type_context::*;
 
 pub use inference::run;
 
-/// Create a top level type context containing all types and functions with their
-/// respective types in the simplest form possible.
+/// Create a top level type context containing all types and functions with
+/// their respective types in the simplest form possible.
 pub fn prepare_for_typechecking(program: &syntax::ast::Program) -> TypCtx {
     let mut tctx = TypCtx::new();
     let mut add_types = AddTypes::with_primitive_types(&mut tctx);

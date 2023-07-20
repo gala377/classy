@@ -73,8 +73,8 @@ enum ShouldPerformGc {
 /// Do not put behind Mutex or Arc.
 ///
 /// This struct is per thread, meaning that each thread holds its own copy.
-/// It is safe to clone and send to another thread, though the thread_id and a tlab
-/// have to be recomputed for the new thread.
+/// It is safe to clone and send to another thread, though the thread_id and a
+/// tlab have to be recomputed for the new thread.
 #[allow(dead_code)]
 pub struct Heap {
     thread_id: std::thread::ThreadId,
@@ -307,8 +307,9 @@ impl ObjectAllocator for Heap {
             if new_tlab.is_some() {
                 return self.thread_tlab.allocate(layout);
             }
-            // todo: for the check above to make sense we need the request threads stop
-            // while holding the lock for the allocator.
+            // todo: for the check above to make sense we need the request
+            // threads stop while holding the lock for the
+            // allocator.
         };
         Ptr::null()
         // TODO:

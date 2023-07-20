@@ -106,6 +106,19 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
         get_struct_type_impl(self.tctx, t.clone())
     }
 
+    fn get_struct_fields(&self, t: &Type) -> Vec<(String, Type)> {
+        fn implementation(tctx: &TypCtx, t: Type) -> Vec<(String, Type)> {
+            match t {
+                Type::Struct { fields, .. } => fields.clone(),
+                Type::Scheme { typ, .. } => implementation(tctx, *typ.clone()),
+                Type::App { typ, args } => implementation(tctx, instance(tctx, args.clone(), *typ)),
+                Type::Alias(for_type) => implementation(tctx, tctx.resolve_alias(for_type)),
+                _ => panic!("expected a struct type"),
+            }
+        }
+        implementation(self.tctx, t.clone())
+    }
+
     fn get_adt_type(&self, name: &str) -> (DefId, Vec<(String, Type)>) {
         fn get_adt_type_impl(tctx: &TypCtx, t: Type) -> (DefId, Vec<(String, Type)>) {
             match t {
@@ -243,9 +256,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
             ast::ExprKind::Access { val, field } => {
                 let lhs_id = val.id;
                 let val = self.emit_expr(val);
-                let Type::Struct { fields, .. } = self.env.get(&lhs_id).unwrap() else {
-                    panic!("Should be a struct");
-                };
+                let fields = self.get_struct_fields(self.env.get(&lhs_id).unwrap());
                 let (offset, field_t) = fields
                     .iter()
                     .enumerate()
@@ -270,8 +281,8 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
             ast::ExprKind::StructLiteral { strct, values } => {
                 // TODO:
                 // We should believe into scope analysis but I am pretty sure I did not
-                // do it and this might create a struct when we dont want to because we reassigned
-                // the name of the type to something else
+                // do it and this might create a struct when we dont want to because we
+                // reassigned the name of the type to something else
                 let name = strct.0.last().unwrap().clone();
                 let (def, fields) = self.get_struct_type(&name);
                 let tid = self.tctx.def_id_to_typ_id(def);
@@ -850,15 +861,6 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
         }
     }
 
-    fn get_fields(&self, t: &Type) -> Vec<(String, Type)> {
-        match t {
-            Type::Struct { fields, .. } => fields.clone(),
-            Type::Alias(for_t) => self.get_fields(&self.tctx.resolve_alias(*for_t)),
-            Type::Scheme { typ, .. } => self.get_fields(typ),
-            Type::App { typ, .. } => self.get_fields(typ),
-            _ => panic!("Expected struct got {t:?}"),
-        }
-    }
 
     fn is_ref(&self, addr: &Address) -> IsRef {
         match addr {
@@ -896,9 +898,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
             ast::ExprKind::Access { val, field } => {
                 let lhs_id = val.id;
                 let val = self.emit_expr(val);
-                let Type::Struct { fields, .. } = self.env.get(&lhs_id).unwrap() else {
-                    panic!("Should be a struct");
-                };
+                let fields = self.get_struct_fields(self.env.get(&lhs_id).unwrap());
                 let offset = fields.iter().position(|(name, _)| name == field).unwrap();
                 Lval::Indexed(val, offset)
             }

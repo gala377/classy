@@ -1,9 +1,12 @@
 use core::panic;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
 use crate::{
-    ast_passes,
-    syntax::ast::{self, Visitor},
+    syntax::ast,
     typecheck::{
         constraints::Constraint,
         constrait_solver::{instance, ConstraintSolver},
@@ -55,6 +58,7 @@ pub(super) struct Inference {
     constraints: Vec<Constraint>,
     next_var: usize,
     ret_t: Option<Type>,
+    already_typecheck: HashSet<String>,
 }
 
 impl Inference {
@@ -66,6 +70,7 @@ impl Inference {
             constraints: Vec::new(),
             next_var: 0,
             ret_t: None,
+            already_typecheck: HashSet::new(),
         }
     }
 
@@ -85,10 +90,42 @@ impl Inference {
             all_constraints: Vec::new(),
             next_var: self.next_var,
             ret_t: self.ret_t.clone(),
+            already_typecheck: self.already_typecheck.clone(),
         };
         let ret = f(&mut sub);
         self.merge(sub);
         ret
+    }
+
+    pub fn infer_function(&mut self, tctx: &mut TypCtx, fn_def: &ast::FunctionDefinition) -> Type {
+        self.already_typecheck.insert(fn_def.name.clone());
+        let mut inferer = Inference::new(self.scope.clone());
+        inferer.next_var = self.next_var;
+        if fn_def.attributes.contains(&"runtime".to_owned()) {
+            return tctx.type_of(&fn_def.name).unwrap();
+        }
+        let global_scope = Scope::get_global(self.scope.clone());
+        inferer.generate_constrains_for_function(tctx, global_scope.clone(), fn_def);
+
+        let mut solver = ConstraintSolver::new(inferer.next_var, tctx);
+        let constraints = inferer
+            .all_constraints
+            .last()
+            .map(|(_, c)| c)
+            .unwrap()
+            .clone();
+        solver.solve(constraints);
+        inferer.next_var = solver.next_var;
+        let mut substitutions = solver.substitutions.into_iter().collect();
+        fix_fresh::fix_types_after_inference(
+            &fn_def.name,
+            &mut substitutions,
+            tctx,
+            &mut inferer.env,
+            global_scope.clone(),
+        );
+        self.merge_without_constraints(inferer);
+        dbg!(tctx.type_of(&fn_def.name).unwrap())
     }
 
     pub fn infer_types(tctx: &mut TypCtx, ast: &ast::Program) -> Self {
@@ -100,73 +137,21 @@ impl Inference {
         let mut inferer = Inference::new(global_scope.clone());
         inferer.next_var = next_id;
 
-        let mut order = ast_passes::order_functions::FunctionsOrderer::new();
-        order.visit(ast);
-        let function_check_order = order.order();
-        let items_mapping = ast
-            .items
-            .iter()
-            .enumerate()
-            .filter_map(|(i, item)| match item {
-                ast::TopLevelItem::FunctionDefinition(fn_def) => {
-                    let ast::FunctionDefinition { name, .. } = fn_def;
-                    Some((name.clone(), i))
-                }
-                _ => None,
-            })
-            .collect::<HashMap<_, _>>();
-        for name in &function_check_order {
-            println!("CHECKING FUNCTION {}", name);
-            let index = items_mapping
-                .get(name)
-                .expect(&format!("Expected function {name} to exist"));
-            let ast::TopLevelItem::FunctionDefinition(fn_def) = &ast.items[*index] else {
-                panic!("unexpected");
+        for item in &ast.items {
+            let ast::TopLevelItem::FunctionDefinition(fn_def) = item else {
+                continue;
             };
-            if fn_def.attributes.contains(&"runtime".to_owned()) {
+            if inferer.already_typecheck.contains(&fn_def.name) {
                 continue;
             }
-            inferer.generate_constrains_for_function(tctx, global_scope.clone(), fn_def);
-
-            let mut solver = ConstraintSolver::new(inferer.next_var, tctx);
-            let constraints = inferer
-                .all_constraints
-                .last()
-                .map(|(_, c)| c)
-                .unwrap()
-                .clone();
-            println!("\n\nCONSTRAINTS FOR {name}\n\n");
-            for c in constraints.iter() {
-                println!("-> {:#?}", c);
-            }
-            solver.solve(constraints);
-            inferer.next_var = solver.next_var;
-            let mut substitutions = solver.substitutions.into_iter().collect();
-            if name == "make_ref" {
-                println!("{}", tctx.debug_string());
-            }
-            fix_fresh::fix_types_after_inference(
-                name,
-                &mut substitutions,
-                tctx,
-                &mut inferer.env,
-                global_scope.clone(),
-            );
-            println!("SUBSTITUTIONS");
-            for (id, typ) in substitutions {
-                println!("{} -> {:?}", id, typ);
-            }
-            println!("\n\n\nENV IS");
-            for (id, typ) in inferer.env.iter() {
-                println!("{} -> {:?}", id, typ);
-            }
+            let _ = inferer.infer_function(tctx, fn_def);
         }
         inferer
     }
 
     fn generate_constrains_for_function(
         &mut self,
-        tctx: &TypCtx,
+        tctx: &mut TypCtx,
         global_scope: Rc<RefCell<Scope>>,
         ast::FunctionDefinition {
             name,
@@ -208,7 +193,7 @@ impl Inference {
                 }
                 let mut prefex_scope = PrefexScope::new();
                 prefex_scope.add_type_vars(&prefex);
-                scope.infer_in_expr(body, &mut prefex_scope)
+                scope.infer_in_expr(body, &mut prefex_scope, tctx)
             })
         };
         self.constraints.push(Constraint::Eq(fn_actual_type, *ret));
@@ -221,9 +206,21 @@ impl Inference {
         self.env.extend(other.env);
         self.constraints.extend(other.constraints);
         self.next_var = other.next_var;
+        self.already_typecheck.extend(other.already_typecheck);
     }
 
-    pub fn infer_in_expr(&mut self, expr: &ast::Expr, prefex_scope: &mut PrefexScope) -> Type {
+    pub fn merge_without_constraints(&mut self, other: Self) {
+        self.env.extend(other.env);
+        self.next_var = other.next_var;
+        self.already_typecheck.extend(other.already_typecheck);
+    }
+
+    pub fn infer_in_expr(
+        &mut self,
+        expr: &ast::Expr,
+        prefex_scope: &mut PrefexScope,
+        tctx: &mut TypCtx,
+    ) -> Type {
         let id = expr.id;
         match &expr.kind {
             ast::ExprKind::Unit => {
@@ -235,15 +232,15 @@ impl Inference {
                 self.env.insert(id, ret_t.clone());
                 let exprs = exprs
                     .iter()
-                    .map(|expr| self.infer_in_expr(expr, prefex_scope))
+                    .map(|expr| self.infer_in_expr(expr, prefex_scope, tctx))
                     .collect::<Vec<_>>();
                 let last_t = exprs.last().unwrap().clone();
                 self.constraints.push(Constraint::Eq(ret_t.clone(), last_t));
                 ret_t
             }
             ast::ExprKind::Assignment { lval, rval } => {
-                let l_t = self.infer_in_expr(lval, prefex_scope);
-                let r_t = self.infer_in_expr(rval, prefex_scope);
+                let l_t = self.infer_in_expr(lval, prefex_scope, tctx);
+                let r_t = self.infer_in_expr(rval, prefex_scope, tctx);
                 self.constraints.push(Constraint::Eq(l_t, r_t));
                 self.env.insert(id, Type::Unit);
                 Type::Unit
@@ -265,22 +262,40 @@ impl Inference {
                 Type::Bool
             }
             ast::ExprKind::Name(name) => {
-                let typ = {
+                let mut typ = {
                     let scope = self.scope.borrow();
                     scope
                         .type_of(name)
                         .unwrap_or_else(|| panic!("Unknown variable {name}"))
                 };
+                if self.scope.borrow().is_global(name) && requires_typechecking(typ.clone()) {
+                    if self.already_typecheck.contains(name) {
+                        panic!(
+                            "Function {name} has been already typechecked but still requires \
+                             typechecking {typ:?}. Possibly a recursive definition."
+                        )
+                    }
+                    let fn_def = tctx
+                        .nodes
+                        .iter()
+                        .find_map(|(_, def)| match def {
+                            ast::TopLevelItem::FunctionDefinition(fn_def) => Some(fn_def),
+                            _ => None,
+                        })
+                        .unwrap()
+                        .clone();
+                    typ = self.infer_function(tctx, &fn_def);
+                }
                 self.env.insert(id, typ.clone());
                 typ
             }
             ast::ExprKind::FunctionCall { func, args, kwargs } => {
                 let ret_t = self.fresh_type();
                 self.env.insert(id, ret_t.clone());
-                let f_t = self.infer_in_expr(func, prefex_scope);
+                let f_t = self.infer_in_expr(func, prefex_scope, tctx);
                 let args_t = args
                     .iter()
-                    .map(|arg| self.infer_in_expr(arg, prefex_scope))
+                    .map(|arg| self.infer_in_expr(arg, prefex_scope, tctx))
                     .collect::<Vec<_>>();
                 if !kwargs.is_empty() {
                     todo!("kwargs not implemented yet")
@@ -307,7 +322,7 @@ impl Inference {
             ast::ExprKind::Access { val, field } => {
                 let ret_t = self.fresh_type();
                 self.env.insert(id, ret_t.clone());
-                let val_t = self.infer_in_expr(val, prefex_scope);
+                let val_t = self.infer_in_expr(val, prefex_scope, tctx);
                 self.constraints.push(Constraint::HasField {
                     t: val_t,
                     field: field.clone(),
@@ -320,7 +335,7 @@ impl Inference {
                 self.env.insert(id, t_t.clone());
                 let args_t = args
                     .iter()
-                    .map(|arg| self.infer_in_expr(arg, prefex_scope))
+                    .map(|arg| self.infer_in_expr(arg, prefex_scope, tctx))
                     .collect::<Vec<_>>();
                 self.constraints
                     .push(Constraint::Eq(t_t.clone(), Type::Tuple(args_t)));
@@ -343,7 +358,7 @@ impl Inference {
                         .add_variable(&par.name, typ.clone());
                 }
                 let body_t = self.in_scope(lambda_scope, |scope| {
-                    scope.infer_in_expr(body, prefex_scope)
+                    scope.infer_in_expr(body, prefex_scope, tctx)
                 });
                 self.constraints.push(Constraint::Eq(
                     lambda_t.clone(),
@@ -355,7 +370,7 @@ impl Inference {
                 lambda_t
             }
             ast::ExprKind::TypedExpr { expr, typ } => {
-                let expr_t = self.infer_in_expr(expr, prefex_scope);
+                let expr_t = self.infer_in_expr(expr, prefex_scope, tctx);
                 let typ_t = Self::ast_type_to_type(&self.scope.borrow(), prefex_scope, typ);
                 self.constraints.push(Constraint::Eq(expr_t, typ_t.clone()));
                 self.env.insert(id, typ_t.clone());
@@ -377,7 +392,7 @@ impl Inference {
                 let args_t = values
                     .iter()
                     .map(|(name, expr)| {
-                        let expr_t = self.infer_in_expr(expr, prefex_scope);
+                        let expr_t = self.infer_in_expr(expr, prefex_scope, tctx);
                         (name, expr_t)
                     })
                     .collect::<HashMap<_, _>>();
@@ -390,16 +405,16 @@ impl Inference {
             }
             ast::ExprKind::While { cond, body } => {
                 self.env.insert(id, Type::Unit);
-                let cond_t = self.infer_in_expr(cond, prefex_scope);
+                let cond_t = self.infer_in_expr(cond, prefex_scope, tctx);
                 self.constraints.push(Constraint::Eq(cond_t, Type::Bool));
                 let _ = self.in_scope(Scope::empty_scope_with_parent(self.scope.clone()), |this| {
-                    this.infer_in_expr(body, prefex_scope)
+                    this.infer_in_expr(body, prefex_scope, tctx)
                 });
                 Type::Unit
             }
             ast::ExprKind::Return(expr) => {
                 self.env.insert(id, Type::Divergent);
-                let expr_t = self.infer_in_expr(expr, prefex_scope);
+                let expr_t = self.infer_in_expr(expr, prefex_scope, tctx);
                 self.constraints
                     .push(Constraint::Eq(expr_t, self.ret_t.clone().unwrap()));
                 Type::Divergent
@@ -411,11 +426,11 @@ impl Inference {
             } => {
                 let if_t = self.fresh_type();
                 self.env.insert(id, if_t.clone());
-                let cond_t = self.infer_in_expr(cond, prefex_scope);
+                let cond_t = self.infer_in_expr(cond, prefex_scope, tctx);
                 self.constraints.push(Constraint::Eq(cond_t, Type::Bool));
                 let body_t = self
                     .in_scope(Scope::empty_scope_with_parent(self.scope.clone()), |this| {
-                        this.infer_in_expr(body, prefex_scope)
+                        this.infer_in_expr(body, prefex_scope, tctx)
                     });
                 match else_body {
                     None => {
@@ -425,7 +440,7 @@ impl Inference {
                     Some(else_body) => {
                         let else_body_t = self
                             .in_scope(Scope::empty_scope_with_parent(self.scope.clone()), |this| {
-                                this.infer_in_expr(else_body, prefex_scope)
+                                this.infer_in_expr(else_body, prefex_scope, tctx)
                             });
                         self.constraints
                             .push(Constraint::Eq(body_t.clone(), else_body_t));
@@ -436,7 +451,7 @@ impl Inference {
             }
             ast::ExprKind::Let { name, typ, init } => {
                 self.env.insert(id, Type::Unit);
-                let init_t = self.infer_in_expr(init, prefex_scope);
+                let init_t = self.infer_in_expr(init, prefex_scope, tctx);
                 let let_t = match typ {
                     ast::Typ::ToInfere => init_t.clone(),
                     t => Self::ast_type_to_type(&self.scope.borrow(), prefex_scope, t),
@@ -448,7 +463,7 @@ impl Inference {
             ast::ExprKind::ArrayLiteral { typ, size, init } => {
                 let array_t = self.fresh_type();
                 self.env.insert(id, array_t.clone());
-                let size_t = self.infer_in_expr(size, prefex_scope);
+                let size_t = self.infer_in_expr(size, prefex_scope, tctx);
                 self.constraints.push(Constraint::Eq(size_t, Type::Int));
                 let array_inner_t = match typ {
                     ast::Typ::ToInfere => self.fresh_type(),
@@ -460,7 +475,7 @@ impl Inference {
                 ));
                 let init_types: Vec<_> = init
                     .iter()
-                    .map(|expr| self.infer_in_expr(expr, prefex_scope))
+                    .map(|expr| self.infer_in_expr(expr, prefex_scope, tctx))
                     .collect();
                 for t in init_types {
                     self.constraints
@@ -474,8 +489,8 @@ impl Inference {
             ast::ExprKind::IndexAccess { lhs, index } => {
                 let inner_t = self.fresh_type();
                 self.env.insert(id, inner_t.clone());
-                let lhs_t = self.infer_in_expr(lhs, prefex_scope);
-                let index_t = self.infer_in_expr(index, prefex_scope);
+                let lhs_t = self.infer_in_expr(lhs, prefex_scope, tctx);
+                let index_t = self.infer_in_expr(index, prefex_scope, tctx);
                 self.constraints.push(Constraint::Eq(index_t, Type::Int));
                 self.constraints.push(Constraint::Eq(
                     lhs_t,
@@ -486,7 +501,7 @@ impl Inference {
             ast::ExprKind::Match { expr, cases } => {
                 let ret = self.fresh_type();
                 self.env.insert(id, ret.clone());
-                let expr_t = self.infer_in_expr(expr, prefex_scope);
+                let expr_t = self.infer_in_expr(expr, prefex_scope, tctx);
                 for (pattern, body, guard) in cases {
                     self.in_scope(Scope::empty_scope_with_parent(self.scope.clone()), |this| {
                         // i think we need to reverse constraints generated by patterns
@@ -497,10 +512,10 @@ impl Inference {
                         // The same applies to normal constraints.
                         this.constraints.reverse();
                         if let Some(cond) = guard {
-                            let cond_t = this.infer_in_expr(cond, prefex_scope);
+                            let cond_t = this.infer_in_expr(cond, prefex_scope, tctx);
                             this.constraints.push(Constraint::Eq(cond_t, Type::Bool));
                         }
-                        let body_t = this.infer_in_expr(body, prefex_scope);
+                        let body_t = this.infer_in_expr(body, prefex_scope, tctx);
                         this.constraints.push(Constraint::Eq(body_t, ret.clone()));
                         Type::Unit
                     });
@@ -524,7 +539,7 @@ impl Inference {
                 self.constraints.push(Constraint::Eq(ret.clone(), t));
                 let args_t = args
                     .iter()
-                    .map(|arg| self.infer_in_expr(arg, prefex_scope))
+                    .map(|arg| self.infer_in_expr(arg, prefex_scope, tctx))
                     .collect::<Vec<_>>();
                 self.constraints.push(Constraint::HasCase {
                     t: ret.clone(),
@@ -546,7 +561,7 @@ impl Inference {
                 let fields_t = fields
                     .iter()
                     .map(|(name, expr)| {
-                        let expr_t = self.infer_in_expr(expr, prefex_scope);
+                        let expr_t = self.infer_in_expr(expr, prefex_scope, tctx);
                         (name.clone(), expr_t)
                     })
                     .collect::<Vec<_>>();
@@ -888,6 +903,25 @@ fn remove_aliases_in_env(env: &mut HashMap<usize, Type>, tctx: &TypCtx) {
             let resolved = tctx.resolve_alias(*for_type);
             *typ = resolved;
         }
+    }
+}
+
+pub fn requires_typechecking(t: Type) -> bool {
+    let mut r = RequiresTypeChecking {
+        requires_typechecking: false,
+    };
+    r.fold_type(t);
+    r.requires_typechecking
+}
+
+struct RequiresTypeChecking {
+    requires_typechecking: bool,
+}
+
+impl TypeFolder for RequiresTypeChecking {
+    fn fold_fresh(&mut self, id: usize) -> Type {
+        self.requires_typechecking = true;
+        Type::Fresh(id)
     }
 }
 

@@ -95,9 +95,13 @@ impl Tlab {
     }
 
     pub fn allocate(&mut self, layout: Layout) -> ErasedPtr {
-        debug_assert!(self.local_buffer.page_as_ref().owner.unwrap() == self.id,
-            "cannot alloc as tlab's owner is not the same as the current thred: c: {current:?} != tl: {tlab:?}",
-            current=self.id, tlab=self.local_buffer.page_as_ref().owner.unwrap());
+        debug_assert!(
+            self.local_buffer.page_as_ref().owner.unwrap() == self.id,
+            "cannot alloc as tlab's owner is not the same as the current thred: c: {current:?} != \
+             tl: {tlab:?}",
+            current = self.id,
+            tlab = self.local_buffer.page_as_ref().owner.unwrap()
+        );
         self.local_buffer.alloc_layout(layout).erase()
     }
 

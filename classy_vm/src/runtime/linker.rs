@@ -118,6 +118,13 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                 let t = tctx.definitions.get(&for_t).unwrap();
                 Self::get_type_name(tctx, t.clone())
             }
+            Type::Function { .. } => {
+                "Code".to_owned()
+            }
+            Type::ADT { def, .. } => {
+                let tid = tctx.def_id_to_typ_id(def);
+                tctx.get_name(tid).unwrap()
+            }
             t => {
                 panic!("Not supported yet {t:?}")
             }
@@ -256,6 +263,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                         "String" => self.vm.runtime.classes.string,
                         "Byte" => self.vm.runtime.classes.byte,
                         "@GenericRef" => self.vm.runtime.classes.gref,
+                        "Code" => self.vm.runtime.classes.code,
                         _ => user_classes.get_class_ptr(std::mem::transmute(sym)),
                     };
                     set_field_cls(*cls_ptr, i, field_cls_addr);

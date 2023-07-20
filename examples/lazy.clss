@@ -16,13 +16,15 @@ type Lazy(a) {
 lazy f = Lazy { val = LazyInner.Suspended(f) }
 
 lazy_get: (Lazy(a)) -> a
-lazy_get l = l.val match {
-    Evaled(x) => x
-    Suspended(f) => {
-        let res = f()
-        l.val = LazyInner.Evaled(res)
-        res
-    } 
+lazy_get l {
+    l.val match {
+        Evaled(x) => x
+        Suspended(f) => {
+            let res = f()
+            l.val = LazyInner.Evaled(res)
+            res
+        }
+    }
 }
 
 test_lazy {

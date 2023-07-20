@@ -253,7 +253,7 @@ impl Thread {
     pub fn interpert(&mut self) {
         let mut instr = 0;
         let mut frames = vec![self.alloc_frame(self.code).expect("Out of memory")];
-        let code_end = unsafe { (*self.code.get()).code.instructions.len() };
+        let mut code_end = unsafe { (*self.code.get()).code.instructions.len() };
         let mut code = unsafe { &*self.code.get() };
         macro_rules! read_word {
             () => {{
@@ -352,6 +352,7 @@ impl Thread {
                     c_frame = *frames.last().unwrap();
                     instr = unsafe { (*c_frame.get()).ip };
                     code = unsafe { &*(*c_frame.get()).code.get() };
+                    code_end = code.code.instructions.len();
                     push!(ret);
                 }
                 OpCode::CallNative1 => {
@@ -433,7 +434,8 @@ impl Thread {
                     frames.push(new_frame);
                     code = unsafe { &*code_inst.get() };
                     instr = 0;
-                    c_frame = new_frame
+                    c_frame = new_frame;
+                    code_end = code.code.instructions.len();
                 }
                 OpCode::Call1 => {
                     safepoint!();
@@ -477,7 +479,8 @@ impl Thread {
                     frames.push(new_frame);
                     code = unsafe { &*code_inst.get() };
                     instr = 0;
-                    c_frame = new_frame
+                    c_frame = new_frame;
+                    code_end = code.code.instructions.len();
                 }
                 OpCode::CallN => {
                     safepoint!();
@@ -527,7 +530,8 @@ impl Thread {
                     frames.push(new_frame);
                     code = unsafe { &*code_inst.get() };
                     instr = 0;
-                    c_frame = new_frame
+                    c_frame = new_frame;
+                    code_end = code.code.instructions.len();
                 }
                 OpCode::LastMarker => {
                     panic!("This instruction should have never been emitted")
@@ -652,7 +656,7 @@ impl Thread {
                     let offset = read_word!();
                     let value = pop!();
                     if value == 0 {
-                        instr += offset as usize - 1;
+                        instr += (offset as usize) - 1;
                     } else {
                         instr += OpCode::JumpFrontIfFalse.argument_size();
                     }

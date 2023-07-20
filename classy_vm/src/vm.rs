@@ -181,9 +181,9 @@ mod tests {
     //     let mut vm = setup_vm(4 * size_of::<usize>(), 1, true);
     //     let mut t = vm.create_evaluation_thread(classy_c::code::Code::new());
     //     unsafe {
-    //         let ptr: Ptr<isize> = t.allocate_instance(vm.runtime.classes.int);
-    //         assert!(!ptr.is_null());
-    //         (*ptr.unwrap()) = 123456;
+    //         let ptr: Ptr<isize> =
+    // t.allocate_instance(vm.runtime.classes.int);         assert!(!ptr.
+    // is_null());         (*ptr.unwrap()) = 123456;
     //         let handle = t.create_handle(NonNullPtr::from_ptr(ptr));
     //         let expected = t.young_space_allocated();
     //         assert_eq!((*handle.as_ptr()), 123456);
@@ -201,9 +201,9 @@ mod tests {
     //     let mut vm = setup_vm(4 * size_of::<usize>(), 1, false);
     //     let mut t = vm.create_evaluation_thread(classy_c::code::Code::new());
     //     unsafe {
-    //         let ptr: Ptr<isize> = t.allocate_instance(vm.runtime.classes.int);
-    //         assert!(!ptr.is_null());
-    //         let expected = t.young_space_allocated();
+    //         let ptr: Ptr<isize> =
+    // t.allocate_instance(vm.runtime.classes.int);         assert!(!ptr.
+    // is_null());         let expected = t.young_space_allocated();
     //         let handle = t.create_handle(NonNullPtr::from_ptr(ptr));
     //         t.revoke_handle(handle);
     //         t.run_young_gc();

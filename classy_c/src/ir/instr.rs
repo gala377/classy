@@ -159,10 +159,10 @@ pub enum Instruction {
 impl Debug for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::BinOpAssign(arg0, arg1, arg2, arg3) =>
-                write!(f, "{arg0:?} = {arg1:?} {arg2:?} {arg3:?}"),
-            Self::UnOpAssing(arg0, arg1, arg2) =>
-                write!(f, "{arg0:?} = {arg1:?} {arg2:?}"),
+            Self::BinOpAssign(arg0, arg1, arg2, arg3) => {
+                write!(f, "{arg0:?} = {arg1:?} {arg2:?} {arg3:?}")
+            }
+            Self::UnOpAssing(arg0, arg1, arg2) => write!(f, "{arg0:?} = {arg1:?} {arg2:?}"),
             Self::CopyAssign(arg0, arg1) => write!(f, "{arg0:?} = {arg1:?}"),
             Self::IndexCopy { res, base, offset } => write!(f, "{res:?} = {base:?}[{offset:?}]"),
             Self::IndexSet {
@@ -207,15 +207,22 @@ impl Debug for Instruction {
                 count,
             } => write!(
                 f,
-                "{res:?} = {}[count={count:?}; is_ref={is_elem_ref}, elem_size={elem_size}; elem_align={elem_align}]",
+                "{res:?} = {}[count={count:?}; is_ref={is_elem_ref}, elem_size={elem_size}; \
+                 elem_align={elem_align}]",
                 "array".bold().green()
             ),
-            Self::AllocCase { res, size, case, typ } => write!(
+            Self::AllocCase {
+                res,
+                size,
+                case,
+                typ,
+            } => write!(
                 f,
                 "{res:?} = {}[{size}] {} {case} {} {typ}",
                 "alloc_case".bold().green(),
                 "case".bold().green(),
-                "type".bold().green()),
+                "type".bold().green()
+            ),
             Self::Return(arg0) => write!(f, "{} {arg0:?}", "return".bold().green()),
         }
     }
