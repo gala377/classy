@@ -204,14 +204,25 @@ impl Thread {
                     let ptr: ErasedNonNull = unsafe { std::mem::transmute(arg) };
                     unsafe { (*ptr.class().get()).name().as_ptr() as Word }
                 }
+                fn error(_: &mut Thread, _: &mut [NonNullPtr<Frame>], args: &[Word]) -> Word {
+                    if args.len() != 1 {
+                        panic!("error accepts only one argument");
+                    }
+                    let arg = args[0];
+                    let ptr: NonNullPtr<class::string::StringInst> =
+                        unsafe { std::mem::transmute(arg) };
+                    let str = unsafe { (*ptr.get()).as_rust_str() };
+                    panic!("Error: {}", str);
+                }
                 m.insert("print".to_owned(), native_print as RuntimeFn);
-                m.insert("header_data".to_owned(), header_data as RuntimeFn);
-                m.insert("itos".to_owned(), itos as RuntimeFn);
-                m.insert("print_n_times".to_owned(), print_n_times as RuntimeFn);
-                m.insert("byte_copy".to_owned(), byte_copy as RuntimeFn);
+                m.insert("header_data".to_owned(), header_data);
+                m.insert("itos".to_owned(), itos);
+                m.insert("print_n_times".to_owned(), print_n_times);
+                m.insert("byte_copy".to_owned(), byte_copy);
                 m.insert("add".to_owned(), add);
                 m.insert("str_from_bytes".to_owned(), str_from_bytes);
                 m.insert("class_name".to_owned(), class_name);
+                m.insert("error".to_owned(), error);
                 m
             },
         }
