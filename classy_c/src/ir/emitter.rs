@@ -188,7 +188,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
             }
             ast::ExprKind::Assignment { lval, rval } => {
                 // TODO: I am not sure if this will
-                // wotk with complex assignments like
+                // work with complex assignments like
                 // a.b[10].c.d[20] = 1
                 // but we would need to check it when the interpreter is ready
                 let lval = self.emit_lval(lval);
