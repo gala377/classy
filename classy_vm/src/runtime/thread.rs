@@ -683,6 +683,14 @@ impl Thread {
                 //     let b = pop!();
                 //     push!(a + b);
                 // }
+                OpCode::PushTrue => {
+                    push!(1);
+                    instr += 1;
+                }
+                OpCode::PushFalse => {
+                    push!(0);
+                    instr += 1;
+                }
                 i => todo!("Instruction not supported yet {i:?}"),
             }
         }

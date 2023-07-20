@@ -2,16 +2,32 @@
 @empty @runtime
 print: (String) -> ()
 
+@empty @runtime
+error: (String) -> a
+
+assert(b, msg) = if (not b) { error msg }
+
+is_zero a = a match {
+    a => true
+    _ => false 
+}
+
+not b = b match {
+    true => false
+    false => true
+}
+
 f a = a match {
-    "hello" => g a
-    _ => g("not this")
+    1 => g a
+    _ => g(2)
 }
 
 g a = a match {
-    "not this" => "finish"
-    _ => f("anything else")
+    2 => 0
+    _ => f(3)
 }
 
+
 main {
-    print(f("hello"))
+    assert(is_zero(f(1)), "hello")
 }
