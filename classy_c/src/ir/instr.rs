@@ -152,6 +152,11 @@ pub enum Instruction {
         is_elem_ref: bool,
         count: Address,
     },
+    AllocTuple {
+        res: Address,
+        size: usize,
+        refmap: Vec<bool>,
+    },
     // Return from a function
     Return(Address),
 }
@@ -183,6 +188,9 @@ impl Debug for Instruction {
                 "ifFalse".bold().green(),
                 "goto".bold().green()
             ),
+            Self::AllocTuple { res, size, refmap } => {
+                write!(f, "{}[{}] {:?}", "alloc_tuple".bold().green(), size, refmap)
+            }
             Self::Param(arg0) => write!(f, "{} {arg0:?}", "param".bold().green()),
             Self::Call { res, func, argc } => {
                 write!(f, "{res:?} = {} {func:?} {argc}", "call".bold().green())

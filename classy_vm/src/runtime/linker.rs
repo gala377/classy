@@ -106,6 +106,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
             Type::Bool => "Bool".to_owned(),
             Type::String => "String".to_owned(),
             Type::Float => "Float".to_owned(),
+            Type::Tuple(_) => "Tuple".to_owned(),
             Type::Unit => "Unit".to_owned(),
             Type::Generic(_, _) => "@GenericRef".to_owned(),
             Type::Struct { def, .. } => {
@@ -118,9 +119,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                 let t = tctx.definitions.get(&for_t).unwrap();
                 Self::get_type_name(tctx, t.clone())
             }
-            Type::Function { .. } => {
-                "Code".to_owned()
-            }
+            Type::Function { .. } => "Code".to_owned(),
             Type::ADT { def, .. } => {
                 let tid = tctx.def_id_to_typ_id(def);
                 tctx.get_name(tid).unwrap()
@@ -264,6 +263,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
                         "Byte" => self.vm.runtime.classes.byte,
                         "@GenericRef" => self.vm.runtime.classes.gref,
                         "Code" => self.vm.runtime.classes.code,
+                        "Tuple" => self.vm.runtime.classes.tuple,
                         _ => user_classes.get_class_ptr(std::mem::transmute(sym)),
                     };
                     set_field_cls(*cls_ptr, i, field_cls_addr);
@@ -406,14 +406,19 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
             .constant_pool
             .get::<String>(index as usize)
             .expect("checked by instruction");
-        let type_name = *self.vm.interned_strings.get(&str).expect(&format!(
-            "expected type symbols to already be allocated {str}"
-        ));
-        let cls_ptr = self
-            .vm
-            .runtime
-            .user_classes
-            .get_class_ptr(type_name as usize);
+        let cls_ptr = match str.as_str() {
+            // TODO: ugly, make interner point to runtime classes as well
+            "Tuple" => self.vm.runtime.classes.tuple,
+            str => {
+                let type_name = *self.vm.interned_strings.get(str).expect(&format!(
+                    "expected type symbols to already be allocated {str}"
+                ));
+                self.vm
+                    .runtime
+                    .user_classes
+                    .get_class_ptr(type_name as usize)
+            }
+        };
         let cls_ptr_bytes = (cls_ptr.get() as u64).to_le_bytes();
         // overwrite the id with static pointer
         assert!(cls_ptr_bytes.len() == std::mem::size_of::<u64>());

@@ -105,7 +105,7 @@ impl Inference {
             .rposition(|n| *n == fn_def.name)
             // add 1 here because if function found itself immediately we need to
             // know this instead of returning 0. Basically it means:
-            // 
+            //
             // This is amount of functions in the recursive chain.
             // If there is any chain the amount is at least one.
             .map(|x| x + 1)
@@ -113,8 +113,8 @@ impl Inference {
         // function is already in the stack so this is a (mutually) recursive call
         if stack_position > 0 {
             println!("Stack position is more than 1 so this is recursive call");
-            // TODO: should it be stack_position or stack_position - 1? 
-            self.generalize_after = std::cmp::max(self.generalize_after, stack_position-1);
+            // TODO: should it be stack_position or stack_position - 1?
+            self.generalize_after = std::cmp::max(self.generalize_after, stack_position - 1);
             return tctx.type_of(&fn_def.name).unwrap();
         }
         self.call_stack.push(fn_def.name.clone());
@@ -301,15 +301,12 @@ impl Inference {
                 Type::Bool
             }
             ast::ExprKind::Name(name) => {
-
                 let mut typ = {
                     println!("Checking name {name}");
                     let scope = self.scope.borrow();
-                    scope
-                        .type_of(name)
-                        .unwrap_or_else(|| {
-                            println!("Expression checked:\n{expr:?}");
-                            panic!("Unknown variable {name}")
+                    scope.type_of(name).unwrap_or_else(|| {
+                        println!("Expression checked:\n{expr:?}");
+                        panic!("Unknown variable {name}")
                     })
                 };
                 if self.scope.borrow().is_global(name) && requires_typechecking(typ.clone()) {
@@ -324,7 +321,11 @@ impl Inference {
                         .nodes
                         .iter()
                         .find_map(|(_, def)| match def {
-                            ast::TopLevelItem::FunctionDefinition(fn_def) if fn_def.name == *name => Some(fn_def),
+                            ast::TopLevelItem::FunctionDefinition(fn_def)
+                                if fn_def.name == *name =>
+                            {
+                                Some(fn_def)
+                            }
                             _ => None,
                         })
                         .unwrap()

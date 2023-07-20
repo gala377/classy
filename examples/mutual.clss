@@ -17,6 +17,16 @@ not b = b match {
     false => true
 }
 
+and(a, b) = (a, b) match {
+    (true, true) => true
+    _ => false
+}
+
+or(a, b) = (a, b) match {
+    (false, false) => false
+    _ => true
+}
+
 f a = a match {
     1 => g a
     _ => g(2)
@@ -30,4 +40,6 @@ g a = a match {
 
 main {
     assert(is_zero(f(1)), "hello")
+    assert(and(true, true), "works?")
+    assert(or(false, true), "works2?")
 }

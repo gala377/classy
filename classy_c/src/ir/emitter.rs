@@ -275,7 +275,33 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 });
                 res
             }
-            ast::ExprKind::Tuple(_) => todo!(),
+            ast::ExprKind::Tuple(types) => {
+                let types = types
+                    .iter()
+                    .map(|expr| self.emit_expr(expr))
+                    .collect::<Vec<_>>();
+                let is_ref: Vec<_> = types
+                    .iter()
+                    .map(|x| match self.is_ref(x) {
+                        IsRef::NoRef => false,
+                        IsRef::Ref => true,
+                    })
+                    .collect();
+                let res = self.new_temporary(IsRef::Ref);
+                self.current_block.push(Instruction::AllocTuple {
+                    res: res.clone(),
+                    size: types.len(),
+                    refmap: is_ref,
+                });
+                for (i, expr) in types.iter().enumerate() {
+                    self.current_block.push(Instruction::IndexSet {
+                        base: res.clone(),
+                        offset: Address::ConstantInt(i as isize),
+                        value: expr.clone(),
+                    });
+                }
+                res
+            }
             ast::ExprKind::Lambda { .. } => todo!(),
             ast::ExprKind::TypedExpr { expr, .. } => self.emit_expr(expr),
             ast::ExprKind::StructLiteral { strct, values } => {
@@ -860,7 +886,6 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
             _ => panic!("Expected adt got {t:?}"),
         }
     }
-
 
     fn is_ref(&self, addr: &Address) -> IsRef {
         match addr {

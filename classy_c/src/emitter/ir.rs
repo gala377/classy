@@ -125,6 +125,9 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
                 ir::Instruction::Return(v) => {
                     add_temp(tmps, v);
                 }
+                ir::Instruction::AllocTuple { res, .. } => {
+                    add_temp(tmps, res);
+                }
             }
         }
 
@@ -355,6 +358,33 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
                     self.set_address(&mut code, res)
                         .map_err(|e| format!("line {index}, {debug_op:?} => {e}"))
                         .unwrap();
+                }
+                ir::Instruction::AllocTuple { res, size, refmap } => {
+                    const SIZE_MASK: usize = 0b111111;
+                    const TAG_SHIFT: usize = 6;
+
+                    self.export_stack_map(&mut code);
+                    self.emit_instr(&mut code, OpCode::AllocHeap);
+                    let id = self.constant_pool.add_entry("Tuple".to_owned().into());
+                    self.emit_word(&mut code, id as u64);
+                    self.stack_map_add_ref();
+                    self.set_address(&mut code, res.clone())
+                        .map_err(|e| format!("line {index}, {debug_op:?} => {e}"))
+                        .unwrap();
+                    if size > SIZE_MASK {
+                        panic!("Tuple has too many elements");
+                    }
+                    let mut data = size as isize;
+                    for (i, v) in refmap.iter().enumerate() {
+                        data = data | ((*v as isize) << (i + TAG_SHIFT))
+                    }
+                    self.push_address(&mut code, res.clone());
+                    let id = self.constant_pool.add_entry(data.into());
+                    self.emit_instr(&mut code, OpCode::ConstLoadInteger);
+                    self.emit_word(&mut code, id as u64);
+                    // offset neg pops 2 values from stack so no need to adjust stack map
+                    self.emit_instr(&mut code, OpCode::SetOffsetNegative);
+                    self.emit_word(&mut code, 1);
                 }
                 ir::Instruction::AllocCase { res, typ, case, .. } => {
                     // alloc object
