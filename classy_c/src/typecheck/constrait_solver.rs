@@ -40,12 +40,6 @@ impl<'ctx> ConstraintSolver<'ctx> {
         constraints.reverse();
         let mut constraints: VecDeque<_> = constraints.into();
         while let Some(con) = constraints.pop_back() {
-            println!("\n\nSOLVING CONSTRAINTS\n");
-            println!(">> {con:#?}");
-            for con in constraints.iter() {
-                println!("-> {con:#?}");
-            }
-
             self.solve_constraint(con, &mut constraints);
         }
     }

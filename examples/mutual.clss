@@ -1,0 +1,17 @@
+
+@empty @runtime
+print: (String) -> ()
+
+f a = a match {
+    "hello" => g a
+    _ => g("not this")
+}
+
+g a = a match {
+    "not this" => "finish"
+    _ => f("anything else")
+}
+
+main {
+    print(f("hello"))
+}

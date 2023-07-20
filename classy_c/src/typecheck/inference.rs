@@ -10,7 +10,7 @@ use crate::{
     typecheck::{
         constraints::Constraint,
         constrait_solver::{instance, ConstraintSolver},
-        fix_fresh,
+        fix_fresh::{self, generalize_types},
         r#type::{Type, TypeFolder},
         scope::Scope,
         type_context::TypCtx,
@@ -27,18 +27,6 @@ pub fn run(tctx: &mut TypCtx, ast: &ast::Program) -> TypeEnv {
     let mut cons = Inference::infer_types(tctx, ast);
 
     println!("{}", tctx.debug_string());
-    // let mut substs = HashMap::new();
-    // let mut env = cons.env;
-    // for (name, constraints) in cons.all_constraints {
-    //     println!("Solving constraints for {}", name);
-    //     let mut solver = ConstraintSolver::new(tctx);
-    //     solver.solve(constraints);
-    //     substs.extend(solver.substitutions);
-    //     fix_fresh::fix_types_after_inference(&mut substs, tctx, &mut env);
-    // }
-    // for (id, typ) in substs.iter() {
-    //     println!("{} -> {:?}", id, typ);
-    // }
     println!("SUBSTITUTIONS");
     println!("{}", tctx.debug_string());
     println!("ENV IS:");
@@ -54,11 +42,13 @@ pub(super) struct Inference {
     scope: Rc<RefCell<Scope>>,
     // allows matching expression ids with types
     env: HashMap<usize, Type>,
-    all_constraints: Vec<(String, Vec<Constraint>)>,
     constraints: Vec<Constraint>,
     next_var: usize,
     ret_t: Option<Type>,
-    already_typecheck: HashSet<String>,
+    call_stack: Vec<String>,
+    already_typechecked: HashSet<String>,
+    typecheck_until_generalization: HashSet<String>,
+    generalize_after: usize,
 }
 
 impl Inference {
@@ -66,11 +56,13 @@ impl Inference {
         Self {
             scope,
             env: HashMap::new(),
-            all_constraints: Vec::new(),
             constraints: Vec::new(),
             next_var: 0,
             ret_t: None,
-            already_typecheck: HashSet::new(),
+            already_typechecked: HashSet::new(),
+            typecheck_until_generalization: HashSet::new(),
+            call_stack: Vec::new(),
+            generalize_after: 0,
         }
     }
 
@@ -87,10 +79,12 @@ impl Inference {
             scope,
             env: HashMap::new(),
             constraints: Vec::new(),
-            all_constraints: Vec::new(),
             next_var: self.next_var,
             ret_t: self.ret_t.clone(),
-            already_typecheck: self.already_typecheck.clone(),
+            call_stack: self.call_stack.clone(),
+            typecheck_until_generalization: self.typecheck_until_generalization.clone(),
+            already_typechecked: self.already_typechecked.clone(),
+            generalize_after: self.generalize_after,
         };
         let ret = f(&mut sub);
         self.merge(sub);
@@ -98,33 +92,83 @@ impl Inference {
     }
 
     pub fn infer_function(&mut self, tctx: &mut TypCtx, fn_def: &ast::FunctionDefinition) -> Type {
-        self.already_typecheck.insert(fn_def.name.clone());
-        let mut inferer = Inference::new(self.scope.clone());
-        inferer.next_var = self.next_var;
+        // runtime functions are assumed to be already typed with a signature
+        // so there is not need to infer them. They also don't have bodies
+        // so we don't want to go into them.
+        println!("Infering function {}", fn_def.name);
         if fn_def.attributes.contains(&"runtime".to_owned()) {
             return tctx.type_of(&fn_def.name).unwrap();
         }
+        let stack_position = self
+            .call_stack
+            .iter()
+            .rposition(|n| *n == fn_def.name)
+            // add 1 here because if function found itself immediately we need to
+            // know this instead of returning 0. Basically it means:
+            // 
+            // This is amount of functions in the recursive chain.
+            // If there is any chain the amount is at least one.
+            .map(|x| x + 1)
+            .unwrap_or(0);
+        // function is already in the stack so this is a (mutually) recursive call
+        if stack_position > 0 {
+            println!("Stack position is more than 1 so this is recursive call");
+            // TODO: should it be stack_position or stack_position - 1? 
+            self.generalize_after = std::cmp::max(self.generalize_after, stack_position-1);
+            return tctx.type_of(&fn_def.name).unwrap();
+        }
+        self.call_stack.push(fn_def.name.clone());
         let global_scope = Scope::get_global(self.scope.clone());
+        println!("Creating new inferer for new function");
+        let mut inferer = Inference {
+            scope: global_scope.clone(),
+            env: HashMap::new(),
+            constraints: Vec::new(),
+            next_var: self.next_var,
+            ret_t: None,
+            call_stack: self.call_stack.clone(),
+            already_typechecked: self.already_typechecked.clone(),
+            typecheck_until_generalization: self.typecheck_until_generalization.clone(),
+            generalize_after: 0,
+        };
+        inferer.next_var = self.next_var;
+        println!("Generating constraints");
         inferer.generate_constrains_for_function(tctx, global_scope.clone(), fn_def);
-
-        let mut solver = ConstraintSolver::new(inferer.next_var, tctx);
-        let constraints = inferer
-            .all_constraints
-            .last()
-            .map(|(_, c)| c)
-            .unwrap()
-            .clone();
-        solver.solve(constraints);
-        inferer.next_var = solver.next_var;
-        let mut substitutions = solver.substitutions.into_iter().collect();
-        fix_fresh::fix_types_after_inference(
-            &fn_def.name,
-            &mut substitutions,
-            tctx,
-            &mut inferer.env,
-            global_scope.clone(),
-        );
-        self.merge_without_constraints(inferer);
+        // if the function should be generalized immiediately it will be removed
+        // right after this statement. If not it will be merged with our
+        // chain for later generalization.
+        inferer
+            .typecheck_until_generalization
+            .insert(fn_def.name.clone());
+        // we need to generalize all functions in the mutualy recursive chain here.
+        if inferer.generalize_after == 0 {
+            println!("Generalization is 0 so we can generalize now");
+            // Only now we solve constraints after we gathered all information
+            // after mutally recursive calls in the call stack.
+            let mut solver = ConstraintSolver::new(inferer.next_var, tctx);
+            let constraints = inferer.constraints.clone();
+            solver.solve(constraints);
+            inferer.next_var = solver.next_var;
+            let mut substitutions = solver.substitutions.into_iter().collect();
+            fix_fresh::fix_types_after_inference(&mut substitutions, tctx, &mut inferer.env);
+            // drain removes the functions from the chain so we won't try to
+            // generalize them later
+            println!("Constraints are solved");
+            for name in inferer.typecheck_until_generalization.drain() {
+                println!("Function {name} has been typechecked");
+                generalize_types(tctx, &name, global_scope.clone(), &mut inferer.env);
+                self.already_typechecked.insert(name);
+            }
+            // The constraints generated by this call have to be discarded as we already
+            // solved them
+            self.merge_without_constraints(inferer);
+        } else {
+            inferer.generalize_after -= 1;
+            // we need to keep constaraints here as they will be necessary when
+            // we want to solve mutally recursive function types
+            self.merge(inferer);
+        }
+        self.call_stack.pop();
         dbg!(tctx.type_of(&fn_def.name).unwrap())
     }
 
@@ -141,7 +185,7 @@ impl Inference {
             let ast::TopLevelItem::FunctionDefinition(fn_def) = item else {
                 continue;
             };
-            if inferer.already_typecheck.contains(&fn_def.name) {
+            if inferer.already_typechecked.contains(&fn_def.name) {
                 continue;
             }
             let _ = inferer.infer_function(tctx, fn_def);
@@ -157,13 +201,9 @@ impl Inference {
             name,
             parameters,
             body,
-            attributes,
             ..
         }: &ast::FunctionDefinition,
     ) {
-        if attributes.contains(&"runtime".to_owned()) {
-            return;
-        }
         let t = global_scope
             .borrow()
             .type_of(name)
@@ -197,22 +237,21 @@ impl Inference {
             })
         };
         self.constraints.push(Constraint::Eq(fn_actual_type, *ret));
-        self.all_constraints
-            .push((name.clone(), self.constraints.clone()));
-        self.constraints.clear();
     }
 
     pub fn merge(&mut self, other: Self) {
-        self.env.extend(other.env);
-        self.constraints.extend(other.constraints);
-        self.next_var = other.next_var;
-        self.already_typecheck.extend(other.already_typecheck);
+        self.constraints.extend(other.constraints.iter().cloned());
+        self.merge_without_constraints(other);
     }
 
     pub fn merge_without_constraints(&mut self, other: Self) {
         self.env.extend(other.env);
         self.next_var = other.next_var;
-        self.already_typecheck.extend(other.already_typecheck);
+        // not sure we need extend here but it is just for safety
+        self.already_typechecked.extend(other.already_typechecked);
+        self.generalize_after = std::cmp::max(self.generalize_after, other.generalize_after);
+        self.typecheck_until_generalization
+            .extend(other.typecheck_until_generalization);
     }
 
     pub fn infer_in_expr(
@@ -262,14 +301,20 @@ impl Inference {
                 Type::Bool
             }
             ast::ExprKind::Name(name) => {
+
                 let mut typ = {
+                    println!("Checking name {name}");
                     let scope = self.scope.borrow();
                     scope
                         .type_of(name)
-                        .unwrap_or_else(|| panic!("Unknown variable {name}"))
+                        .unwrap_or_else(|| {
+                            println!("Expression checked:\n{expr:?}");
+                            panic!("Unknown variable {name}")
+                    })
                 };
                 if self.scope.borrow().is_global(name) && requires_typechecking(typ.clone()) {
-                    if self.already_typecheck.contains(name) {
+                    println!("Name {name} is global and requires typechecking. {typ:?}");
+                    if self.already_typechecked.contains(name) {
                         panic!(
                             "Function {name} has been already typechecked but still requires \
                              typechecking {typ:?}. Possibly a recursive definition."
@@ -279,7 +324,7 @@ impl Inference {
                         .nodes
                         .iter()
                         .find_map(|(_, def)| match def {
-                            ast::TopLevelItem::FunctionDefinition(fn_def) => Some(fn_def),
+                            ast::TopLevelItem::FunctionDefinition(fn_def) if fn_def.name == *name => Some(fn_def),
                             _ => None,
                         })
                         .unwrap()

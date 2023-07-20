@@ -8,19 +8,17 @@ use super::{
 };
 
 pub fn fix_types_after_inference(
-    name: &str,
     substitutions: &mut HashMap<usize, Type>,
     tctx: &mut TypCtx,
     env: &mut HashMap<usize, Type>,
-    global_scope: Rc<RefCell<Scope>>,
 ) {
     fix_types_in_env(substitutions, env);
     fix_fresh_vars_in_substitutions(substitutions, tctx);
     fix_nested_types(substitutions, tctx);
-    generalize_types(tctx, name, global_scope, env);
+    //generalize_types(tctx, name, global_scope, env);
 }
 
-fn generalize_types(
+pub fn generalize_types(
     tctx: &mut TypCtx,
     name: &str,
     global_scope: Rc<RefCell<Scope>>,
