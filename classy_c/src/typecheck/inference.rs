@@ -753,6 +753,9 @@ impl Inference {
                     let pos = prefex_scope.position(name).unwrap();
                     Type::Generic(DeBruijn(pos as isize), *i)
                 }
+                // TODO: #problem This might lookup a function shich name
+                // we do not know. So we should solve it here it the type
+                // of this function is unknown.
                 None => scope.lookup_type(name).expect("unknown type"),
             },
             ast::Typ::Application { callee, args } => {
