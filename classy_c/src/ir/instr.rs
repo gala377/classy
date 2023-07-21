@@ -189,7 +189,13 @@ impl Debug for Instruction {
                 "goto".bold().green()
             ),
             Self::AllocTuple { res, size, refmap } => {
-                write!(f, "{}[{}] {:?}", "alloc_tuple".bold().green(), size, refmap)
+                write!(
+                    f,
+                    "{res:?} = {}[{}] {:?}",
+                    "alloc_tuple".bold().green(),
+                    size,
+                    refmap
+                )
             }
             Self::Param(arg0) => write!(f, "{} {arg0:?}", "param".bold().green()),
             Self::Call { res, func, argc } => {
