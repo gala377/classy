@@ -179,6 +179,19 @@ pub fn resolve_methods_block(
         .push(meth_set);
 }
 
+pub fn resolve_const_def(name: &str, typ: &ast::Typ, tctx: &mut TypCtx) {
+    let mut resolver = TypeResolver::new(tctx);
+    let mut scope = PrefexScope::new();
+    let Type::Alias(typ) = resolver.resolve_type(&mut scope, typ) else {
+        panic!("Alias resolver should only return aliases")
+    };
+    assert!(
+        tctx.variables.insert(name.to_owned(), typ).is_some(),
+        "updating type definition for funtion that does not exist {}",
+        name
+    );
+}
+
 struct TypeResolver<'ctx> {
     names: &'ctx HashMap<String, TypeId>,
     definitions: &'ctx mut HashMap<TypeId, Type>,

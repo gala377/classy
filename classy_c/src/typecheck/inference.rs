@@ -182,13 +182,18 @@ impl Inference {
         inferer.next_var = next_id;
 
         for item in &ast.items {
-            let ast::TopLevelItem::FunctionDefinition(fn_def) = item else {
-                continue;
-            };
-            if inferer.already_typechecked.contains(&fn_def.name) {
-                continue;
+            match item {
+                ast::TopLevelItem::FunctionDefinition(fn_def) => {
+                    if inferer.already_typechecked.contains(&fn_def.name) {
+                        continue;
+                    }
+                    let _ = inferer.infer_function(tctx, fn_def);
+                }
+                ast::TopLevelItem::ConstDefinition(def) => {
+                    inferer.infer_const_def(tctx, global_scope.clone(), def);
+                }
+                _ => continue,
             }
-            let _ = inferer.infer_function(tctx, fn_def);
         }
         inferer
     }
@@ -237,6 +242,47 @@ impl Inference {
             })
         };
         self.constraints.push(Constraint::Eq(fn_actual_type, *ret));
+    }
+
+    fn infer_const_def(
+        &mut self,
+        tctx: &mut TypCtx,
+        global_scope: Rc<RefCell<Scope>>,
+        ast::ConstDefinition { name, init, .. }: &ast::ConstDefinition,
+    ) {
+        let t = global_scope.borrow().type_of(name).unwrap();
+        let mut inferer = Inference {
+            scope: global_scope.clone(),
+            env: HashMap::new(),
+            constraints: Vec::new(),
+            next_var: self.next_var,
+            ret_t: None,
+            call_stack: self.call_stack.clone(),
+            already_typechecked: self.already_typechecked.clone(),
+            typecheck_until_generalization: self.typecheck_until_generalization.clone(),
+            generalize_after: 0,
+        };
+        inferer.next_var = self.next_var;
+        let const_actual_type = {
+            let const_scope = Scope::empty_scope_with_parent(global_scope.clone());
+            inferer.in_scope(const_scope.clone(), |scope| {
+                scope.set_ret_t(Some(t.clone()));
+                let mut prefex_scope = PrefexScope::new();
+                scope.infer_in_expr(init, &mut prefex_scope, tctx)
+            })
+        };
+        inferer
+            .constraints
+            .push(Constraint::Eq(const_actual_type, t));
+        let mut solver = ConstraintSolver::new(inferer.next_var, tctx);
+        let constraints = inferer.constraints.clone();
+        solver.solve(constraints);
+        inferer.next_var = solver.next_var;
+        let mut substitutions = solver.substitutions.into_iter().collect();
+        fix_fresh::fix_types_after_inference(&mut substitutions, tctx, &mut inferer.env);
+        generalize_types(tctx, &name, global_scope.clone(), &mut inferer.env);
+        // discard constraints as we alrady solved them
+        self.merge_without_constraints(inferer);
     }
 
     pub fn merge(&mut self, other: Self) {
@@ -634,7 +680,12 @@ impl Inference {
                 });
                 ret
             }
-            ast::ExprKind::MethodCall { receiver, method, args, kwargs } => {
+            ast::ExprKind::MethodCall {
+                receiver,
+                method,
+                args,
+                kwargs,
+            } => {
                 assert!(
                     kwargs.is_empty(),
                     "Keyword arguments are not implemented yet"

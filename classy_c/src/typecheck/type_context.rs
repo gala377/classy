@@ -200,6 +200,13 @@ impl TypCtx {
         id
     }
 
+    pub fn add_const_node(&mut self, node: &ast::ConstDefinition) -> DefId {
+        let id = self.next_id();
+        self.nodes
+            .insert(id, ast::TopLevelItem::ConstDefinition(node.clone()));
+        id
+    }
+
     pub fn add_methods_block_node(&mut self, node: &ast::MethodsBlock) -> DefId {
         let id = self.next_id();
         self.nodes

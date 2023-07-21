@@ -374,11 +374,9 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
             .constant_pool
             .get::<String>(index as usize)
             .expect("checked by instruction");
-        let function_ptr = self
-            .functions
-            .get(&function_name)
-            .cloned()
-            .expect("all function should have been already allocated");
+        let function_ptr = self.functions.get(&function_name).cloned().expect(&format!(
+            "all function should have been already allocated: {function_name}"
+        ));
         let fn_ptr_bytes = (function_ptr.get() as u64).to_le_bytes();
         // overwrite the id with static pointer
         assert!(fn_ptr_bytes.len() == std::mem::size_of::<u64>());

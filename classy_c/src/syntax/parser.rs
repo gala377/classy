@@ -65,6 +65,8 @@ impl<'source> Parser<'source> {
                 items.push(ast::TopLevelItem::FunctionDefinition(fun_def));
             } else if let Ok(meth_block) = self.parse_methods_block() {
                 items.push(ast::TopLevelItem::MethodsBlock(meth_block));
+            } else if let Ok(const_def) = self.parse_const_definition() {
+                items.push(ast::TopLevelItem::ConstDefinition(const_def))
             } else {
                 self.error(
                     self.lexer.current().span.clone(),
@@ -77,6 +79,22 @@ impl<'source> Parser<'source> {
                 return Err(self.errors.clone());
             }
         }
+    }
+
+    fn parse_const_definition(&mut self) -> ParseRes<ast::ConstDefinition> {
+        self.match_token(TokenType::Const)?;
+        let name = self.parse_identifier()?;
+        let _ = self.expect_token(TokenType::Colon);
+        let typ = self.parse_type()?;
+        let _ = self.expect_token(TokenType::Assignment);
+        let init = self.parse_expr()?;
+        let _ = self.expect_token(TokenType::Semicolon);
+        Ok(ast::ConstDefinition {
+            id: DUMMY_AST_ID,
+            name,
+            typ,
+            init,
+        })
     }
 
     fn parse_methods_block(&mut self) -> ParseRes<ast::MethodsBlock> {

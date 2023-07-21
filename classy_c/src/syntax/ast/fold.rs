@@ -5,7 +5,7 @@ use crate::syntax::ast::{
     TopLevelItem, Typ, TypeDefinition, TypeVariable, TypedName,
 };
 
-use super::MethodsBlock;
+use super::{ConstDefinition, MethodsBlock};
 
 /// TODO: Not all travelsal methods are implemented yet.
 pub trait Folder: Sized {
@@ -19,6 +19,10 @@ pub trait Folder: Sized {
 
     fn fold_function_definition(&mut self, def: FunctionDefinition) -> FunctionDefinition {
         fold_function_definition(self, def)
+    }
+
+    fn fold_const_definition(&mut self, def: ConstDefinition) -> ConstDefinition {
+        fold_const_definition(self, def)
     }
 
     fn fold_methods_block(&mut self, meths: MethodsBlock) -> MethodsBlock {
@@ -136,7 +140,13 @@ pub trait Folder: Sized {
         fold_function_args(self, args)
     }
 
-    fn fold_methods_call(&mut self, receiver: Expr, method: String, args: Vec<Expr>, kwargs: HashMap<String, Expr>) -> ExprKind {
+    fn fold_methods_call(
+        &mut self,
+        receiver: Expr,
+        method: String,
+        args: Vec<Expr>,
+        kwargs: HashMap<String, Expr>,
+    ) -> ExprKind {
         fold_method_call(self, receiver, method, args, kwargs)
     }
 
@@ -305,6 +315,9 @@ pub fn fold_top_level_item<F: Folder>(folder: &mut F, item: TopLevelItem) -> Top
         TopLevelItem::MethodsBlock(meths) => {
             TopLevelItem::MethodsBlock(folder.fold_methods_block(meths))
         }
+        TopLevelItem::ConstDefinition(def) => {
+            TopLevelItem::ConstDefinition(folder.fold_const_definition(def))
+        }
     }
 }
 
@@ -383,9 +396,12 @@ pub fn fold_expr_kind(folder: &mut impl Folder, expr: ExprKind) -> ExprKind {
         ExprKind::AdtUnitConstructor { typ, constructor } => {
             folder.fold_adt_unit_constructor(typ, constructor)
         }
-        ExprKind::MethodCall { receiver, method, args, kwargs } => {
-            folder.fold_methods_call(*receiver, method, args, kwargs)
-        }
+        ExprKind::MethodCall {
+            receiver,
+            method,
+            args,
+            kwargs,
+        } => folder.fold_methods_call(*receiver, method, args, kwargs),
     }
 }
 
@@ -750,5 +766,14 @@ pub fn fold_method_call(
             .into_iter()
             .map(|(k, v)| (k, folder.fold_expr(v)))
             .collect(),
+    }
+}
+
+pub fn fold_const_definition(folder: &mut impl Folder, def: ConstDefinition) -> ConstDefinition {
+    ConstDefinition {
+        id: def.id,
+        name: folder.fold_name(def.name),
+        typ: folder.fold_typ(def.typ),
+        init: folder.fold_expr(def.init),
     }
 }

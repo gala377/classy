@@ -1,0 +1,19 @@
+
+@empty @runtime
+print: (String) -> ()
+
+type Option(a) {
+    Some(a)
+    None
+}
+
+const HELLO_WORLD: String = "Hello world"
+const MAYBE_STRING: Option(String) = Option.Some("hi")
+const GLOBAL_INT: Int = {
+    let ret = 1
+    ret
+}
+
+main {
+    print HELLO_WORLD
+};

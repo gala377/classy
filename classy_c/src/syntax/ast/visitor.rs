@@ -15,6 +15,10 @@ pub trait Visitor<'ast>: Sized {
         walk_function_def(self, def)
     }
 
+    fn visit_const_definition(&mut self, def: &'ast ast::ConstDefinition) {
+        walk_const_definition(self, def)
+    }
+
     fn visit_methods_block(&mut self, meth: &'ast ast::MethodsBlock) {
         walk_methods_block(self, meth)
     }
@@ -205,6 +209,7 @@ pub fn walk_top_level_item<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::T
         ast::TopLevelItem::FunctionDefinition(fn_def) => v.visit_fn_def(fn_def),
         ast::TopLevelItem::TypeDefinition(t_def) => v.visit_type_def(t_def),
         ast::TopLevelItem::MethodsBlock(meth) => v.visit_methods_block(meth),
+        ast::TopLevelItem::ConstDefinition(def) => v.visit_const_definition(def),
     }
 }
 
@@ -288,9 +293,12 @@ pub fn walk_expr_kind<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::ExprKi
         ast::ExprKind::AdtUnitConstructor { typ, constructor } => {
             v.visit_adt_unit_constructor(typ, constructor)
         }
-        ast::ExprKind::MethodCall { receiver, method, args, kwargs } => {
-            v.visit_method_call(receiver, method, args, kwargs)
-        }
+        ast::ExprKind::MethodCall {
+            receiver,
+            method,
+            args,
+            kwargs,
+        } => v.visit_method_call(receiver, method, args, kwargs),
     }
 }
 
@@ -590,4 +598,10 @@ pub fn walk_method_call<'ast, V: Visitor<'ast>>(
     for arg in kwargs.values() {
         v.visit_expr(arg);
     }
+}
+
+pub fn walk_const_definition<'ast, V: Visitor<'ast>>(v: &mut V, def: &'ast ast::ConstDefinition) {
+    v.visit_name(&def.name);
+    v.visit_typ(&def.typ);
+    v.visit_expr(&def.init);
 }

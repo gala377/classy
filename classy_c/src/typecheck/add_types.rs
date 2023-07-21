@@ -27,6 +27,12 @@ impl<'ast, 'ctx> ast::Visitor<'ast> for AddTypes<'ctx> {
         self.ctx.add_variable(&node.name, typ_id);
     }
 
+    fn visit_const_definition(&mut self, def: &'ast ast::ConstDefinition) {
+        let _id = self.ctx.add_const_node(def);
+        let typ_id = self.ctx.reserve_id();
+        self.ctx.add_variable(&def.name, typ_id);
+    }
+
     fn visit_type_def(&mut self, node: &'ast ast::TypeDefinition) {
         println!("Adding node for: {node:?}");
         let _id = self.ctx.add_type_node(node);

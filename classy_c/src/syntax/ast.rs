@@ -26,7 +26,18 @@ pub enum TopLevelItem {
     TypeDefinition(TypeDefinition),
     FunctionDefinition(FunctionDefinition),
     MethodsBlock(MethodsBlock),
+    ConstDefinition(ConstDefinition),
 }
+
+#[derive(Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq))]
+pub struct ConstDefinition {
+    pub id: usize,
+    pub name: String,
+    pub typ: Typ,
+    pub init: Expr,
+}
+
 #[derive(Debug, Clone)]
 pub struct TypeDefinition {
     pub name: String,
@@ -220,7 +231,7 @@ pub enum ExprKind {
         method: String,
         args: Vec<Expr>,
         kwargs: HashMap<String, Expr>,
-    }
+    },
 }
 
 #[derive(Debug, Clone)]
