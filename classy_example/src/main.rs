@@ -57,6 +57,9 @@ struct Args {
 
     #[arg(long)]
     file: Option<String>,
+
+    #[arg(long)]
+    print_ast: bool,
 }
 
 fn main() {
@@ -112,14 +115,20 @@ fn main() {
 
 
             "#;
-            let functions = compile(&mut vm, source);
+            let functions = compile(&mut vm, source, args.print_ast);
+            let Some(functions) = functions else {
+                return;
+            };
             let mut thread = vm.create_evaluation_thread(functions["main"]);
             thread.interpert();
         }
         Example::RunFile => {
             let file = args.file.expect("file path has to be provided");
             let source = std::fs::read_to_string(Path::new(&file)).unwrap();
-            let functions = compile(&mut vm, &source);
+            let functions = compile(&mut vm, &source, args.print_ast);
+            let Some(functions) = functions else {
+                return;
+            };
             let mut thread = vm.create_evaluation_thread(functions["main"]);
             thread.interpert();
         }
@@ -130,7 +139,8 @@ fn main() {
 fn compile(
     vm: &mut Vm,
     source: &str,
-) -> HashMap<String, NonNullPtr<classy_vm::runtime::class::code::Code>> {
+    print_ast: bool,
+) -> Option<HashMap<String, NonNullPtr<classy_vm::runtime::class::code::Code>>> {
     let mut parser =
         classy_c::syntax::parser::Parser::new(classy_c::syntax::lexer::Lexer::new(source));
     let ast = parser.parse().unwrap();
@@ -138,6 +148,10 @@ fn compile(
     let mut tctx = typecheck::prepare_for_typechecking(&ast);
     println!("Type ctxt: {}", tctx.debug_string());
     let res = run_before_typechecking_passes(&tctx, ast);
+    if print_ast {
+        println!("AST: {:#?}", res);
+        return None;
+    }
     //println!("AST: {:#?}", res);
     let tenv = typecheck::run(&mut tctx, &res);
 
@@ -171,7 +185,7 @@ fn compile(
         .iter()
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
-    vm.load_functions(&mut functions_vec, &constant_pool)
+    Some(vm.load_functions(&mut functions_vec, &constant_pool))
 }
 
 pub fn prepare_type_ctx(mut tctx: TypCtx, ast: &ast::Program) -> TypCtx {

@@ -16,10 +16,10 @@ COMPILE_COMMAND_FMT = [
 ]
 
 
-def run_classy_c(file: str):
+def run_classy_c(file: str, rest: list[str]):
     cwd = os.getcwd()
     path = Path(cwd) / file
-    command = [*COMPILE_COMMAND_FMT, f"--file={path}"]
+    command = [*COMPILE_COMMAND_FMT, f"--file={path}", *rest]
     print(f"Running {command}")
     subprocess.run(command, cwd=CLASSY_PATH)
 
@@ -27,14 +27,22 @@ def run_classy_c(file: str):
 def make_argparser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "file", type=str, help="Path to the file to be run")
+        "file",
+        type=str,
+        help="Path to the file to be run",
+    )
+    parser.add_argument(
+        "rest",
+        nargs="*",
+        help="rest of the args, passed directly to the binary",
+    )
     return parser
 
 
 def main():
     parser = make_argparser()
     args = parser.parse_args()
-    run_classy_c(args.file)
+    run_classy_c(args.file, args.rest)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-use std::{cmp::Reverse, ops::Range};
+use std::ops::Range;
 
 use thiserror::Error;
 
@@ -836,7 +836,18 @@ impl<'source> Parser<'source> {
             TokenType::LParen => {
                 self.lexer.advance();
                 if self.match_token(TokenType::RParen).is_ok() {
-                    return Ok(mk_expr(ast::ExprKind::Unit));
+                    if !self.match_token(TokenType::FatArrow).is_ok() {
+                        return Ok(mk_expr(ast::ExprKind::Unit));
+                    }
+                    let body = self.parse_expr().error(
+                        self,
+                        beg,
+                        "expected a lambda's body after an empty lambda's parameters list",
+                    )?;
+                    return Ok(mk_expr(ast::ExprKind::Lambda {
+                        parameters: Vec::new(),
+                        body: Box::new(body),
+                    }));
                 }
                 let inner = self.parse_expr()?;
                 if self.match_token(TokenType::Comma).is_err() {

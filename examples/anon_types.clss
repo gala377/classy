@@ -1,0 +1,9 @@
+
+
+@empty @runtime
+print: (String) -> ()
+
+main {
+    let a = type { name = "Rafał" }
+    print(a.name)
+}
