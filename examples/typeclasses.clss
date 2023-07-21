@@ -1,0 +1,37 @@
+
+
+type Show(a) {
+    show: (a) -> String
+}
+
+const ShowString: Show(String) = Show {
+    show = (x) => x
+}
+
+const ShowInt: Show(Int) = Show {
+    show = (x) => to_string x
+}
+
+type Option(a) {
+    Some(a)
+    None
+}
+
+ShowOption: (Show(a)) -> Show(Option(a))
+ShowOption dict {
+    let impl(opt) = opt match {
+        None => "None"
+        Some(x) => "Some(" + (dict.show x) + ")"
+    }
+    Show { show: impl }
+}
+
+
+print: (Show(a), a) -> ()
+print(dict, val) = print(dict.show val)
+
+main {
+    print(ShowOption(ShowString), Option.Some("Hello"))
+    print(ShowInt, 1)
+    print(ShowOption(ShowInt), Option.None)
+}
