@@ -42,6 +42,16 @@ pub trait Visitor<'ast>: Sized {
         walk_function_call(self, func, args, kwargs)
     }
 
+    fn visit_method_call(
+        &mut self,
+        receiver: &'ast ast::Expr,
+        method: &'ast str,
+        args: &'ast [ast::Expr],
+        kwargs: &'ast HashMap<String, ast::Expr>,
+    ) {
+        walk_method_call(self, receiver, method, args, kwargs)
+    }
+
     fn visit_access(&mut self, val: &'ast ast::Expr, field: &'ast str) {
         walk_access(self, val, field)
     }
@@ -277,6 +287,9 @@ pub fn walk_expr_kind<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::ExprKi
         } => v.visit_adt_tuple_constructor(typ, constructor, args),
         ast::ExprKind::AdtUnitConstructor { typ, constructor } => {
             v.visit_adt_unit_constructor(typ, constructor)
+        }
+        ast::ExprKind::MethodCall { receiver, method, args, kwargs } => {
+            v.visit_method_call(receiver, method, args, kwargs)
         }
     }
 }
@@ -559,5 +572,22 @@ fn walk_methods_block<'ast, V: Visitor<'ast>>(v: &mut V, meth: &'ast ast::Method
     v.visit_typ(&meth.typ);
     for method in &meth.methods {
         v.visit_fn_def(method);
+    }
+}
+
+pub fn walk_method_call<'ast, V: Visitor<'ast>>(
+    v: &mut V,
+    receiver: &'ast ast::Expr,
+    method: &'ast str,
+    args: &'ast [ast::Expr],
+    kwargs: &'ast HashMap<String, ast::Expr>,
+) {
+    v.visit_expr(receiver);
+    v.visit_name(method);
+    for arg in args {
+        v.visit_expr(arg);
+    }
+    for arg in kwargs.values() {
+        v.visit_expr(arg);
     }
 }

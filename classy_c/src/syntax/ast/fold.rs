@@ -136,6 +136,10 @@ pub trait Folder: Sized {
         fold_function_args(self, args)
     }
 
+    fn fold_methods_call(&mut self, receiver: Expr, method: String, args: Vec<Expr>, kwargs: HashMap<String, Expr>) -> ExprKind {
+        fold_method_call(self, receiver, method, args, kwargs)
+    }
+
     fn fold_anon_type(&mut self, fields: Vec<(String, Expr)>) -> ExprKind {
         fold_anon_type(self, fields)
     }
@@ -378,6 +382,9 @@ pub fn fold_expr_kind(folder: &mut impl Folder, expr: ExprKind) -> ExprKind {
         } => folder.fold_adt_tuple_constructor(typ, constructor, args),
         ExprKind::AdtUnitConstructor { typ, constructor } => {
             folder.fold_adt_unit_constructor(typ, constructor)
+        }
+        ExprKind::MethodCall { receiver, method, args, kwargs } => {
+            folder.fold_methods_call(*receiver, method, args, kwargs)
         }
     }
 }
@@ -724,6 +731,24 @@ pub fn fold_methods_block(folder: &mut impl Folder, meths: MethodsBlock) -> Meth
             .methods
             .into_iter()
             .map(|def| folder.fold_function_definition(def))
+            .collect(),
+    }
+}
+
+pub fn fold_method_call(
+    folder: &mut impl Folder,
+    receiver: Expr,
+    method: String,
+    args: Vec<Expr>,
+    kwargs: HashMap<String, Expr>,
+) -> ExprKind {
+    ExprKind::MethodCall {
+        receiver: Box::new(folder.fold_expr(receiver)),
+        method,
+        args: folder.fold_function_args(args),
+        kwargs: kwargs
+            .into_iter()
+            .map(|(k, v)| (k, folder.fold_expr(v)))
             .collect(),
     }
 }

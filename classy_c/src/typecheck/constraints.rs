@@ -18,4 +18,10 @@ pub enum Constraint {
         case: String,
         of_type: Type,
     },
+    HasMethod {
+        receiver: Type,
+        method: String,
+        args: Vec<Type>,
+        ret: Type,
+    }
 }

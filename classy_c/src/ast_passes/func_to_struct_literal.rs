@@ -109,46 +109,19 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
 
     fn try_to_resolve_adt(
         &mut self,
-        expr_id: usize,
-        access_id: usize,
-        name: &str,
-        case: &str,
+        receiver: ast::Expr,
+        field: String,
         args: Vec<ast::Expr>,
         kwargs: std::collections::HashMap<String, ast::Expr>,
     ) -> ExprKind {
-        let Some(t) = self.tctx.get_type(name) else {
-            return ast::fold::fold_function_call(
-                self,
-                ast::Expr {
-                    id: expr_id,
-                    kind: ast::ExprKind::Access {
-                        val: Box::new(ast::Expr {
-                            id: access_id,
-                            kind: ast::ExprKind::Name(name.to_owned()),
-                        }),
-                        field: case.to_owned(),
-                    },
-                },
-                args,
-                kwargs,
-            );
+        let ast::ExprKind::Name(name) = receiver.kind.clone() else {
+            return ast::fold::fold_method_call(self, receiver, field, args, kwargs);
         };
-        let Some(t) = resolve_case(self.tctx, case, &t) else {
-            return ast::fold::fold_function_call(
-                self,
-                ast::Expr {
-                    id: expr_id,
-                    kind: ast::ExprKind::Access {
-                        val: Box::new(ast::Expr {
-                            id: access_id,
-                            kind: ast::ExprKind::Name(name.to_owned()),
-                        }),
-                        field: case.to_owned(),
-                    },
-                },
-                args,
-                kwargs,
-            );
+        let Some(t) = self.tctx.get_type(&name) else {
+            return ast::fold::fold_method_call(self, receiver, field, args, kwargs);
+        };
+        let Some(t) = resolve_case(self.tctx, &field, &t) else {
+            return ast::fold::fold_method_call(self, receiver, field, args, kwargs);
         };
         match t {
             Type::Struct { fields, .. } => {
@@ -205,7 +178,7 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
                         name
                     );
                 }
-                ast::fold::fold_adt_struct_constructor(self, name.to_owned(), case.to_owned(), body)
+                ast::fold::fold_adt_struct_constructor(self, name, field, body)
             }
             Type::Tuple(field_t) => {
                 assert!(kwargs.is_empty(), "tuple constructors do not that kwargs");
@@ -214,23 +187,9 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
                     field_t.len(),
                     "tuple constructors take exactly the number of arguments as there are fields"
                 );
-                ast::fold::fold_adt_tuple_constructor(self, name.to_owned(), case.to_owned(), args)
+                ast::fold::fold_adt_tuple_constructor(self, name, field, args)
             }
-            _ => ast::fold::fold_function_call(
-                self,
-                ast::Expr {
-                    id: expr_id,
-                    kind: ast::ExprKind::Access {
-                        val: Box::new(ast::Expr {
-                            id: access_id,
-                            kind: ast::ExprKind::Name(name.to_owned()),
-                        }),
-                        field: case.to_owned(),
-                    },
-                },
-                args,
-                kwargs,
-            ),
+            _ => ast::fold::fold_method_call(self, receiver, field, args, kwargs),
         }
     }
 }
@@ -250,16 +209,18 @@ impl<'ctx> ast::fold::Folder for PromoteCallToStructLiteral<'ctx> {
     ) -> ast::ExprKind {
         match func.kind {
             ast::ExprKind::Name(name) => self.try_to_resolve_struct(func.id, &name, args, kwargs),
-            ast::ExprKind::Access {
-                val:
-                    box ast::Expr {
-                        kind: ast::ExprKind::Name(n),
-                        id: access_id,
-                    },
-                field,
-            } => self.try_to_resolve_adt(func.id, access_id, &n, &field, args, kwargs),
             _ => ast::fold::fold_function_call(self, func, args, kwargs),
         }
+    }
+
+    fn fold_methods_call(
+        &mut self,
+        receiver: ast::Expr,
+        method: String,
+        args: Vec<ast::Expr>,
+        kwargs: std::collections::HashMap<String, ast::Expr>,
+    ) -> ExprKind {
+        self.try_to_resolve_adt(receiver, method, args, kwargs)
     }
 
     fn fold_access(&mut self, val: ast::Expr, field: String) -> ast::ExprKind {

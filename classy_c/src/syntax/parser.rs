@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{cmp::Reverse, ops::Range};
 
 use thiserror::Error;
 
@@ -737,6 +737,41 @@ impl<'source> Parser<'source> {
                     val: Box::new(lhs),
                     field,
                 });
+                let curr = self.lexer.current().typ.clone();
+                match curr {
+                    TokenType::LParen
+                    | TokenType::LBrace
+                    | TokenType::Identifier(_)
+                    | TokenType::False
+                    | TokenType::True
+                    | TokenType::String(_)
+                    | TokenType::Integer(_)
+                    | TokenType::Float(_)
+                    | TokenType::Array => match self.parse_fn_call(lhs)?.kind {
+                        ast::ExprKind::FunctionCall {
+                            func:
+                                box ast::Expr {
+                                    kind:
+                                        ast::ExprKind::Access {
+                                            val: receiver,
+                                            field: method,
+                                        },
+                                    ..
+                                },
+                            args,
+                            kwargs,
+                        } => {
+                            lhs = mk_expr(ast::ExprKind::MethodCall {
+                                receiver,
+                                method,
+                                args,
+                                kwargs,
+                            });
+                        }
+                        e => unreachable!("parse_fn_call returned an invalid expression {:?}", e),
+                    },
+                    _ => {}
+                }
                 continue;
             }
             let curr = self.lexer.current().typ.clone();
@@ -745,10 +780,10 @@ impl<'source> Parser<'source> {
                 | TokenType::LBrace
                 | TokenType::Identifier(_)
                 | TokenType::False
-                | TokenType::True 
+                | TokenType::True
                 | TokenType::String(_)
-                | TokenType::Integer(_) 
-                | TokenType::Float(_) 
+                | TokenType::Integer(_)
+                | TokenType::Float(_)
                 | TokenType::Array => {
                     lhs = self.parse_fn_call(lhs)?;
                     continue;

@@ -634,6 +634,26 @@ impl Inference {
                 });
                 ret
             }
+            ast::ExprKind::MethodCall { receiver, method, args, kwargs } => {
+                assert!(
+                    kwargs.is_empty(),
+                    "Keyword arguments are not implemented yet"
+                );
+                let ret = self.fresh_type();
+                self.env.insert(id, ret.clone());
+                let receiver_t = self.infer_in_expr(receiver, prefex_scope, tctx);
+                let args_t = args
+                    .iter()
+                    .map(|arg| self.infer_in_expr(arg, prefex_scope, tctx))
+                    .collect::<Vec<_>>();
+                self.constraints.push(Constraint::HasMethod {
+                    receiver: receiver_t,
+                    method: method.clone(),
+                    args: args_t,
+                    ret: ret.clone(),
+                });
+                ret
+            }
         }
     }
 

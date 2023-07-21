@@ -351,6 +351,17 @@ fn replace_in_constraints(id: usize, for_t: Type, cons: &mut VecDeque<Constraint
                 case: case.clone(),
                 of_type: replacer.fold_type(of_type.clone()),
             },
+            Constraint::HasMethod {
+                receiver,
+                method,
+                args,
+                ret,
+            } => Constraint::HasMethod {
+                receiver: replacer.fold_type(receiver.clone()),
+                method: method.clone(),
+                args: args.iter().map(|t| replacer.fold_type(t.clone())).collect(),
+                ret: replacer.fold_type(ret.clone()),
+            },
         }
     }
 }

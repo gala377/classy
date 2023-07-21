@@ -571,6 +571,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 self.current_block.push(Instruction::Label(exit_label.0));
                 res
             }
+            x => todo!("{x:?}"),
         }
     }
 

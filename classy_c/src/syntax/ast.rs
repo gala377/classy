@@ -215,6 +215,12 @@ pub enum ExprKind {
         expr: Box<Expr>,
         cases: Vec<(Pattern, Expr, Option<Box<Expr>>)>,
     },
+    MethodCall {
+        receiver: Box<Expr>,
+        method: String,
+        args: Vec<Expr>,
+        kwargs: HashMap<String, Expr>,
+    }
 }
 
 #[derive(Debug, Clone)]
