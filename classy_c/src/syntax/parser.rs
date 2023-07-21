@@ -741,7 +741,15 @@ impl<'source> Parser<'source> {
             }
             let curr = self.lexer.current().typ.clone();
             match curr {
-                TokenType::LParen | TokenType::LBrace | TokenType::Identifier(_) => {
+                TokenType::LParen
+                | TokenType::LBrace
+                | TokenType::Identifier(_)
+                | TokenType::False
+                | TokenType::True 
+                | TokenType::String(_)
+                | TokenType::Integer(_) 
+                | TokenType::Float(_) 
+                | TokenType::Array => {
                     lhs = self.parse_fn_call(lhs)?;
                     continue;
                 }
