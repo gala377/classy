@@ -23,9 +23,10 @@ use crate::{
     },
 };
 
-use super::class::frame::Frame;
-
-type RuntimeFn = fn(&mut Thread, &mut [NonNullPtr<Frame>], &[Word]) -> Word;
+use super::{
+    class::frame::Frame,
+    std_lib::{self, RuntimeFn},
+};
 
 pub type Word = u64;
 
@@ -42,16 +43,16 @@ pub struct ThreadArgs {
 }
 
 pub struct Thread {
-    heap: Heap,
-    _permament_heap: Arc<Mutex<permament_heap::PermamentHeap>>,
-    runtime: Runtime,
-    thread_manager: Arc<ThreadManager>,
-    code: NonNullPtr<class::code::Code>,
-    debug: bool,
+    pub heap: Heap,
+    pub _permament_heap: Arc<Mutex<permament_heap::PermamentHeap>>,
+    pub runtime: Runtime,
+    pub thread_manager: Arc<ThreadManager>,
+    pub code: NonNullPtr<class::code::Code>,
+    pub debug: bool,
     // todo: this is temporary, ideally linker should
     // replace symbolic references to runtime functions
     // with their addresses
-    native_functions: HashMap<String, RuntimeFn>,
+    pub native_functions: HashMap<String, RuntimeFn>,
 }
 
 macro_rules! log {
@@ -91,140 +92,7 @@ impl Thread {
             thread_manager,
             code,
             debug,
-            native_functions: {
-                let mut m = HashMap::new();
-                fn native_print(
-                    _: &mut Thread,
-                    _: &mut [NonNullPtr<Frame>],
-                    args: &[Word],
-                ) -> Word {
-                    if args.len() != 1 {
-                        panic!("print accepts only one argument");
-                    }
-                    // safety: type checking ensures its safe
-                    unsafe {
-                        let str_ptr: NonNullPtr<StringInst> = std::mem::transmute(args[0]);
-                        println!("{}", (*str_ptr.get()).as_rust_str());
-                    }
-                    0
-                }
-                fn itos(t: &mut Thread, stack: &mut [NonNullPtr<Frame>], args: &[Word]) -> Word {
-                    if args.len() != 1 {
-                        panic!("parse_int accepts only one argument");
-                    }
-                    // safety: type checking ensures its safe
-                    unsafe {
-                        let as_s = args[0].to_string();
-                        let mut s = t.allocate_string(as_s.len());
-                        if s.is_none() {
-                            let mut frames =
-                                stack.iter_mut().map(|f| f as *mut _).collect::<Vec<_>>();
-                            t.heap.run_gc(t.runtime.classes.string, &mut frames);
-                            s = t.allocate_string(as_s.len());
-                            if s.is_none() {
-                                panic!("out of memory")
-                            }
-                        }
-                        let s = s.unwrap();
-                        std::ptr::copy_nonoverlapping(
-                            as_s.as_ptr(),
-                            s.0.as_ptr() as *mut u8,
-                            as_s.len(),
-                        );
-                        std::mem::transmute(s)
-                    }
-                }
-                fn byte_copy(_: &mut Thread, _: &mut [NonNullPtr<Frame>], args: &[Word]) -> Word {
-                    let [source, dest, offset, len] = args else {
-                        panic!("byte_copy accepts only four arguments");
-                    };
-                    unsafe {
-                        let source: NonNullPtr<u8> = std::mem::transmute(*source);
-                        let dest: NonNullPtr<u8> = std::mem::transmute(*dest);
-                        let offset = *offset;
-                        let len = *len;
-                        std::ptr::copy(
-                            source.0.as_ptr(),
-                            dest.0.as_ptr().add(offset as usize),
-                            len as usize,
-                        );
-                    }
-                    0
-                }
-                fn str_from_bytes(
-                    _: &mut Thread,
-                    _: &mut [NonNullPtr<Frame>],
-                    args: &[Word],
-                ) -> Word {
-                    args[0]
-                }
-                fn add(_: &mut Thread, _: &mut [NonNullPtr<Frame>], args: &[Word]) -> Word {
-                    if args.len() != 2 {
-                        panic!("add accepts only two arguments");
-                    }
-                    args[0] + args[1]
-                }
-                fn header_data(_: &mut Thread, _: &mut [NonNullPtr<Frame>], args: &[Word]) -> Word {
-                    if args.len() != 1 {
-                        panic!("array_len accepts only one argument");
-                    }
-                    unsafe {
-                        let arg = args[0];
-                        let arr_ptr: NonNullPtr<()> = std::mem::transmute(arg);
-                        let p = arr_ptr.data() as Word;
-                        println!("NATIVE DATA IS {p}");
-                        p
-                    }
-                }
-                fn print_n_times(
-                    _: &mut Thread,
-                    _: &mut [NonNullPtr<Frame>],
-                    args: &[Word],
-                ) -> Word {
-                    if args.len() != 2 {
-                        panic!("print_n_times accepts only two arguments");
-                    }
-                    let str_ptr = args[0];
-                    let times = args[1];
-                    // safety: type checking ensures its safe
-                    unsafe {
-                        let str_ptr: NonNullPtr<StringInst> = std::mem::transmute(str_ptr);
-                        let str = (*str_ptr.get()).as_rust_str();
-                        for _ in 0..times {
-                            println!("{}", str);
-                        }
-                    }
-                    0
-                }
-                fn class_name(_: &mut Thread, _: &mut [NonNullPtr<Frame>], args: &[Word]) -> Word {
-                    if args.len() != 1 {
-                        panic!("class_name accepts only one argument");
-                    }
-                    let arg = args[0];
-                    let ptr: ErasedNonNull = unsafe { std::mem::transmute(arg) };
-                    unsafe { (*ptr.class().get()).name().as_ptr() as Word }
-                }
-                fn error(_: &mut Thread, _: &mut [NonNullPtr<Frame>], args: &[Word]) -> Word {
-                    if args.len() != 1 {
-                        panic!("error accepts only one argument");
-                    }
-                    let arg = args[0];
-                    let ptr: NonNullPtr<class::string::StringInst> =
-                        unsafe { std::mem::transmute(arg) };
-                    let str = unsafe { (*ptr.get()).as_rust_str() };
-                    panic!("Error: {}", str);
-                }
-                m.insert("print".to_owned(), native_print as RuntimeFn);
-                m.insert("header_data".to_owned(), header_data);
-                m.insert("itos".to_owned(), itos);
-                m.insert("print_n_times".to_owned(), print_n_times);
-                m.insert("byte_copy".to_owned(), byte_copy);
-                m.insert("add".to_owned(), add);
-                m.insert("str_from_bytes".to_owned(), str_from_bytes);
-                m.insert("class_name".to_owned(), class_name);
-                m.insert("error".to_owned(), error);
-                m
-            },
+            native_functions: std_lib::functions(),
         }
     }
 

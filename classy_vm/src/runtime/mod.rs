@@ -1,5 +1,6 @@
 pub mod class;
 pub mod linker;
+pub mod std_lib;
 pub mod thread;
 pub mod thread_manager;
 pub mod trace;
