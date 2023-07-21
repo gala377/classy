@@ -91,9 +91,16 @@ fn main() {
                 @runtime @empty
                 class_name: (a) -> String
 
-                type Option(a) {
-                    Some(a)
-                    None
+
+                concat_strings: (String, String) -> String
+                concat_strings(s1, s2) {
+                    let len1 = header_data s1
+                    let len2 = header_data s2
+                    let len = add(len1, len2)
+                    let res = array[len]
+                    byte_copy(s1, res, 0, len1)
+                    byte_copy(s2, res, len1, len2)
+                    str_from_bytes res
                 }
 
                 type Either(a, b) {
