@@ -210,6 +210,9 @@ pub enum ExprKind {
         typ: Typ,
         init: Box<Expr>,
     },
+    LetRec {
+        definitions: Vec<FunctionDefinition>,
+    },
     AnonType {
         fields: Vec<(String, Expr)>,
     },

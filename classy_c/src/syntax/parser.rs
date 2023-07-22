@@ -1040,6 +1040,9 @@ impl<'source> Parser<'source> {
     fn parse_let(&mut self) -> ParseRes<ast::Expr> {
         let beg = self.curr_pos();
         self.match_token(TokenType::Let)?;
+        if self.match_token(TokenType::Rec).is_ok() {
+            return self.parse_let_rec();
+        }
         let name =
             self.parse_identifier()
                 .error(self, beg, "expected a name after a let keyword")?;
@@ -1060,6 +1063,22 @@ impl<'source> Parser<'source> {
             typ,
             init: Box::new(init),
         }))
+    }
+
+    fn parse_let_rec(&mut self) -> ParseRes<ast::Expr> {
+        let definitions = if self.match_token(TokenType::LBrace).is_ok() {
+            let res = Self::parse_delimited(
+                self,
+                Parser::parse_function_definition,
+                TokenType::Semicolon,
+            );
+            let _ = self.expect_token(TokenType::RBrace);
+            let _ = self.expect_token(TokenType::Semicolon);
+            res
+        } else {
+            vec![self.parse_function_definition()?]
+        };
+        Ok(mk_expr(ast::ExprKind::LetRec { definitions }))
     }
 
     fn parse_pattern(&mut self) -> ParseRes<ast::Pattern> {

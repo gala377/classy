@@ -50,6 +50,8 @@ pub enum TokenType {
     Methods,
     #[token("const")]
     Const,
+    #[token("rec")]
+    Rec,
 
     // Literals
     #[regex(r"[_a-zA-Z][_a-zA-Z0-9]*", |lex| lex.slice().to_owned())]

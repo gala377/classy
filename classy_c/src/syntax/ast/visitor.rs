@@ -19,6 +19,10 @@ pub trait Visitor<'ast>: Sized {
         walk_const_definition(self, def)
     }
 
+    fn visit_local_function_def(&mut self, def: &'ast ast::FunctionDefinition) {
+        walk_local_function_def(self, def)
+    }
+
     fn visit_methods_block(&mut self, meth: &'ast ast::MethodsBlock) {
         walk_methods_block(self, meth)
     }
@@ -87,6 +91,10 @@ pub trait Visitor<'ast>: Sized {
 
     fn visit_let(&mut self, name: &'ast str, typ: &'ast ast::Typ, init: &'ast ast::Expr) {
         walk_let(self, name, typ, init)
+    }
+
+    fn visit_let_rec(&mut self, definitions: &'ast [ast::FunctionDefinition]) {
+        walk_let_rec(self, definitions)
     }
 
     fn visit_assignment(&mut self, lval: &'ast ast::Expr, rval: &'ast ast::Expr) {
@@ -299,6 +307,7 @@ pub fn walk_expr_kind<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::ExprKi
             args,
             kwargs,
         } => v.visit_method_call(receiver, method, args, kwargs),
+        ast::ExprKind::LetRec { definitions } => v.visit_let_rec(definitions),
     }
 }
 
@@ -604,4 +613,25 @@ pub fn walk_const_definition<'ast, V: Visitor<'ast>>(v: &mut V, def: &'ast ast::
     v.visit_name(&def.name);
     v.visit_typ(&def.typ);
     v.visit_expr(&def.init);
+}
+
+pub fn walk_local_function_def<'ast, V: Visitor<'ast>>(
+    v: &mut V,
+    def: &'ast ast::FunctionDefinition,
+) {
+    v.visit_name(&def.name);
+    v.visit_typ(&def.typ);
+    for param in &def.parameters {
+        v.visit_name(param);
+    }
+    v.visit_expr(&def.body);
+}
+
+pub fn walk_let_rec<'ast, V: Visitor<'ast>>(
+    v: &mut V,
+    definitions: &'ast [ast::FunctionDefinition],
+) {
+    for def in definitions {
+        v.visit_local_function_def(def);
+    }
 }

@@ -294,6 +294,14 @@ pub trait Folder: Sized {
     fn fold_array_type(&mut self, typ: Typ) -> Typ {
         fold_array_type(self, typ)
     }
+
+    fn fold_let_rec(&mut self, definitions: Vec<FunctionDefinition>) -> ExprKind {
+        fold_let_rec(self, definitions)
+    }
+
+    fn fold_local_function_def(&mut self, def: FunctionDefinition) -> FunctionDefinition {
+        fold_local_function_def(self, def)
+    }
 }
 
 pub fn fold_program<F: Folder>(folder: &mut F, program: Program) -> Program {
@@ -402,6 +410,7 @@ pub fn fold_expr_kind(folder: &mut impl Folder, expr: ExprKind) -> ExprKind {
             args,
             kwargs,
         } => folder.fold_methods_call(*receiver, method, args, kwargs),
+        ExprKind::LetRec { definitions } => folder.fold_let_rec(definitions),
     }
 }
 
@@ -775,5 +784,28 @@ pub fn fold_const_definition(folder: &mut impl Folder, def: ConstDefinition) -> 
         name: folder.fold_name(def.name),
         typ: folder.fold_typ(def.typ),
         init: folder.fold_expr(def.init),
+    }
+}
+
+pub fn fold_let_rec(folder: &mut impl Folder, definitions: Vec<FunctionDefinition>) -> ExprKind {
+    let mut new_defs = Vec::new();
+    for def in definitions {
+        new_defs.push(folder.fold_function_definition(def));
+    }
+    ExprKind::LetRec {
+        definitions: new_defs,
+    }
+}
+
+pub fn fold_local_function_def(
+    folder: &mut impl Folder,
+    def: FunctionDefinition,
+) -> FunctionDefinition {
+    FunctionDefinition {
+        name: folder.fold_name(def.name),
+        parameters: folder.fold_function_params(def.parameters),
+        body: folder.fold_expr(def.body),
+        typ: folder.fold_typ(def.typ),
+        attributes: folder.fold_attributes(def.attributes),
     }
 }

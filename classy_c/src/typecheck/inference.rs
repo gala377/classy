@@ -705,6 +705,7 @@ impl Inference {
                 });
                 ret
             }
+            t => todo!("{t:?} not implemented yet for typechecking"),
         }
     }
 
