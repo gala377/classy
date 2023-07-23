@@ -30,12 +30,31 @@ pub fn generalize_types(
         bindings: HashMap::new(),
         current_id: 0,
         debruijn: DeBruijn::zero(),
+        above: 0,
     };
     let t = tctx.definitions.get_mut(&new_t).unwrap();
     *t = generalizer.generalize(t.clone());
     let new_t = tctx.definitions.get(&new_t).unwrap().clone();
     global_scope.borrow_mut().add_variable(name, new_t);
     // Update generalized type in env
+    fix_types_in_env(&generalizer.bindings, env);
+}
+
+pub fn generalize_type_above(
+    above: usize,
+    name: &str,
+    scope: Rc<RefCell<Scope>>,
+    env: &mut HashMap<usize, Type>,
+) {
+    let t = scope.borrow().type_of(name).unwrap().clone();
+    let mut generalizer = GeneralizerHelper {
+        bindings: HashMap::new(),
+        current_id: 0,
+        debruijn: DeBruijn::zero(),
+        above,
+    };
+    let new_t = generalizer.generalize(t);
+    scope.borrow_mut().add_variable(name, new_t.clone());
     fix_types_in_env(&generalizer.bindings, env);
 }
 
@@ -100,6 +119,7 @@ struct GeneralizerHelper {
     bindings: HashMap<usize, Type>,
     current_id: usize,
     debruijn: DeBruijn,
+    above: usize,
 }
 
 impl GeneralizerHelper {
@@ -138,6 +158,9 @@ impl TypeFolder for GeneralizerHelper {
     }
 
     fn fold_fresh(&mut self, id: usize) -> Type {
+        if id < self.above {
+            return Type::Fresh(id);
+        }
         match self.bindings.get(&id) {
             Some(t) => t.clone(),
             None => {

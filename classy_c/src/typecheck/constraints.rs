@@ -23,5 +23,5 @@ pub enum Constraint {
         method: String,
         args: Vec<Type>,
         ret: Type,
-    }
+    },
 }

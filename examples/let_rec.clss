@@ -1,0 +1,24 @@
+
+
+@runtime @empty
+print: (String) -> ()
+
+@runtime @empty
+itoa: (Int) -> String
+
+infere { "hello" }
+
+generic: (a) -> a
+generic arg {
+    let x = infere()
+    let x2 = x
+    let x3 = x2
+    let rec ignore x = arg
+    ignore 1
+}
+
+main {
+    let rec id x = x
+    print(id("hello"))
+    print(itoa(id(1)))
+}

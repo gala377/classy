@@ -83,6 +83,19 @@ impl Scope {
         })
     }
 
+    pub fn type_of_with_pos(&self, name: &str) -> Option<(usize, Type)> {
+        self.resolved_vars
+            .get(name)
+            .cloned()
+            .map(|t| (0, t))
+            .or_else(|| {
+                self.parent
+                    .as_ref()
+                    .and_then(|parent| parent.borrow().type_of_with_pos(name))
+                    .map(|(pos, t)| (pos + 1, t))
+            })
+    }
+
     pub fn lookup_type(&self, name: &str) -> Option<Type> {
         self.resolved_types.get(name).cloned().or_else(|| {
             self.parent

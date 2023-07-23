@@ -44,6 +44,15 @@ where
         None
     }
 
+    pub fn get_with_position(&self, key: &K) -> Option<(usize, &V)> {
+        for (i, scope) in self.stack.iter().rev().enumerate() {
+            if let Some(value) = scope.get(key) {
+                return Some((i, value));
+            }
+        }
+        None
+    }
+
     pub fn position(&self, key: &K) -> Option<usize> {
         for (i, scope) in self.stack.iter().rev().enumerate() {
             if scope.contains_key(key) {

@@ -61,7 +61,7 @@ impl<'source> Parser<'source> {
             }
             if let Ok(str_def) = self.parse_type_definition() {
                 items.push(ast::TopLevelItem::TypeDefinition(str_def));
-            } else if let Ok(fun_def) = self.parse_function_definition() {
+            } else if let Ok(fun_def) = self.parse_function_definition(true) {
                 items.push(ast::TopLevelItem::FunctionDefinition(fun_def));
             } else if let Ok(meth_block) = self.parse_methods_block() {
                 items.push(ast::TopLevelItem::MethodsBlock(meth_block));
@@ -104,7 +104,7 @@ impl<'source> Parser<'source> {
         let _ = self.expect_token(TokenType::LBrace);
         let mut methods = Vec::new();
         while self.lexer.current().typ != TokenType::RBrace {
-            let method = self.parse_function_definition()?;
+            let method = self.parse_function_definition(true)?;
             methods.push(method);
         }
         let _ = self.expect_token(TokenType::RBrace);
@@ -225,7 +225,10 @@ impl<'source> Parser<'source> {
         attributes
     }
 
-    fn parse_function_definition(&mut self) -> ParseRes<ast::FunctionDefinition> {
+    fn parse_function_definition(
+        &mut self,
+        eat_semicolon: bool,
+    ) -> ParseRes<ast::FunctionDefinition> {
         let beg = self.curr_pos();
         let attributes = self.parse_attributes();
         let name = self.parse_identifier()?;
@@ -270,7 +273,9 @@ impl<'source> Parser<'source> {
         } else {
             self.parse_expr_sequence()?
         };
-        let _ = self.expect_token(TokenType::Semicolon);
+        if eat_semicolon {
+            let _ = self.expect_token(TokenType::Semicolon);
+        }
         let typ = match typ {
             ast::Typ::ToInfere => {
                 let args = parameters
@@ -1041,6 +1046,7 @@ impl<'source> Parser<'source> {
         let beg = self.curr_pos();
         self.match_token(TokenType::Let)?;
         if self.match_token(TokenType::Rec).is_ok() {
+            println!("Parsing let rec");
             return self.parse_let_rec();
         }
         let name =
@@ -1067,16 +1073,13 @@ impl<'source> Parser<'source> {
 
     fn parse_let_rec(&mut self) -> ParseRes<ast::Expr> {
         let definitions = if self.match_token(TokenType::LBrace).is_ok() {
-            let res = Self::parse_delimited(
-                self,
-                Parser::parse_function_definition,
-                TokenType::Semicolon,
-            );
-            let _ = self.expect_token(TokenType::RBrace);
-            let _ = self.expect_token(TokenType::Semicolon);
+            let mut res = Vec::new();
+            while self.match_token(TokenType::RBrace).is_err() {
+                res.push(self.parse_function_definition(true)?);
+            }
             res
         } else {
-            vec![self.parse_function_definition()?]
+            vec![self.parse_function_definition(false)?]
         };
         Ok(mk_expr(ast::ExprKind::LetRec { definitions }))
     }

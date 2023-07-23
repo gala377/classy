@@ -13,7 +13,7 @@ use crate::{
         handle::Handle,
         heap::{self, Heap, SemiSpace},
         permament_heap,
-        ptr::{ErasedNonNull, NonNullPtr, Ptr},
+        ptr::{NonNullPtr, Ptr},
         ObjectAllocator,
     },
     runtime::{
