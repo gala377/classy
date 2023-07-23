@@ -6,6 +6,12 @@ print: (String) -> ()
 @runtime @empty
 itoa: (Int) -> String
 
+@runtime @empty
+eq: (Int, Int) -> Bool
+
+@runtime @empty
+sub: (Int, Int) -> Int
+
 infere { "hello" }
 
 generic: (a) -> a
@@ -21,4 +27,22 @@ main {
     let rec id x = x
     print(id("hello"))
     print(itoa(id(1)))
+
+    let rec countdown n = if (eq(n, 0)) {
+        0
+    } else {
+        countdown(sub(n, 1))
+    }
+
+    let rec {
+        f a = a match {
+            1 => g a
+            _ => g(2)
+        }
+
+        g a = a match {
+            2 => 0
+            _ => f(3)
+        }
+    }
 }
