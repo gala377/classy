@@ -1,5 +1,5 @@
 [package]
-name = "classy_vm"
+name = "classyvm"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,5 +7,5 @@ edition = "2021"
 loom = "0.5.6"
 sptr = "0.3.2"
 thiserror = "1.0.37"
-classy_c = { path = "../classy_c" }
+classy_c = { path = "../classyclib" }
 bitvec = "1.0.1"
