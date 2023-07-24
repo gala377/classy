@@ -1,4 +1,4 @@
-use crate::syntax::ast::{self, Visitor};
+use classy_syntax::ast::{self, Visitor};
 
 use super::AstPass;
 pub struct VerifyLvalues;

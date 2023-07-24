@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::syntax::ast;
+use classy_syntax::ast;
 
 use super::{
     r#type::{DeBruijn, Type},

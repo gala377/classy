@@ -1,6 +1,6 @@
 use logos::Logos;
 
-use crate::syntax::tokens::{Token, TokenType, IGNORE_NEWLINE};
+use crate::tokens::{Token, TokenType, IGNORE_NEWLINE};
 
 #[derive(Clone)]
 pub struct Lexer<'a> {

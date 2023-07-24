@@ -1,9 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    syntax::ast,
-    typecheck::{self, type_context::TypCtx},
-};
+use classy_syntax::ast;
+
+use crate::typecheck::{self, type_context::TypCtx};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Type {
@@ -179,11 +178,11 @@ fn serialize_type(tctx: &TypCtx, typ: &typecheck::r#type::Type, top_level: bool)
             } else {
                 let node = tctx.nodes.get(def).unwrap();
                 match node {
-                    crate::syntax::ast::TopLevelItem::TypeDefinition(ast::TypeDefinition {
+                    classy_syntax::ast::TopLevelItem::TypeDefinition(ast::TypeDefinition {
                         name,
                         ..
                     }) => Type::Name(name.clone()),
-                    crate::syntax::ast::TopLevelItem::FunctionDefinition(_) => {
+                    classy_syntax::ast::TopLevelItem::FunctionDefinition(_) => {
                         panic!("No struct node should map to a function definition")
                     }
                     def => unimplemented!("{def:?}"),

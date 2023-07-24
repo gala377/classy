@@ -1,4 +1,4 @@
-use crate::syntax::ast;
+use classy_syntax::ast;
 
 use crate::typecheck::{r#type::Type, type_context::TypCtx};
 

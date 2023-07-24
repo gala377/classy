@@ -10,7 +10,7 @@ pub mod scope;
 pub mod r#type;
 pub mod type_context;
 
-use crate::syntax::{
+use classy_syntax::{
     self,
     ast::{self, Visitor},
 };
@@ -25,7 +25,7 @@ pub use inference::run;
 
 /// Create a top level type context containing all types and functions with
 /// their respective types in the simplest form possible.
-pub fn prepare_for_typechecking(program: &syntax::ast::Program) -> TypCtx {
+pub fn prepare_for_typechecking(program: &classy_syntax::ast::Program) -> TypCtx {
     let mut tctx = TypCtx::new();
     let mut add_types = AddTypes::with_primitive_types(&mut tctx);
     add_types.visit(program);
@@ -228,16 +228,13 @@ fn replace_aliases_with_map(typ: &Type, map: &HashMap<TypeId, TypeId>) -> Type {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
-    use crate::{
-        syntax::{ast::Visitor, lexer::Lexer, parser::Parser},
-        typecheck::{
-            self,
-            r#type::Type,
-            type_context::{TypCtx, TypeId},
-        },
+    use crate::typecheck::{
+        self,
+        r#type::Type,
+        type_context::{TypCtx, TypeId},
     };
+    use classy_syntax::{ast::Visitor, lexer::Lexer, parser::Parser};
+    use std::collections::HashMap;
 
     macro_rules! map {
         { $($key:literal => $val:expr),* $(,)? } => {

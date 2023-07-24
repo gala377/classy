@@ -2,12 +2,13 @@ use std::collections::HashSet;
 
 use colored::*;
 
+use classy_syntax::{ast, ast::Visitor, lexer::Lexer, parser::Parser};
+
 use classyclib::{
     ast_passes::{
         gather_runtime_functions, run_befor_type_context_passes, run_before_typechecking_passes,
     },
     code::constant_pool::ConstantPool,
-    syntax::{ast, ast::Visitor, lexer::Lexer, parser::Parser},
     typecheck::{self, add_types::AddTypes, type_context::TypCtx},
 };
 

@@ -1,7 +1,7 @@
-use crate::{
-    scope::Scope,
-    syntax::ast::{self, Folder},
-};
+
+use classy_syntax::ast::{self, Folder};
+
+use crate::scope::Scope;
 
 use super::AstPass;
 

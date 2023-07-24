@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::syntax::ast::{
+use crate::ast::{
     DefinedType, Expr, ExprKind, FunctionDefinition, Path, Pattern, PatternKind, Program,
     TopLevelItem, Typ, TypeDefinition, TypeVariable, TypedName,
 };

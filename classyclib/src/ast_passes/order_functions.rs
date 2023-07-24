@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::syntax::ast;
+use classy_syntax::ast;
 
 /// TODO: Involve methods into the ordering
 
@@ -207,11 +207,11 @@ impl<'g> CycleFinder<'g> {
 
 #[cfg(test)]
 mod tests {
-    use crate::syntax::ast::{self, Visitor};
+    use classy_syntax::ast::{self, Visitor};
 
     fn mk_ast(source: &str) -> ast::Program {
-        let lexer = crate::syntax::lexer::Lexer::new(source);
-        let mut parser = crate::syntax::parser::Parser::new(lexer);
+        let lexer = classy_syntax::lexer::Lexer::new(source);
+        let mut parser = classy_syntax::parser::Parser::new(lexer);
         parser.parse().unwrap()
     }
 

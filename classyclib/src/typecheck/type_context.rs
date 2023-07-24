@@ -1,9 +1,6 @@
+use crate::typecheck::r#type::{Type, TypeFolder};
+use classy_syntax::ast;
 use std::collections::HashMap;
-
-use crate::{
-    syntax::ast,
-    typecheck::r#type::{Type, TypeFolder},
-};
 
 #[derive(Debug, Clone)]
 pub struct MethodSet {

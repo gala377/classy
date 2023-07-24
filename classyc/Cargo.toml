@@ -9,3 +9,4 @@ classyvm = { path = "../classyvm" }
 classyclib = { path = "../classyclib" }
 colored = "2.0.0"
 color-eyre = "0.6.2"
+classy_syntax = { path = "../classy_syntax" }

@@ -7,10 +7,11 @@ use std::{
 use clap::Parser;
 use colored::Colorize;
 
+use classy_syntax::ast::{self, Visitor};
+
 use classyclib::{
     ast_passes::run_before_typechecking_passes,
     code::constant_pool::ConstantPool,
-    syntax::ast::{self, Visitor},
     typecheck::{self, add_types::AddTypes, type_context::TypCtx},
 };
 use classyvm::{
@@ -70,8 +71,7 @@ fn compile(
     source: &str,
     print_ast: bool,
 ) -> Option<HashMap<String, NonNullPtr<classyvm::runtime::class::code::Code>>> {
-    let mut parser =
-        classyclib::syntax::parser::Parser::new(classyclib::syntax::lexer::Lexer::new(source));
+    let mut parser = classy_syntax::parser::Parser::new(classy_syntax::lexer::Lexer::new(source));
     let ast = parser.parse().unwrap();
     let ast = classyclib::ast_passes::run_befor_type_context_passes(ast);
     let mut tctx = typecheck::prepare_for_typechecking(&ast);

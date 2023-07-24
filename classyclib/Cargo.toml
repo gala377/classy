@@ -12,3 +12,4 @@ serde = { version = "1.0.163", features = ["serde_derive"] }
 serde_json = "1.0.96"
 similar-asserts = "1.4.2"
 thiserror = "1.0.37"
+classy_syntax = { path = "../classy_syntax" }

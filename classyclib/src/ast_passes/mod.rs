@@ -1,4 +1,6 @@
-use crate::{syntax::ast, typecheck::type_context::TypCtx};
+use classy_syntax::ast;
+
+use crate::typecheck::type_context::TypCtx;
 
 pub mod assign_expr_id;
 pub mod func_to_struct_literal;

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::syntax::ast::{self, Folder, Visitor};
+use classy_syntax::ast::{self, Folder, Visitor};
 
 use super::AstPass;
 

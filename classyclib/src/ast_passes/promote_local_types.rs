@@ -1,4 +1,4 @@
-use crate::syntax::ast::{self, Folder};
+use classy_syntax::ast::{self, Folder};
 
 use super::AstPass;
 

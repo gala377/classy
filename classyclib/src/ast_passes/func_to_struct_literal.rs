@@ -1,5 +1,6 @@
+use classy_syntax::ast::{self, ExprKind};
+
 use crate::ast_passes;
-use crate::syntax::ast::{self, ExprKind};
 use crate::typecheck::r#type::Type;
 use crate::typecheck::type_context::TypCtx;
 
@@ -293,13 +294,17 @@ fn resolve_fields(tctx: &TypCtx, t: &Type) -> Option<Vec<(String, Type)>> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        ast_passes::{func_to_struct_literal::PromoteCallToStructLiteral, AstPass},
-        syntax::{lexer::Lexer, parser::Parser},
-        typecheck,
+
+    use classy_syntax::{
+        ast::{self},
+        lexer::Lexer,
+        parser::Parser,
     };
 
-    use crate::syntax::ast;
+    use crate::{
+        ast_passes::{func_to_struct_literal::PromoteCallToStructLiteral, AstPass},
+        typecheck,
+    };
 
     fn run_test(input: &str, expected: ast::Builder) {
         let lexer = Lexer::new(input);

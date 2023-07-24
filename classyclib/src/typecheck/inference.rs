@@ -1,20 +1,18 @@
-use core::panic;
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     rc::Rc,
 };
 
-use crate::{
-    syntax::ast::{self, ExprKind, Visitor},
-    typecheck::{
-        constraints::Constraint,
-        constrait_solver::{instance, ConstraintSolver, FreshTypeReplacer},
-        fix_fresh::{self, generalize_type_above, generalize_types},
-        r#type::{Type, TypeFolder},
-        scope::Scope,
-        type_context::TypCtx,
-    },
+use classy_syntax::ast::{self, ExprKind, Visitor};
+
+use crate::typecheck::{
+    constraints::Constraint,
+    constrait_solver::{instance, ConstraintSolver, FreshTypeReplacer},
+    fix_fresh::{self, generalize_type_above, generalize_types},
+    r#type::{Type, TypeFolder},
+    scope::Scope,
+    type_context::TypCtx,
 };
 
 use super::{ast_to_type::PrefexScope, r#type::DeBruijn};
@@ -1162,9 +1160,9 @@ impl TypeFolder for RequiresTypeChecking {
 mod tests {
     use crate::{
         ast_passes::{self},
-        syntax::{lexer::Lexer, parser::Parser},
         typecheck,
     };
+    use classy_syntax::{lexer::Lexer, parser::Parser};
 
     fn run_typechecker(source: &str) {
         let lex = Lexer::new(source);

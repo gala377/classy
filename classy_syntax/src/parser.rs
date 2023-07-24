@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use thiserror::Error;
 
-use crate::syntax::{
+use crate::{
     ast::{self, TypedName},
     lexer::Lexer,
     tokens::{Token, TokenType},
@@ -1319,7 +1319,7 @@ fn mk_expr(kind: ast::ExprKind) -> ast::Expr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::syntax::ast;
+    use crate::ast;
 
     type TestRes = Result<(), Vec<SyntaxError>>;
 

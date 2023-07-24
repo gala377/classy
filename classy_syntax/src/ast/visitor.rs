@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::syntax::ast;
+use crate::ast;
 
 pub trait Visitor<'ast>: Sized {
     fn visit(&mut self, node: &'ast ast::Program) {

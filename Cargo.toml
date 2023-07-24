@@ -3,5 +3,6 @@ members = [
     "classyvm",
     "classyc",
     "classyclib",
+    "classy_syntax",
 ]
 resolver = "2"

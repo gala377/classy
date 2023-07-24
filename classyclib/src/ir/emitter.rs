@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 
-use crate::{
-    syntax::ast::{self},
-    typecheck::{
-        constrait_solver::instance,
-        inference::TypeEnv,
-        r#type::Type,
-        type_context::{DefId, TypCtx},
-    },
+use classy_syntax::ast;
+
+use crate::typecheck::{
+    constrait_solver::instance,
+    inference::TypeEnv,
+    r#type::Type,
+    type_context::{DefId, TypCtx},
 };
 
 use super::instr::{Address, Block, Instruction, IsRef, Label, Op};
