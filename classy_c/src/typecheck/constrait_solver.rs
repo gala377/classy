@@ -40,6 +40,12 @@ impl<'ctx> ConstraintSolver<'ctx> {
         constraints.reverse();
         let mut constraints: VecDeque<_> = constraints.into();
         while let Some(con) = constraints.pop_back() {
+            println!("\n\n\n\n\n\n\n");
+
+            println!("=> {con:?}");
+            for c in constraints.iter().rev() {
+                println!("-> {c:?}");
+            }
             self.solve_constraint(con, &mut constraints);
         }
     }
@@ -423,6 +429,10 @@ pub fn instance(tctx: &TypCtx, args: Vec<Type>, scheme_t: Type) -> Type {
         "Cannot instantiate non ref types"
     );
     match &scheme_t {
+        // Special case when we just need to unpack a scheme
+        Type::Scheme { prefex, typ } if args.is_empty() && prefex.is_empty() => {
+            return ShiftDebruijn.fold_type(*typ.clone());
+        }
         Type::Scheme { prefex, .. } => {
             assert_eq!(
                 prefex.len(),
@@ -438,7 +448,7 @@ pub fn instance(tctx: &TypCtx, args: Vec<Type>, scheme_t: Type) -> Type {
             assert!(args.is_empty(), "type is empty, cannot instantiate: {t:?}");
         }
     }
-    args.into_iter().enumerate().fold(scheme_t, |acc, (i, t)| {
+    let new_t = args.into_iter().enumerate().fold(scheme_t, |acc, (i, t)| {
         let mut replacer = Instatiator {
             for_gen: i,
             instatiated: t,
@@ -446,5 +456,13 @@ pub fn instance(tctx: &TypCtx, args: Vec<Type>, scheme_t: Type) -> Type {
             deruijn: DeBruijn(-1),
         };
         replacer.fold_type(acc)
-    })
+    });
+    ShiftDebruijn.fold_type(new_t)
+}
+
+struct ShiftDebruijn;
+impl TypeFolder for ShiftDebruijn {
+    fn fold_generic(&mut self, index: DeBruijn, pos: usize) -> Type {
+        Type::Generic(index - 1, pos)
+    }
 }

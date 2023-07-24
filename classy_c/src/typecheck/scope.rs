@@ -10,6 +10,7 @@ pub struct Scope {
     resolved_vars: HashMap<String, Type>,
     type_ids: HashMap<usize, Type>,
     parent: Option<Rc<RefCell<Scope>>>,
+    increases_debruijn: bool,
 }
 
 impl Scope {
@@ -63,15 +64,27 @@ impl Scope {
             resolved_vars,
             type_ids: type_ctx.definitions.clone(),
             parent: None,
+            increases_debruijn: false,
         }
     }
 
-    pub fn empty_scope_with_parent(parent: Rc<RefCell<Scope>>) -> Rc<RefCell<Self>> {
+    pub fn new(parent: Rc<RefCell<Scope>>) -> Rc<RefCell<Self>> {
         Rc::new(RefCell::new(Self {
             resolved_types: HashMap::new(),
             resolved_vars: HashMap::new(),
             type_ids: HashMap::new(),
             parent: Some(parent),
+            increases_debruijn: false,
+        }))
+    }
+
+    pub fn new_debruijn(parent: Rc<RefCell<Scope>>) -> Rc<RefCell<Self>> {
+        Rc::new(RefCell::new(Self {
+            resolved_types: HashMap::new(),
+            resolved_vars: HashMap::new(),
+            type_ids: HashMap::new(),
+            parent: Some(parent),
+            increases_debruijn: true,
         }))
     }
 
@@ -80,6 +93,12 @@ impl Scope {
             self.parent
                 .as_ref()
                 .and_then(|parent| parent.borrow().type_of(name))
+                .map(|t| match t {
+                    Type::Generic(index, pos) if self.increases_debruijn => {
+                        Type::Generic(index + 1, pos)
+                    }
+                    t => t,
+                })
         })
     }
 

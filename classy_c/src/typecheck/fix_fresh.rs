@@ -53,7 +53,13 @@ pub fn generalize_type_above(
         debruijn: DeBruijn::zero(),
         above,
     };
-    let new_t = generalizer.generalize(t);
+    let new_t = match generalizer.generalize(t) {
+        t @ Type::Scheme { .. } => t,
+        t => Type::Scheme {
+            prefex: Vec::new(),
+            typ: Box::new(t),
+        },
+    };
     scope.borrow_mut().add_variable(name, new_t.clone());
     fix_types_in_env(&generalizer.bindings, env);
 }
@@ -126,8 +132,10 @@ impl GeneralizerHelper {
     pub fn generalize(&mut self, t: Type) -> Type {
         let t = self.fold_type(t);
         if self.bindings.is_empty() {
+            println!("Folded type and bindigns are empty");
             t
         } else {
+            println!("Folded type and bindings are not empty");
             let mut prefex = Vec::new();
             for i in 0..self.current_id {
                 prefex.push(PREFEX_NAMES[i % PREFEX_NAMES.len()].to_owned());

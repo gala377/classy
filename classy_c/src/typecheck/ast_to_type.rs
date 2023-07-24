@@ -258,9 +258,12 @@ impl<'ctx> TypeResolver<'ctx> {
                     scope.add_type_vars(generics);
                     let resolved_args = args.iter().map(|t| self.resolve_type(scope, t)).collect();
                     let resolved_ret = self.resolve_type(scope, ret);
-                    self.add_definition(Type::Function {
-                        args: resolved_args,
-                        ret: Box::new(resolved_ret),
+                    self.add_definition(Type::Scheme {
+                        prefex: generics.clone(),
+                        typ: Box::new(Type::Function {
+                            args: resolved_args,
+                            ret: Box::new(resolved_ret),
+                        }),
                     })
                 })
             }

@@ -1,0 +1,14 @@
+
+
+
+test: (a, forall b => (b) -> a) -> a
+test (x, f) {
+    let z = f(x) 
+    z
+};
+
+foo: (a) -> a 
+foo b {
+    let rec ignore a = b
+    ignore 1
+}

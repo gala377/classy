@@ -797,3 +797,217 @@ impl KwArgsBuilder {
         self
     }
 }
+impl Expr {
+    pub fn pretty(&self) -> String {
+        match &self.kind {
+            ExprKind::Unit => "".to_string(),
+            ExprKind::Sequence(exprs) => {
+                let mut res = "seq { ".to_string();
+                for expr in exprs {
+                    res.push_str(&expr.pretty());
+                    res.push_str("; ");
+                }
+                res.push_str("}");
+                res
+            }
+            ExprKind::Assignment { lval, rval } => {
+                format!("{} = {}", lval.pretty(), rval.pretty())
+            }
+            ExprKind::IntConst(i) => i.to_string(),
+            ExprKind::StringConst(s) => {
+                let mut res = "\"".to_string();
+                res.push_str(&s);
+                res.push_str("\"");
+                res
+            }
+            ExprKind::FloatConst(f) => {
+                let res = f.to_string();
+                res
+            }
+            ExprKind::BoolConst(b) => {
+                let res = b.to_string();
+                res
+            }
+            ExprKind::Name(n) => n.clone(),
+            ExprKind::FunctionCall { func, args, kwargs } => {
+                let mut res = func.pretty();
+                res.push_str("(");
+                for arg in args {
+                    res.push_str(&arg.pretty());
+                    res.push_str(", ");
+                }
+                for (name, arg) in kwargs {
+                    res.push_str(&format!("{} = {}, ", name, arg.pretty()));
+                }
+                res.push_str(")");
+                res
+            }
+            ExprKind::Access { val, field } => {
+                let mut res = val.pretty();
+                res.push_str(".");
+                res.push_str(&field);
+                res
+            }
+            ExprKind::Tuple(args) => {
+                let mut res = "(".to_string();
+                for arg in args {
+                    res.push_str(&arg.pretty());
+                    res.push_str(", ");
+                }
+                res.push_str(")");
+                res
+            }
+            ExprKind::Lambda { parameters, body } => {
+                let mut res = "fn (".to_string();
+                for TypedName { name, .. } in parameters {
+                    res.push_str(&name);
+                }
+                res.push_str(") ");
+                res.push_str(&body.pretty());
+                res
+            }
+            ExprKind::TypedExpr { expr, .. } => expr.pretty(),
+            ExprKind::StructLiteral { strct, values } => {
+                let mut res = strct.0.join(".");
+                res.push_str(" { ");
+                for (name, val) in values {
+                    res.push_str(&format!("{} = {}, ", name, val.pretty()));
+                }
+                res.push_str("}");
+                res
+            }
+            ExprKind::AdtTupleConstructor {
+                typ,
+                constructor,
+                args,
+            } => {
+                let mut res = format!("{}::{}", typ, constructor);
+                res.push_str("(");
+                for arg in args {
+                    res.push_str(&arg.pretty());
+                    res.push_str(", ");
+                }
+                res.push_str(")");
+                res
+            }
+            ExprKind::AdtStructConstructor {
+                typ,
+                constructor,
+                fields,
+            } => {
+                let mut res = format!("{}::{}", typ, constructor);
+                res.push_str("{ ");
+                for (name, val) in fields {
+                    res.push_str(&format!("{} = {}, ", name, val.pretty()));
+                }
+                res.push_str("}");
+                res
+            }
+            ExprKind::AdtUnitConstructor { typ, constructor } => {
+                format!("{}::{}", typ, constructor)
+            }
+            ExprKind::While { cond, body } => {
+                let mut res = "while ".to_string();
+                res.push_str(&format!("({})", &cond.pretty()));
+                res.push_str(" ");
+                res.push_str(&body.pretty());
+                res
+            }
+            ExprKind::Return(e) => {
+                let mut res = "return ".to_string();
+                res.push_str(&e.pretty());
+                res
+            }
+            ExprKind::If {
+                cond,
+                body,
+                else_body,
+            } => {
+                let mut res = "if ".to_string();
+                res.push_str(&cond.pretty());
+                res.push_str(" ");
+                res.push_str(&body.pretty());
+                if let Some(else_body) = else_body {
+                    res.push_str(" else ");
+                    res.push_str(&else_body.pretty());
+                }
+                res
+            }
+            ExprKind::Let { name, init, .. } => {
+                let mut res = "let ".to_string();
+                res.push_str(&name);
+                res.push_str(" = ");
+                res.push_str(&init.pretty());
+                res
+            }
+            ExprKind::LetRec { definitions } => {
+                let mut res = "let rec ".to_string();
+                for def in definitions {
+                    res.push_str(&def.name);
+                    res.push_str(" = ");
+                    res.push_str(&def.body.pretty());
+                }
+                res
+            }
+            ExprKind::AnonType { fields } => {
+                let mut res = "type { ".to_string();
+                for (name, val) in fields {
+                    res.push_str(&format!("{} = {}, ", name, val.pretty()));
+                }
+                res.push_str("}");
+                res
+            }
+            ExprKind::ArrayLiteral { size, init, .. } => {
+                let mut res = "array[".to_string();
+                res.push_str(&size.pretty());
+                res.push_str("] = [");
+                for val in init {
+                    res.push_str(&val.pretty());
+                    res.push_str(", ");
+                }
+                res.push_str("]");
+                res
+            }
+            ExprKind::IndexAccess { lhs, index } => {
+                let mut res = lhs.pretty();
+                res.push_str("[");
+                res.push_str(&index.pretty());
+                res.push_str("]");
+                res
+            }
+            ExprKind::Match { expr, cases } => {
+                let mut res = "match ".to_string();
+                res.push_str(&expr.pretty());
+                res.push_str(" {");
+                for (_, body, guard) in cases {
+                    res.push_str(&format!("PATTERN => {}", body.pretty()));
+                    if let Some(guard) = guard {
+                        res.push_str(" if ");
+                        res.push_str(&guard.pretty());
+                    }
+                    res.push_str("; ");
+                }
+                res.push_str("}");
+                res
+            }
+            ExprKind::MethodCall {
+                receiver,
+                method,
+                args,
+                kwargs,
+            } => {
+                let mut res = receiver.pretty();
+                res.push_str(&format!(".{}(", method));
+                for arg in args {
+                    res.push_str(&arg.pretty());
+                    res.push_str(", ");
+                }
+                for (name, arg) in kwargs {
+                    res.push_str(&format!("{} = {}, ", name, arg.pretty()));
+                }
+                res.push_str(")");
+                res
+            }
+        }
+    }
+}
