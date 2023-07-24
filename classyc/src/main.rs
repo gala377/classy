@@ -48,7 +48,7 @@ struct Args {
 }
 
 fn main() {
-    color_rye::install().unwrap();
+    color_eyre::install().unwrap();
     let args = Args::parse();
     let mut vm = Vm::new_default(vm::Options {
         page_size: args.page_size + size_of::<Page>(),

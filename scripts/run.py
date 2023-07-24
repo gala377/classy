@@ -17,9 +17,11 @@ COMPILE_COMMAND_FMT = [
 def run_classy_c(file: str, rest: list[str]):
     cwd = os.getcwd()
     path = Path(cwd) / file
+    env = os.environ.copy()
+    env["RUST_BACKTRACE"] = "1"
     command = [*COMPILE_COMMAND_FMT, "--", f"--file={path}", *rest]
     print(f"Running {' '.join(command)}")
-    subprocess.run(command, cwd=CLASSY_PATH)
+    subprocess.run(command, cwd=CLASSY_PATH, env=env)
 
 
 def make_argparser() -> argparse.ArgumentParser:
