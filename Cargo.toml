@@ -4,5 +4,6 @@ members = [
     "classyc",
     "classyclib",
     "classy_syntax",
+    "classy_sexpr",
 ]
 resolver = "2"
