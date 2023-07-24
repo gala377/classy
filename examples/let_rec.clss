@@ -1,6 +1,9 @@
 
 
 @runtime @empty
+uninitialized: forall a => () -> a
+
+@runtime @empty
 print: (String) -> ()
 
 @runtime @empty
@@ -21,6 +24,16 @@ generic arg {
     let x3 = x2
     let rec ignore x = arg
     ignore 1
+}
+
+
+check_that {
+    let x = uninitialized()
+    let rec inc {
+        x = 1
+    }
+    inc()
+    inc()
 }
 
 main {
