@@ -33,12 +33,6 @@ struct Args {
     #[arg(long, default_value_t = PAGE_ALIGN)]
     page_align: usize,
 
-    #[arg(long, default_value_t = 0)]
-    allocate_integers: usize,
-
-    #[arg(long, default_value_t = 1)]
-    threads: usize,
-
     #[arg(long)]
     create_handle_every: Option<usize>,
 
