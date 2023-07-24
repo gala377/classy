@@ -193,17 +193,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "classy_example"
-version = "0.1.0"
-dependencies = [
- "clap",
- "classy_c",
- "classy_vm",
- "color-eyre",
- "colored",
-]
-
-[[package]]
 name = "classy_vm"
 version = "0.1.0"
 dependencies = [
@@ -212,6 +201,17 @@ dependencies = [
  "loom",
  "sptr",
  "thiserror",
+]
+
+[[package]]
+name = "classyc"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "classy_c",
+ "classy_vm",
+ "color-eyre",
+ "colored",
 ]
 
 [[package]]

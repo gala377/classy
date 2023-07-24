@@ -10,16 +10,14 @@ CLASSY_PATH = Path(__file__).parent.parent
 COMPILE_COMMAND_FMT = [
     "cargo",
     "run",
-    "-p=classy_example",
-    "--",
-    "--example=run-file",
+    "-p=classyc",
 ]
 
 
 def run_classy_c(file: str, rest: list[str]):
     cwd = os.getcwd()
     path = Path(cwd) / file
-    command = [*COMPILE_COMMAND_FMT, f"--file={path}", *rest]
+    command = [*COMPILE_COMMAND_FMT, "--", f"--file={path}", *rest]
     print(f"Running {' '.join(command)}")
     subprocess.run(command, cwd=CLASSY_PATH)
 
