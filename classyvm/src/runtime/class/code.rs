@@ -4,7 +4,7 @@ use super::{instance_trace, Class};
 
 #[repr(C, align(8))]
 pub struct Code {
-    pub code: classy_c::code::Code,
+    pub code: classyclib::code::Code,
 }
 
 unsafe fn drop_code(code_inst: *mut ()) {

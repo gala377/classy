@@ -4,7 +4,7 @@ use std::{
     thread::ThreadId,
 };
 
-use classy_c::{code::constant_pool::ConstantPool, typecheck::type_context::TypCtx};
+use classyclib::{code::constant_pool::ConstantPool, typecheck::type_context::TypCtx};
 
 use crate::{
     mem::{
@@ -116,7 +116,7 @@ impl Vm {
 
     pub fn load_functions(
         &mut self,
-        functions: &mut Vec<(String, classy_c::code::Code)>,
+        functions: &mut Vec<(String, classyclib::code::Code)>,
         constant_pool: &ConstantPool,
     ) -> HashMap<String, NonNullPtr<class::code::Code>> {
         Linker::new(self, constant_pool)
@@ -179,7 +179,8 @@ mod tests {
     // #[test]
     // fn gc_changes_the_handles_address_but_preserves_the_value() {
     //     let mut vm = setup_vm(4 * size_of::<usize>(), 1, true);
-    //     let mut t = vm.create_evaluation_thread(classy_c::code::Code::new());
+    //     let mut t =
+    // vm.create_evaluation_thread(classyclib::code::Code::new());
     //     unsafe {
     //         let ptr: Ptr<isize> =
     // t.allocate_instance(vm.runtime.classes.int);         assert!(!ptr.
@@ -199,7 +200,8 @@ mod tests {
     // #[test]
     // fn revoking_a_handle_allows_gc_to_collect_garbage() {
     //     let mut vm = setup_vm(4 * size_of::<usize>(), 1, false);
-    //     let mut t = vm.create_evaluation_thread(classy_c::code::Code::new());
+    //     let mut t =
+    // vm.create_evaluation_thread(classyclib::code::Code::new());
     //     unsafe {
     //         let ptr: Ptr<isize> =
     // t.allocate_instance(vm.runtime.classes.int);         assert!(!ptr.

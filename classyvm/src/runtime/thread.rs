@@ -6,7 +6,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use classy_c::code::OpCode;
+use classyclib::code::OpCode;
 
 use crate::{
     mem::{

@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4.0.18", features = ["derive"] }
-classy_vm = { path = "../classyvm" }
-classy_c = { path = "../classyclib" }
+classyvm = { path = "../classyvm" }
+classyclib = { path = "../classyclib" }
 colored = "2.0.0"
 color-eyre = "0.6.2"

@@ -1,7 +1,7 @@
 [workspace]
 members = [
-    "classy_vm",
-    "classy_example",
-    "classy_c",
+    "classyvm",
+    "classyc",
+    "classyclib",
 ]
 resolver = "2"

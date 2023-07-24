@@ -7,13 +7,13 @@ use std::{
 use clap::Parser;
 use colored::Colorize;
 
-use classy_c::{
+use classyclib::{
     ast_passes::run_before_typechecking_passes,
     code::constant_pool::ConstantPool,
     syntax::ast::{self, Visitor},
     typecheck::{self, add_types::AddTypes, type_context::TypCtx},
 };
-use classy_vm::{
+use classyvm::{
     mem::{page::Page, ptr::NonNullPtr},
     vm::{self, Vm},
 };
@@ -69,11 +69,11 @@ fn compile(
     vm: &mut Vm,
     source: &str,
     print_ast: bool,
-) -> Option<HashMap<String, NonNullPtr<classy_vm::runtime::class::code::Code>>> {
+) -> Option<HashMap<String, NonNullPtr<classyvm::runtime::class::code::Code>>> {
     let mut parser =
-        classy_c::syntax::parser::Parser::new(classy_c::syntax::lexer::Lexer::new(source));
+        classyclib::syntax::parser::Parser::new(classyclib::syntax::lexer::Lexer::new(source));
     let ast = parser.parse().unwrap();
-    let ast = classy_c::ast_passes::run_befor_type_context_passes(ast);
+    let ast = classyclib::ast_passes::run_befor_type_context_passes(ast);
     let mut tctx = typecheck::prepare_for_typechecking(&ast);
     println!("Type ctxt: {}", tctx.debug_string());
     let res = run_before_typechecking_passes(&tctx, ast);
@@ -86,25 +86,25 @@ fn compile(
     let mut constant_pool = ConstantPool::new();
     let mut functions = HashMap::new();
     let mut gatherer =
-        classy_c::ast_passes::gather_runtime_functions::GatherRuntimeFunctions::new();
+        classyclib::ast_passes::gather_runtime_functions::GatherRuntimeFunctions::new();
     gatherer.visit(&res);
     let runtime_functions: HashSet<String> = gatherer.res.into_iter().collect();
     for def in &res.items {
         if let ast::TopLevelItem::FunctionDefinition(fdef) = def {
-            let emmiter = classy_c::ir::Emitter::new(&tctx, &tenv);
+            let emmiter = classyclib::ir::Emitter::new(&tctx, &tenv);
             let block = emmiter.emit_fn(fdef);
             println!("\n\n\nFunction definition {:#?}", fdef.name);
             for (i, instr) in block.body.iter().enumerate() {
                 println!("{} {:?}", format!("{i:03}|").dimmed(), instr);
             }
-            let compiled = classy_c::emitter::compile_ir_function(
+            let compiled = classyclib::emitter::compile_ir_function(
                 &block,
                 runtime_functions.clone(),
                 &tctx,
                 &mut constant_pool,
             );
             println!("\n");
-            classy_c::code::debug::debug_print_code(&compiled.instructions, &constant_pool);
+            classyclib::code::debug::debug_print_code(&compiled.instructions, &constant_pool);
             functions.insert(fdef.name.clone(), compiled);
         }
     }

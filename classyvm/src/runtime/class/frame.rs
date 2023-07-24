@@ -1,4 +1,4 @@
-use classy_c::code::GcStackMapEntry;
+use classyclib::code::GcStackMapEntry;
 
 use crate::{
     mem::ptr::{ErasedPtr, NonNullPtr, Ptr},

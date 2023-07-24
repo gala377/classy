@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use colored::*;
 
-use classy_c::{
+use classyclib::{
     ast_passes::{
         gather_runtime_functions, run_befor_type_context_passes, run_before_typechecking_passes,
     },
@@ -46,12 +46,12 @@ fn main() {
     compile(SOURCE, &[package]);
     //   compile(SOURCE, &[]);
     //println!("{}", tctx.debug_string());
-    // let package = classy_c::package::Package::new("main", &tctx);
+    // let package = classyclib::package::Package::new("main", &tctx);
     // let out = std::fs::File::create("out.json").unwrap();
     // serde_json::to_writer_pretty(out, &package).unwrap();
 }
 
-fn compile(source: &str, packages: &[classy_c::package::Package]) -> TypCtx {
+fn compile(source: &str, packages: &[classyclib::package::Package]) -> TypCtx {
     let res = parse_source(source);
     let res = run_befor_type_context_passes(res);
     let mut tctx = TypCtx::new();
@@ -69,25 +69,25 @@ fn compile(source: &str, packages: &[classy_c::package::Package]) -> TypCtx {
     for def in &res.items {
         if let ast::TopLevelItem::FunctionDefinition(fdef) = def {
             println!("\n\n\nFunction definition {:#?}", fdef.name);
-            let emmiter = classy_c::ir::Emitter::new(&tctx, &tenv);
+            let emmiter = classyclib::ir::Emitter::new(&tctx, &tenv);
             let block = emmiter.emit_fn(fdef);
             for (i, instr) in block.body.iter().enumerate() {
                 println!("{} {:?}", format!("{i:03}|").dimmed(), instr);
             }
             println!("\n\nCompiled:");
-            let compiled = classy_c::emitter::compile_ir_function(
+            let compiled = classyclib::emitter::compile_ir_function(
                 &block,
                 runtime_functions.clone(),
                 &tctx,
                 &mut constant_pool,
             );
-            classy_c::code::debug::debug_print_code(&compiled.instructions, &constant_pool);
+            classyclib::code::debug::debug_print_code(&compiled.instructions, &constant_pool);
         }
     }
     tctx
 }
 
-pub fn make_package() -> classy_c::package::Package {
+pub fn make_package() -> classyclib::package::Package {
     let source = r#"
         type MyString = String
 
@@ -95,7 +95,7 @@ pub fn make_package() -> classy_c::package::Package {
         print s = ()
     "#;
     let tctx = compile(source, &[]);
-    let pckg = classy_c::package::Package::new("test", &tctx);
+    let pckg = classyclib::package::Package::new("test", &tctx);
     println!("Compiler package {:?}", pckg);
     pckg
 }
