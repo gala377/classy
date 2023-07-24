@@ -4,7 +4,7 @@ use std::{
     path::Path,
 };
 
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use colored::Colorize;
 
 use classy_c::{
@@ -20,13 +20,6 @@ use classy_vm::{
 
 const PAGE_SIZE: usize = 1 << 12;
 const PAGE_ALIGN: usize = 1 << 12;
-
-#[derive(Eq, PartialEq, PartialOrd, Ord, Copy, Debug, Clone, ValueEnum)]
-enum Example {
-    Allocation,
-    Print,
-    RunFile,
-}
 
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about)]
@@ -49,9 +42,6 @@ struct Args {
     #[arg(long)]
     create_handle_every: Option<usize>,
 
-    #[arg(long, value_enum, default_value_t = Example::Print)]
-    example: Example,
-
     #[arg(long, default_value_t = false)]
     debug: bool,
 
@@ -71,76 +61,14 @@ fn main() {
         initial_tlab_size: args.page_size,
         debug: args.debug,
     });
-    match args.example {
-        Example::Print => {
-            let source = r#"
-                @runtime @empty 
-                print: (String) -> ()
-                @runtime @empty
-                header_data: (a) -> Int
-                @runtime @empty
-                itos: (Int) -> String
-                @runtime @empty
-                print_n_times: (String, Int) -> ()
-                @runtime @empty
-                byte_copy: (String, [Byte], Int, Int) -> ()
-                @runtime @empty
-                add: (Int, Int) -> Int
-                @runtime @empty
-                str_from_bytes: ([Byte]) -> String
-                @runtime @empty
-                class_name: (a) -> String
-
-
-                concat_strings: (String, String) -> String
-                concat_strings(s1, s2) {
-                    let len1 = header_data s1
-                    let len2 = header_data s2
-                    let len = add(len1, len2)
-                    let res = array[len]
-                    byte_copy(s1, res, 0, len1)
-                    byte_copy(s2, res, len1, len2)
-                    str_from_bytes res
-                }
-
-                type Either(a, b) {
-                    Left(a)
-                    Right(b)
-                }
-                
-                type Integer {
-                    val: Int
-                }
-
-                printi x = print (itos x)
-
-                print_either: (Either(Option(Integer), String)) -> ()
-                print_either a = a match {
-                    Either.Left(Option.Some(Integer { val: x })) => printi x
-                    Either.Right(x) => print x
-                }
-
-
-            "#;
-            let functions = compile(&mut vm, source, args.print_ast);
-            let Some(functions) = functions else {
-                return;
-            };
-            let mut thread = vm.create_evaluation_thread(functions["main"]);
-            thread.interpert();
-        }
-        Example::RunFile => {
-            let file = args.file.expect("file path has to be provided");
-            let source = std::fs::read_to_string(Path::new(&file)).unwrap();
-            let functions = compile(&mut vm, &source, args.print_ast);
-            let Some(functions) = functions else {
-                return;
-            };
-            let mut thread = vm.create_evaluation_thread(functions["main"]);
-            thread.interpert();
-        }
-        _ => panic!("Not implemented"),
-    }
+    let file = args.file.expect("file path has to be provided");
+    let source = std::fs::read_to_string(Path::new(&file)).unwrap();
+    let functions = compile(&mut vm, &source, args.print_ast);
+    let Some(functions) = functions else {
+        return;
+    };
+    let mut thread = vm.create_evaluation_thread(functions["main"]);
+    thread.interpert();
 }
 
 fn compile(
@@ -159,7 +87,6 @@ fn compile(
         println!("AST: {:#?}", res);
         return None;
     }
-    //println!("AST: {:#?}", res);
     let tenv = typecheck::run(&mut tctx, &res);
 
     let mut constant_pool = ConstantPool::new();
