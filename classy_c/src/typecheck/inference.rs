@@ -1305,7 +1305,7 @@ mod tests {
 
             main: () -> ()
             main {
-                let a = Foo{a = 1, b = "Hello"}
+                let a = Foo{ a = 1; b = "Hello"}
                 is_foo a
             }
         "#;
@@ -1328,7 +1328,7 @@ mod tests {
 
             main: () -> ()
             main {
-                let a = Foo{a = 1, b = "Hello"}
+                let a = Foo { a = 1;  b = "Hello"}
                 let anon = type { foo = a; bar = "World" }
                 is_foo anon.foo
                 is_string anon.bar
@@ -1465,20 +1465,20 @@ mod tests {
         run_typechecker(source)
     }
 
-    // #[test]
-    // fn generic_functions() {
-    //     let source = r#"
-    //         is_string: (String) -> ()
-    //         is_string s = ()
+    #[test]
+    fn generic_functions() {
+        let source = r#"
+            is_string: (String) -> ()
+            is_string s = ()
 
-    //         id: forall a => (a) -> a
-    //         id a = a
+            id: forall a => (a) -> a
+            id a = a
 
-    //         main: () -> ()
-    //         main {
-    //             is_string(id "hello")
-    //         }
-    //     "#;
-    //     run_typechecker(source)
-    // }
+            main: () -> ()
+            main {
+                is_string(id "hello")
+            }
+        "#;
+        run_typechecker(source)
+    }
 }

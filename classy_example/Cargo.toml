@@ -8,3 +8,4 @@ clap = { version = "4.0.18", features = ["derive"] }
 classy_vm = { path = "../classy_vm" }
 classy_c = { path = "../classy_c" }
 colored = "2.0.0"
+color-eyre = "0.6.2"
