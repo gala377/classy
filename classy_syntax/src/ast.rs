@@ -1040,8 +1040,8 @@ impl classy_sexpr::ToSExpr for FunctionDefinition {
             .map(|name| sexpr!(#name))
             .collect::<Vec<_>>();
         sexpr!(
-            (fn 
-                (attr @attributes)  
+            (fn
+                $attributes
                 (type $typ)
                 #name $parameters $body)
         )
@@ -1168,7 +1168,7 @@ impl classy_sexpr::ToSExpr for ExprKind {
     fn to_sexpr(self) -> classy_sexpr::SExpr {
         match self {
             ExprKind::Unit => sexpr!(()),
-            ExprKind::Sequence(s) => sexpr!((seq @ s)),
+            ExprKind::Sequence(s) => sexpr!($s),
             ExprKind::Assignment { lval, rval } => sexpr!((assign $lval $rval)),
             ExprKind::IntConst(i) => sexpr!($i),
             ExprKind::StringConst(s) => sexpr!($s),
@@ -1177,7 +1177,7 @@ impl classy_sexpr::ToSExpr for ExprKind {
                 sexpr!((float $f))
             }
             ExprKind::BoolConst(b) => sexpr!($b),
-            ExprKind::Name(n) => classy_sexpr::SExpr::Atom(classy_sexpr::Atom::Symbol(n)),
+            ExprKind::Name(n) => sexpr!(#n),
             ExprKind::FunctionCall { func, args, kwargs } => sexpr!((call $func $args $kwargs)),
             ExprKind::Access { val, field } => sexpr!((access $val #field)),
             ExprKind::Tuple(t) => sexpr!((tuple @ t)),
@@ -1204,7 +1204,7 @@ impl classy_sexpr::ToSExpr for ExprKind {
                 body,
                 else_body,
             } => sexpr!((if $cond $body @else_body)),
-            ExprKind::Let { name, typ, init } => sexpr!((let $name $typ $init)),
+            ExprKind::Let { name, typ, init } => sexpr!((let #name $typ $init)),
             ExprKind::LetRec { definitions } => sexpr!((letrec @ definitions)),
             ExprKind::AnonType { fields } => sexpr!((type @ fields)),
             ExprKind::ArrayLiteral { typ, size, init } => sexpr!((array $typ $size $init)),
@@ -1224,7 +1224,7 @@ impl classy_sexpr::ToSExpr for ExprKind {
                 method,
                 args,
                 kwargs,
-            } => sexpr!((method $receiver $method $args $kwargs)),
+            } => sexpr!((method $receiver #method $args $kwargs)),
         }
     }
 }
@@ -1244,10 +1244,10 @@ impl classy_sexpr::ToSExpr for Pattern {
 impl classy_sexpr::ToSExpr for PatternKind {
     fn to_sexpr(self) -> classy_sexpr::SExpr {
         match self {
-            PatternKind::Name(n) => classy_sexpr::SExpr::Atom(classy_sexpr::Atom::Symbol(n)),
+            PatternKind::Name(n) => sexpr!(#n),
             PatternKind::Tuple(t) => sexpr!((tuple @ t)),
-            PatternKind::Struct { strct, fields } => sexpr!((struct $strct $fields)),
-            PatternKind::TupleStruct { strct, fields } => sexpr!((struct $strct $fields)),
+            PatternKind::Struct { strct, fields } => sexpr!((struct #strct $fields)),
+            PatternKind::TupleStruct { strct, fields } => sexpr!((struct #strct $fields)),
             PatternKind::AnonStruct { fields } => sexpr!((struct @ fields)),
             PatternKind::Array(inner) => sexpr!((array $inner)),
             PatternKind::Wildcard => sexpr!(_),
@@ -1255,7 +1255,7 @@ impl classy_sexpr::ToSExpr for PatternKind {
             PatternKind::String(s) => sexpr!($s),
             PatternKind::Int(i) => sexpr!($i),
             PatternKind::Bool(b) => sexpr!($b),
-            PatternKind::Rest(s) => sexpr!((rest $s)),
+            PatternKind::Rest(s) => sexpr!((rest #s)),
             PatternKind::TypeSpecifier(name, rest) => sexpr!(($name $rest)),
         }
     }

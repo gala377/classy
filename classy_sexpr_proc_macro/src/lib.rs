@@ -6,8 +6,8 @@ use quote::quote;
 use syn::ext::IdentExt;
 use syn::parse::{Parse, ParseStream};
 use syn::{
-    braced, parenthesized, parse_macro_input, token, Expr, Ident, LitBool, LitInt, LitStr, Result,
-    Token,
+    braced, bracketed, parenthesized, parse_macro_input, token, Expr, Ident, LitBool, LitInt,
+    LitStr, Result, Token,
 };
 
 struct SExprParser {
@@ -19,6 +19,96 @@ impl Parse for SExprParser {
         if input.peek(token::Paren) {
             let content;
             parenthesized!(content in input);
+            let mut quoted_list = quote! {
+                let mut res = Vec::new();
+            };
+            while !content.is_empty() {
+                if content.peek(Token![@]) {
+                    content.parse::<Token![@]>().unwrap();
+                    if content.peek(token::Brace) {
+                        let inner;
+                        braced!(inner in content);
+                        let inner = inner.parse::<Expr>().unwrap();
+                        quoted_list = quote! {
+                            #quoted_list
+                            res.extend((#inner).into_iter().map(|x| x.to_sexpr()));
+                        };
+                        continue;
+                    } else {
+                        let ident = content.parse::<Ident>().unwrap();
+                        quoted_list = quote! {
+                            #quoted_list
+                            res.extend(#ident.into_iter().map(|x| x.to_sexpr()));
+                        }
+                    }
+                } else {
+                    let res: SExprParser = content.parse()?;
+                    let inner = res.final_expr;
+                    quoted_list = quote! {
+                        #quoted_list
+                        res.push(#inner);
+                    };
+                };
+            }
+            let final_expr = quote! {
+                {
+                    #quoted_list
+                    classy_sexpr::SExpr::List(res)
+                }
+            }
+            .into();
+            let final_expr = syn::parse::<Expr>(final_expr).unwrap();
+            return Ok(Self { final_expr });
+        }
+
+        if input.peek(token::Brace) {
+            let content;
+            braced!(content in input);
+            let mut quoted_list = quote! {
+                let mut res = Vec::new();
+            };
+            while !content.is_empty() {
+                if content.peek(Token![@]) {
+                    content.parse::<Token![@]>().unwrap();
+                    if content.peek(token::Brace) {
+                        let inner;
+                        braced!(inner in content);
+                        let inner = inner.parse::<Expr>().unwrap();
+                        quoted_list = quote! {
+                            #quoted_list
+                            res.extend((#inner).into_iter().map(|x| x.to_sexpr()));
+                        };
+                        continue;
+                    } else {
+                        let ident = content.parse::<Ident>().unwrap();
+                        quoted_list = quote! {
+                            #quoted_list
+                            res.extend(#ident.into_iter().map(|x| x.to_sexpr()));
+                        }
+                    }
+                } else {
+                    let res: SExprParser = content.parse()?;
+                    let inner = res.final_expr;
+                    quoted_list = quote! {
+                        #quoted_list
+                        res.push(#inner);
+                    };
+                };
+            }
+            let final_expr = quote! {
+                {
+                    #quoted_list
+                    classy_sexpr::SExpr::List(res)
+                }
+            }
+            .into();
+            let final_expr = syn::parse::<Expr>(final_expr).unwrap();
+            return Ok(Self { final_expr });
+        }
+
+        if input.peek(token::Bracket) {
+            let content;
+            bracketed!(content in input);
             let mut quoted_list = quote! {
                 let mut res = Vec::new();
             };

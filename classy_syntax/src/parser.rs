@@ -1319,7 +1319,6 @@ fn mk_expr(kind: ast::ExprKind) -> ast::Expr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast;
     use classy_sexpr::ToSExpr;
     use classy_sexpr_proc_macro::sexpr;
 
@@ -1347,9 +1346,9 @@ mod tests {
             }
         "#,
         sexpr!{(
-            (type Foo () (record))
-            (type Bar () (record))
-        )}
+            (type Foo [] (record))
+            (type Bar [] (record))
+         )}
     }
 
     ptest! {
@@ -1361,13 +1360,13 @@ mod tests {
             }
         "#,
         sexpr!{(
-            (type Foo ()
+            (type Foo []
                 (record
-                    (x (poly () typ1))
-                    (y (poly () typ2))))
-            (type Bar ()
+                    (x (poly [] typ1))
+                    (y (poly [] typ2))))
+            (type Bar []
                 (record
-                    (foo (poly () typ_1))))
+                    (foo (poly [] typ_1))))
         )}
     }
 
@@ -1375,9 +1374,9 @@ mod tests {
         test_struct_definition_with_explicit_not_type_vars,
         "type Foo () { x: a };",
         sexpr!{(
-            (type Foo ()
+            (type Foo []
                 (record
-                    (x (poly () a))))
+                    (x (poly [] a))))
         )}
     }
 
@@ -1385,9 +1384,9 @@ mod tests {
         test_struct_definition_with_one_type_var,
         "type Foo (a) { x: a };",
         sexpr!{(
-            (type Foo (a)
+            (type Foo [a]
                 (record
-                    (x (poly () a))))
+                    (x (poly [] a))))
         )}
 
     }
@@ -1396,9 +1395,9 @@ mod tests {
         test_struct_definition_with_multiple_type_vars,
         "type Foo (a, b, c) { x: a };",
         sexpr!{(
-            (type Foo (a b c)
+            (type Foo [a b c]
                 (record
-                    (x (poly () a))))
+                    (x (poly [] a))))
         )}
     }
 
@@ -1406,7 +1405,7 @@ mod tests {
         test_simple_adt_definition_with_single_discriminant,
         "type A { B };",
         sexpr!((
-            (type A ()
+            (type A []
                 (adt
                     (B unit))
             )
@@ -1417,7 +1416,7 @@ mod tests {
         test_simple_adt_with_multiple_no_argument_discriminants,
         "type A { A; B; C };",
         sexpr!((
-            (type A ()
+            (type A []
                 (adt
                     (A unit)
                     (B unit)
@@ -1430,18 +1429,18 @@ mod tests {
         test_adt_with_mixed_discriminants_with_arguments_and_no_arguments,
         "type A { A(T1, T2); B; C(T3); D(T4, T5, T6); E };",
         sexpr!((
-            (type A ()
+            (type A []
                 (adt
                     (A (tuple
-                        (poly () T1)
-                        (poly () T2)))
+                        (poly [] T1)
+                        (poly [] T2)))
                     (B unit)
                     (C (tuple
-                        (poly () T3)))
+                        (poly [] T3)))
                     (D (tuple
-                        (poly () T4)
-                        (poly () T5)
-                        (poly () T6)))
+                        (poly [] T4)
+                        (poly [] T5)
+                        (poly [] T6)))
                     (E unit))
             )
         ))
@@ -1451,12 +1450,12 @@ mod tests {
         test_adt_with_type_vars,
         "type Res(a, b) { Ok(a); Err(b) };",
         sexpr!((
-            (type Res (a b)
+            (type Res [a b]
                 (adt
                     (Ok (tuple
-                        (poly () a)))
+                        (poly [] a)))
                     (Err (tuple
-                        (poly () b))))
+                        (poly [] b))))
             )
         ))
     }
@@ -1466,9 +1465,10 @@ mod tests {
         "foo: () -> ()
          foo = 10;",
          sexpr!((
-            (fn (attr)
-                (type (fn () () (poly () unit)))
-                foo () 10)
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                foo ()
+                    10)
          ))
     }
 
@@ -1478,13 +1478,14 @@ mod tests {
         r#"foo: (b, d) -> ()
            foo(a, c) = 10;"#,
         sexpr!((
-            (fn (attr)
+            (fn {}
                 (type
-                    (fn () (
-                        (poly () b)
-                        (poly () d))
-                            (poly () unit)))
-                foo (a c) 10)
+                    (fn [] (
+                        (poly [] b)
+                        (poly [] d))
+                            (poly [] unit)))
+                foo (a c)
+                    10)
         ))
     }
 
@@ -1494,9 +1495,11 @@ mod tests {
            a() = a(10, 20, 30)
         "#,
         sexpr!((
-            (fn (attr)
-                (type (fn () () (poly () unit)))
-                a () (call a (10 20 30) ()))
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    call a (10 20 30) {}
+                })
         ))
     }
 
@@ -1504,9 +1507,11 @@ mod tests {
         test_function_returning_a_tuple,
         r#"a: () -> (); a() = (1, 2, (a.b));"#,
         sexpr!((
-            (fn (attr)
-                (type (fn () () (poly () unit)))
-                a () (tuple 1 2 (access a b)))
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    tuple 1 2 (access a b)
+                })
         ))
     }
 
@@ -1514,9 +1519,9 @@ mod tests {
         test_parsing_unit_value,
         "a:()->();a=();",
         sexpr!((
-            (fn (attr)
-                (type (fn () () (poly () unit)))
-                a () ())
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {})
         ))
     }
 
@@ -1524,9 +1529,15 @@ mod tests {
         test_chained_access,
         "a:()->();a=a.b.c.d;",
         sexpr!((
-            (fn (attr)
-                (type (fn () () (poly () unit)))
-                a () (access (access (access a b) c) d))
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    access (
+                        access (
+                            access a b)
+                        c)
+                    d
+                })
         ))
     }
 
@@ -1534,9 +1545,12 @@ mod tests {
         test_parsing_block,
         "a:()->();a={1; 2};",
         sexpr!((
-            (fn (attr)
-                (type (fn () () (poly () unit)))
-                a () (seq 1 2))
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    1
+                    2
+                })
         ))
     }
 
@@ -1544,225 +1558,213 @@ mod tests {
         test_function_with_block_body,
         "a:()->();a{1; 2};",
         sexpr!((
-            (fn (attr)
-                (type (fn () () (poly () unit)))
-                a () (seq 1 2))
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    1
+                    2
+                })
         ))
     }
 
-    // ptest! {
-    //     test_simple_assignment,
-    //     "a:()->();a=a.b=c.d;",
-    //     ast::Builder::new()
-    //         .unit_fn("a", |body| {
-    //             body.assignment(
-    //                 |l| l.access(|s| s.name("a"), "b"),
-    //                 |r| r.access(|s| s.name("c"), "d"))
-    //         })
-    // }
+    ptest! {
+        test_simple_assignment,
+        "a:()->();a=a.b=c.d;",
+        sexpr!{(
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    assign
+                        (access a b)
+                        (access c d)
+                })
+        )}
+    }
 
-    // ptest! {
-    //     test_func_no_arguments_trailing_lambda,
-    //     "a:()->();a=a{1};",
-    //     ast::Builder::new()
-    //         .unit_fn(
-    //             "a",
-    //             |body| body.function_call(
-    //                 |c| c.name("a"),
-    //                 |args| args.add_expr(|arg| {
-    //                     arg.lambda_no_types::<&str>(
-    //                         &[],
-    //                         |body| body.sequence(|seq|
-    //                             seq.add_expr(|expr| expr.integer(1))))
-    //                 }),
-    //                 |k| k))
-    // }
+    ptest! {
+        test_func_no_arguments_trailing_lambda,
+        "a:()->();a=a{1};",
+        sexpr!{(
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    call a ((
+                        lambda () { 1 }
+                    )) {}
+                })
+        )}
+    }
 
-    // ptest! {
-    //     function_call_with_single_non_parenthised_argument,
-    //     "a:()->();a=a a.b;",
-    //     ast::Builder::new()
-    //         .unit_fn("a", |body| body.function_call(
-    //             |c| c.name("a"),
-    //             |args| args.add_expr(
-    //                 |a| a.access(
-    //                     |lhs| lhs.name("a"),
-    //                     "b")),
-    //             |k| k))
-    // }
+    ptest! {
+        function_call_with_single_non_parenthised_argument,
+        "a:()->();a=a a.b;",
+        sexpr!((
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    call a ((
+                        access a b
+                    )) {}
+                })
+        ))
+    }
 
-    // ptest! {
-    //     test_func_call_trailing_lambda_with_single_unparenthised_argument,
-    //     "a:()->();a=a.b c => 1;",
-    //     ast::Builder::new()
-    //         .unit_fn("a", |body| body.function_call(
-    //             |c| c.access(|l| l.name("a"), "b"),
-    //             |args| args
-    //                 .add_expr(|l| l.lambda_no_types(
-    //                     &["c"],
-    //                     |body| body.integer(1))),
-    //             |k| k))
-    // }
+    ptest! {
+        test_func_call_trailing_lambda_with_single_unparenthised_argument,
+        "a:()->();a=a.b c => 1;",
+        sexpr!((
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    method a b (
+                        (lambda ((c infere)) 1)
+                    ) {}
+                })
+        ))
+    }
 
-    // ptest! {
-    //     test_func_call_trailing_lambda_explicit_no_arguments,
-    //     "a:()->();a=a.b () => 1;",
-    //     ast::Builder::new()
-    //         .unit_fn("a", |body| body.function_call(
-    //             |c| c.access(|l| l.name("a"), "b"),
-    //             |args| args
-    //                 .add_expr(|l| l.lambda_no_types::<&str>(
-    //                     &[],
-    //                     |body| body.integer(1))),
-    //             |k| k))
-    // }
+    ptest! {
+        test_func_call_trailing_lambda_explicit_no_arguments,
+        "a:()->();a=a.b () => 1;",
+        sexpr!((
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    method a b (
+                        (lambda [] 1)
+                    ) {}
+                })
+        ))
+    }
 
-    // ptest! {
-    //     test_function_call_with_trailing_with_explicit_parameters,
-    //     "a:()->();a=a(a, b, c) => 1;",
-    //     ast::Builder::new()
-    //         .unit_fn("a", |body| body.function_call(
-    //             |c| c.name("a"),
-    //             |args| args
-    //                 .add_expr(|l| l.lambda_no_types(
-    //                     &["a", "b", "c"],
-    //                     |body| body.integer(1))),
-    //             |k| k))
-    // }
+    ptest! {
+        test_function_call_with_trailing_with_explicit_parameters,
+        "a:()->();a=a(a, b, c) => 1;",
+        sexpr!((
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    call a (
+                        (lambda (
+                            [a infere]
+                            [b infere]
+                            [c infere])
+                            1)) {}
+                })
+        ))
+    }
 
-    // ptest! {
-    //     test_function_call_with_arguments_and_parameterless_trailing_lambda,
-    //     "a:()->();a=a(a, b, c) { 1 };",
-    //     ast::Builder::new()
-    //         .unit_fn("a", |body| body.function_call(
-    //             |c| c.name("a"),
-    //             |args| args
-    //                 .add_expr(|a| a.name("a"))
-    //                 .add_expr(|a| a.name("b"))
-    //                 .add_expr(|a| a.name("c"))
-    //                 .add_expr(|l| l.lambda_no_types::<&str>(
-    //                     &[],
-    //                     |body| body.sequence(
-    //                         |s| s.add_expr(
-    //                             |e| e.integer(1))))),
-    //             |k| k))
-    // }
+    ptest! {
+        test_function_call_with_arguments_and_parameterless_trailing_lambda,
+        "a:()->();a=a(a, b, c) { 1 };",
+        sexpr!((
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    call a (
+                        a b c (lambda () { 1 })) {}
+                })
+        ))
+    }
 
-    // ptest! {
-    //     test_function_call_with_args_trailing_with_explicit_args,
-    //     "a:()->();a=a(a, b, c) (d, e) => { 1 };",
-    //     ast::Builder::new()
-    //         .unit_fn("a", |body| body.function_call(
-    //             |c| c.name("a"),
-    //             |args| args
-    //                 .add_expr(|a| a.name("a"))
-    //                 .add_expr(|a| a.name("b"))
-    //                 .add_expr(|a| a.name("c"))
-    //                 .add_expr(|l| l.lambda_no_types(
-    //                     &["d", "e"],
-    //                     |body| body.sequence(
-    //                         |s| s.add_expr(
-    //                             |e| e.integer(1))))),
-    //             |k| k))
-    // }
+    ptest! {
+        test_function_call_with_args_trailing_with_explicit_args,
+        "a:()->();a=a(a, b, c) (d, e) => { 1 };",
+        sexpr!((
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    call a (
+                        a b c
+                        (lambda ([d infere] [e infere])
+                            { 1 })) {}
+                })
+        ))
+    }
 
-    // ptest! {
-    //     test_trailing_lambda_with_types,
-    //     "a:()->();a=a(b:c,d:e)=>1;",
-    //     ast::Builder::new()
-    //         .unit_fn("a", |body| body.function_call(
-    //             |c| c.name("a"),
-    //             |args| args
-    //                 .add_expr(|l| l.lambda(
-    //                     |pars| pars
-    //                         .name("b", "c")
-    //                         .name("d", "e"),
-    //                     |body| body.integer(1))),
-    //             |k| k))
-    // }
+    ptest! {
+        test_trailing_lambda_with_types,
+        "a:()->();a=a(b:c,d:e)=>1;",
+        sexpr!((
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    call a (
+                        (lambda (
+                            [b (poly [] c)]
+                            [d (poly [] e)])
+                                1)) {}
+                })
+        ))
+    }
 
-    // ptest! {
-    //     test_simple_typed_expression,
-    //     "a:()->();a=a.b c : d;",
-    //     ast::Builder::new()
-    //         .unit_fn("a", |body| {
-    //             body.typed_expr(
-    //                 |expr| {
-    //                     expr.function_call(
-    //                         |c| c.access(
-    //                             |l| l.name("a"),
-    //                             "b"
-    //                         ),
-    //                         |args| args.add_expr(
-    //                             |a| a.name("c")),
-    //                         |k| k)
-    //                 },
-    //                 "d",
-    //             )
-    //         })
-    // }
+    ptest! {
+        test_simple_typed_expression,
+        "a:()->();a=a.b c : d;",
+        sexpr!((
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    typed
+                        (method a b (c) {})
+                        (poly [] d)
+                })
+        ))
+    }
 
-    // ptest! {
-    //     test_single_arg_lambda_expr,
-    //     "a:()->();a=a=>b=>1;",
-    //     ast::Builder::new()
-    //         .unit_fn("a", |body| {
-    //             body.lambda_no_types::<&str>(
-    //                 &["a"],
-    //                 |body| {
-    //                     body.lambda_no_types::<&str>(
-    //                         &["b"],
-    //                         |body| {
-    //                           body.integer(1)
-    //                         })
-    //                 })
-    //         })
-    // }
+    ptest! {
+        test_single_arg_lambda_expr,
+        "a:()->();a=a=>b=>1;",
+        sexpr!((
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    lambda ([a infere])
+                        (lambda ([b infere])
+                            1)
+                })
+        ))
+    }
 
-    // ptest! {
-    //     test_lambda_expression_with_no_type_arg_list,
-    //     "a:()->();a=(a, b)=>1;",
-    //     ast::Builder::new()
-    //         .unit_fn("a", |body| {
-    //             body.lambda_no_types::<&str>(
-    //                 &["a", "b"],
-    //                 |body| {
-    //                     body.integer(1)
-    //                 })
-    //         })
-    // }
+    ptest! {
+        test_lambda_expression_with_no_type_arg_list,
+        "a:()->();a=(a, b)=>1;",
+        sexpr!((
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    lambda ([a infere] [b infere])
+                        1
+                })
+        ))
+    }
 
-    // ptest! {
-    //     test_lambda_expression_with_typed_arg_list,
-    //     "a:()->();a=(a: b, c: d)=>1;",
-    //     ast::Builder::new()
-    //         .unit_fn("a", |body| {
-    //             body.lambda(
-    //                 |args| {
-    //                     args
-    //                         .name("a", "b")
-    //                         .name("c", "d")
-    //                 },
-    //                 |body| {
-    //                     body.integer(1)
-    //                 })
-    //         })
-    // }
+    ptest! {
+        test_lambda_expression_with_typed_arg_list,
+        "a:()->();a=(a: b, c: d)=>1;",
+        sexpr!((
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    lambda (
+                        [a (poly [] b)]
+                        [c (poly [] d)])
+                            1
+                })
+        ))
+    }
 
-    // ptest! {
-    //     function_call_with_single_non_parenthised_argument_and_non_parenthised_lambda,
-    //     "a:()->();a=a b c => 1;",
-    //     ast::Builder::new()
-    //         .unit_fn("a", |body| body.function_call(
-    //             |c| c.name("a"),
-    //             |args| args
-    //                 .add_expr(|a| a.name("b"))
-    //                 .add_expr(|a| a.lambda_no_types::<&str>(
-    //                     &["c"], |body| body.integer(1))),
-    //             |k| k,
-    //         )
-    //     )
-    // }
+    ptest! {
+        function_call_with_single_non_parenthised_argument_and_non_parenthised_lambda,
+        "a:()->();a=a b c => 1;",
+        sexpr!((
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    call a (b (lambda ([c infere]) 1)) {}
+                })
+        ))
+    }
 
     // ptest! {
     //     trailing_lambda_call_in_while_cond,
