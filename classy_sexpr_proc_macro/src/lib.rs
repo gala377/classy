@@ -28,7 +28,17 @@ impl Parse for SExprParser {
             let final_expr = syn::parse::<Expr>(final_expr).unwrap();
             return Ok(Self { final_expr });
         }
-        if let Ok(s) = input.parse::<LitStr>() {
+        if input.peek(LitInt) {
+            let num = input.parse::<LitInt>().unwrap();
+            let final_expr = quote! {
+                classy_sexpr::SExpr::Atom(classy_sexpr::Atom::Number(#num))
+            }
+            .into();
+            let final_expr = syn::parse::<Expr>(final_expr).unwrap();
+            return Ok(Self { final_expr });
+        }
+        if input.peek(LitStr) {
+            let s = input.parse::<LitStr>().unwrap();
             let final_expr = quote! {
                 classy_sexpr::SExpr::Atom(classy_sexpr::Atom::String(#s.to_string()))
             }
@@ -36,7 +46,8 @@ impl Parse for SExprParser {
             let final_expr = syn::parse::<Expr>(final_expr).unwrap();
             return Ok(Self { final_expr });
         }
-        if let Ok(b) = input.parse::<LitBool>() {
+        if input.peek(LitBool) {
+            let b = input.parse::<LitBool>().unwrap();
             let b = if b.value { "true" } else { "false" };
             let final_expr = quote! {
                 classy_sexpr::SExpr::Atom(classy_sexpr::Atom::Symbol(#b.to_string()))
@@ -45,17 +56,10 @@ impl Parse for SExprParser {
             let final_expr = syn::parse::<Expr>(final_expr).unwrap();
             return Ok(Self { final_expr });
         }
-        if let Ok(num) = input.parse::<LitInt>() {
+        if input.peek(Ident) {
+            let ident = input.parse::<Ident>().unwrap();
             let final_expr = quote! {
-                classy_sexpr::SExpr::Atom(classy_sexpr::Atom::Number(#num))
-            }
-            .into();
-            let final_expr = syn::parse::<Expr>(final_expr).unwrap();
-            return Ok(Self { final_expr });
-        }
-        if let Ok(ident) = input.parse::<Ident>() {
-            let final_expr = quote! {
-                classy_sexpr::SExpr::Atom(classy_sexpr::Atom::Symbol(#ident.to_string()))
+                classy_sexpr::SExpr::Atom(classy_sexpr::Atom::Symbol(stringify!(#ident).to_string()))
             }
             .into();
             let final_expr = syn::parse::<Expr>(final_expr).unwrap();
