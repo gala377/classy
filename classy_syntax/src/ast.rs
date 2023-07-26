@@ -309,12 +309,10 @@ impl PartialEq for TypeDefinition {
 }
 
 /// Builders are only used in tests to create AST to test against
-#[cfg(test)]
 pub struct Builder {
-    res: Program,
+    pub res: Program,
 }
 
-#[cfg(test)]
 impl Builder {
     pub fn new() -> Self {
         Self {
@@ -400,14 +398,12 @@ impl Builder {
     }
 }
 
-#[cfg(test)]
 pub struct StructDefBuilder {
     name: String,
     fields: Vec<TypedName>,
     type_variables: Vec<TypeVariable>,
 }
 
-#[cfg(test)]
 impl StructDefBuilder {
     pub fn new() -> Self {
         Self {

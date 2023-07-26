@@ -1,7 +1,4 @@
 {
-    "rust-analyzer.linkedProjects": [
-        "./classy_c/Cargo.toml"
-    ],
     "[python]": {
         "editor.defaultFormatter": "ms-python.black-formatter"
     },
