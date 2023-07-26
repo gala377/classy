@@ -10,3 +10,5 @@ lazy_static = "1.4.0"
 logos = "0.12.0"
 similar-asserts = "1.4.2"
 thiserror = "1.0.44"
+classy_sexpr = { path = "../classy_sexpr" }
+classy_sexpr_proc_macro = { path = "../classy_sexpr_proc_macro" }

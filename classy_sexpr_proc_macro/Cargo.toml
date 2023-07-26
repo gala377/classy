@@ -10,6 +10,6 @@ proc-macro = true
 
 [dependencies]
 quote = "1.0.32"
-syn = { version = "2.0.27", features = ["parsing"] }
+syn = { version = "2.0.27", features = ["full"] }
 classy_sexpr = { path = "../classy_sexpr" }
 proc-macro2 = "1.0.66"

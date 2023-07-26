@@ -3,6 +3,7 @@ use std::{collections::HashMap, ops::Range};
 pub mod fold;
 pub mod visitor;
 
+use classy_sexpr_proc_macro::sexpr;
 pub use fold::Folder;
 pub use visitor::Visitor;
 
@@ -1004,6 +1005,258 @@ impl Expr {
                 res.push_str(")");
                 res
             }
+        }
+    }
+}
+
+impl classy_sexpr::ToSExpr for Program {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        sexpr!(${self.items})
+    }
+}
+
+impl classy_sexpr::ToSExpr for TopLevelItem {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        match self {
+            TopLevelItem::TypeDefinition(def) => sexpr!($def),
+            TopLevelItem::FunctionDefinition(def) => sexpr!($def),
+            TopLevelItem::MethodsBlock(_) => todo!(),
+            TopLevelItem::ConstDefinition(def) => sexpr!($def),
+        }
+    }
+}
+
+impl classy_sexpr::ToSExpr for FunctionDefinition {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        let FunctionDefinition {
+            name,
+            parameters,
+            typ,
+            body,
+            attributes,
+        } = self;
+        let parameters = parameters
+            .into_iter()
+            .map(|name| sexpr!(#name))
+            .collect::<Vec<_>>();
+        sexpr!(
+            (fn 
+                (attr @attributes)  
+                (type $typ)
+                #name $parameters $body)
+        )
+    }
+}
+
+impl classy_sexpr::ToSExpr for ConstDefinition {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        let ConstDefinition {
+            name, typ, init, ..
+        } = self;
+        sexpr!(
+            (const #name $typ $init)
+        )
+    }
+}
+
+impl classy_sexpr::ToSExpr for TypeDefinition {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        let TypeDefinition {
+            name,
+            definition,
+            type_variables,
+            ..
+        } = self;
+        sexpr!(
+            (type #name $type_variables $definition)
+        )
+    }
+}
+
+impl classy_sexpr::ToSExpr for TypeVariable {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        let name = self.name;
+        sexpr!(#name)
+    }
+}
+
+impl classy_sexpr::ToSExpr for DefinedType {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        match self {
+            DefinedType::Record(r) => sexpr!($r),
+            DefinedType::ADT(a) => sexpr!($a),
+            DefinedType::Alias(a) => sexpr!($a),
+        }
+    }
+}
+
+impl classy_sexpr::ToSExpr for Record {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        sexpr!(
+            (record @{self.fields})
+        )
+    }
+}
+
+impl classy_sexpr::ToSExpr for ADT {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        sexpr!((
+            adt
+            @{self.discriminants}
+        ))
+    }
+}
+
+impl classy_sexpr::ToSExpr for Alias {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        sexpr!((alias ${self.for_type}))
+    }
+}
+
+impl classy_sexpr::ToSExpr for Discriminant {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        let cons = self.constructor;
+        sexpr!((
+            #cons
+            ${self.arguments}
+        ))
+    }
+}
+
+impl classy_sexpr::ToSExpr for DiscriminantKind {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        match self {
+            DiscriminantKind::Empty => sexpr!(unit),
+            DiscriminantKind::Tuple(inner) => sexpr!((tuple @ inner)),
+            DiscriminantKind::Record(fields) => sexpr!((record @ fields)),
+        }
+    }
+}
+
+impl classy_sexpr::ToSExpr for TypedName {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        let name = self.name;
+        sexpr!((#name ${self.typ}))
+    }
+}
+impl classy_sexpr::ToSExpr for Typ {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        match self {
+            Typ::Unit => sexpr!(unit),
+            Typ::Name(n) => classy_sexpr::SExpr::Atom(classy_sexpr::Atom::Symbol(n)),
+            Typ::Application { callee, args } => sexpr!(($callee $args)),
+            Typ::Array(inner) => sexpr!((array $inner)),
+            Typ::Function {
+                generics,
+                args,
+                ret,
+            } => sexpr!((fn $generics $args $ret)),
+            Typ::Tuple(inner) => sexpr!((tuple @ inner)),
+            Typ::Poly(args, t) => sexpr!((poly $args $t)),
+            Typ::ToInfere => sexpr!(infere),
+        }
+    }
+}
+
+impl classy_sexpr::ToSExpr for Expr {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        sexpr!(${self.kind})
+    }
+}
+
+impl classy_sexpr::ToSExpr for ExprKind {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        match self {
+            ExprKind::Unit => sexpr!(()),
+            ExprKind::Sequence(s) => sexpr!((seq @ s)),
+            ExprKind::Assignment { lval, rval } => sexpr!((assign $lval $rval)),
+            ExprKind::IntConst(i) => sexpr!($i),
+            ExprKind::StringConst(s) => sexpr!($s),
+            ExprKind::FloatConst(f) => {
+                let f = f.to_string();
+                sexpr!((float $f))
+            }
+            ExprKind::BoolConst(b) => sexpr!($b),
+            ExprKind::Name(n) => classy_sexpr::SExpr::Atom(classy_sexpr::Atom::Symbol(n)),
+            ExprKind::FunctionCall { func, args, kwargs } => sexpr!((call $func $args $kwargs)),
+            ExprKind::Access { val, field } => sexpr!((access $val #field)),
+            ExprKind::Tuple(t) => sexpr!((tuple @ t)),
+            ExprKind::Lambda { parameters, body } => sexpr!((lambda $parameters $body)),
+            ExprKind::TypedExpr { expr, typ } => sexpr!((typed $expr $typ)),
+            ExprKind::StructLiteral { strct, values } => sexpr!((struct $strct $values)),
+            ExprKind::AdtTupleConstructor {
+                typ,
+                constructor,
+                args,
+            } => sexpr!((adt $typ #constructor $args)),
+            ExprKind::AdtStructConstructor {
+                typ,
+                constructor,
+                fields,
+            } => sexpr!((adt $typ #constructor $fields)),
+            ExprKind::AdtUnitConstructor { typ, constructor } => {
+                sexpr!((adt $typ $constructor))
+            }
+            ExprKind::While { cond, body } => sexpr!((while $cond $body)),
+            ExprKind::Return(r) => sexpr!((return $r)),
+            ExprKind::If {
+                cond,
+                body,
+                else_body,
+            } => sexpr!((if $cond $body @else_body)),
+            ExprKind::Let { name, typ, init } => sexpr!((let $name $typ $init)),
+            ExprKind::LetRec { definitions } => sexpr!((letrec @ definitions)),
+            ExprKind::AnonType { fields } => sexpr!((type @ fields)),
+            ExprKind::ArrayLiteral { typ, size, init } => sexpr!((array $typ $size $init)),
+            ExprKind::IndexAccess { lhs, index } => sexpr!((index $lhs $index)),
+            ExprKind::Match { expr, cases } => {
+                let cases = cases
+                    .into_iter()
+                    .map(|(pat, body, guard)| match guard {
+                        Some(g) => sexpr!(($pat $g $body)),
+                        None => sexpr!(($pat $body)),
+                    })
+                    .collect::<Vec<_>>();
+                sexpr!((match $expr $cases))
+            }
+            ExprKind::MethodCall {
+                receiver,
+                method,
+                args,
+                kwargs,
+            } => sexpr!((method $receiver $method $args $kwargs)),
+        }
+    }
+}
+
+impl classy_sexpr::ToSExpr for Path {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        classy_sexpr::SExpr::Atom(classy_sexpr::Atom::Symbol(self.0[0].clone()))
+    }
+}
+
+impl classy_sexpr::ToSExpr for Pattern {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        sexpr!(${self.kind})
+    }
+}
+
+impl classy_sexpr::ToSExpr for PatternKind {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        match self {
+            PatternKind::Name(n) => classy_sexpr::SExpr::Atom(classy_sexpr::Atom::Symbol(n)),
+            PatternKind::Tuple(t) => sexpr!((tuple @ t)),
+            PatternKind::Struct { strct, fields } => sexpr!((struct $strct $fields)),
+            PatternKind::TupleStruct { strct, fields } => sexpr!((struct $strct $fields)),
+            PatternKind::AnonStruct { fields } => sexpr!((struct @ fields)),
+            PatternKind::Array(inner) => sexpr!((array $inner)),
+            PatternKind::Wildcard => sexpr!(_),
+            PatternKind::Unit => sexpr!(()),
+            PatternKind::String(s) => sexpr!($s),
+            PatternKind::Int(i) => sexpr!($i),
+            PatternKind::Bool(b) => sexpr!($b),
+            PatternKind::Rest(s) => sexpr!((rest $s)),
+            PatternKind::TypeSpecifier(name, rest) => sexpr!(($name $rest)),
         }
     }
 }

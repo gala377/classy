@@ -196,6 +196,8 @@ dependencies = [
 name = "classy_syntax"
 version = "0.1.0"
 dependencies = [
+ "classy_sexpr",
+ "classy_sexpr_proc_macro",
  "lazy_static",
  "logos",
  "similar-asserts",
