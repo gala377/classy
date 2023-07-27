@@ -1782,7 +1782,7 @@ mod tests {
 
     ptest! {
         if_with_instruction_following,
-        "a:()->();a { if(b) { c }; d };",
+        "a:()->();a { if(b) { c }; d }",
         sexpr!((
             (fn {}
                 (type (fn [] () (poly [] unit)))
@@ -1795,7 +1795,7 @@ mod tests {
 
     ptest! {
         simple_if_else_chain,
-        "a:()->();a=if(b){c}else if (d){e} else {f};",
+        "a:()->();a=if(b){c}else if (d){e} else {f}",
         sexpr!((
             (fn {}
                 (type (fn [] () (poly [] unit)))
@@ -1807,7 +1807,7 @@ mod tests {
 
     ptest! {
         simple_return_statement,
-        "a:()->();a=return a b;",
+        "a:()->();a=return a b",
         sexpr!((
             (fn {}
                 (type (fn [] () (poly [] unit)))
@@ -1819,7 +1819,7 @@ mod tests {
 
     ptest! {
         simple_let_expression,
-        "a:()->();a=let var = { a };",
+        "a:()->();a=let var = { a }",
         sexpr!((
             (fn {}
                 (type (fn [] () (poly [] unit)))
@@ -1831,7 +1831,7 @@ mod tests {
 
     ptest! {
         keyword_arguments,
-        "a:()->();a=a(b=c, d=e, a);",
+        "a:()->();a=a(b=c, d=e, a)",
         sexpr!((
             (fn {}
                 (type (fn [] () (poly [] unit)))
@@ -1846,7 +1846,7 @@ mod tests {
 
     ptest! {
         function_definition_without_header_infers_type,
-        "foo (a, b, c) = 10;",
+        "foo (a, b, c) = 10",
         sexpr!((
             (fn {}
                 (type (fn [] (infere infere infere) infere))
@@ -1856,7 +1856,7 @@ mod tests {
 
     ptest! {
         empty_function_definition_without_header,
-        "foo { 10 };",
+        "foo { 10 }",
         sexpr!((
             (fn {}
                 (type (fn [] () infere))
