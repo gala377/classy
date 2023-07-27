@@ -1601,9 +1601,7 @@ mod tests {
             (fn {}
                 (type (fn [] () (poly [] unit)))
                 a () {
-                    call a ((
-                        access a b
-                    )) {}
+                    access (call a (a) {}) b
                 })
         ))
     }
@@ -1862,6 +1860,37 @@ mod tests {
                 foo () {
                     10
             })
+        ))
+    }
+    ptest! {
+        parsing_chaining_with_trailing_lambdas,
+        "foo = foo.a { 1 }.b 1",
+        sexpr!((
+            (fn {}
+                (type (fn [] () infere))
+                foo () {
+                    method (
+                        method foo a ((lambda () { 1 })) {}
+                    ) b (1) {}
+                })
+        ))
+    }
+
+    ptest! {
+        parsing_trailing_lambda_splitted_chain_call,
+        r"foo = foo.a {
+            1
+        }.b 1",
+        sexpr!((
+            (fn {}
+                (type (fn [] () infere))
+                foo () {
+                    method (
+                        method foo a (
+                            (lambda () { 1 })
+                        ) {}
+                    ) b (1) {}
+                })
         ))
     }
 }
