@@ -67,6 +67,8 @@ impl<'source> Parser<'source> {
                 items.push(ast::TopLevelItem::MethodsBlock(meth_block));
             } else if let Ok(const_def) = self.parse_const_definition() {
                 items.push(ast::TopLevelItem::ConstDefinition(const_def))
+            } else if let Ok(_) = self.match_token(TokenType::Semicolon) {
+                // just do nothing, eat hanging semicolons
             } else {
                 self.error(
                     self.lexer.current().span.clone(),
@@ -999,9 +1001,6 @@ impl<'source> Parser<'source> {
         let beg = self.curr_pos();
         self.match_token(TokenType::LBrace)?;
         let body = self.parse_delimited(Self::parse_expr, TokenType::Semicolon);
-        if body.is_empty() {
-            return Err(self.error(beg..self.curr_pos(), "An expression block cannot be empty"));
-        }
         let _ = self.match_token(TokenType::RBrace).error(
             self,
             beg,

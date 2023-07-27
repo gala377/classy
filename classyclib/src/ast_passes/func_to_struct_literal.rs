@@ -295,58 +295,83 @@ fn resolve_fields(tctx: &TypCtx, t: &Type) -> Option<Vec<(String, Type)>> {
 #[cfg(test)]
 mod tests {
 
-    use classy_syntax::{
-        ast::{self},
-        lexer::Lexer,
-        parser::Parser,
-    };
+    use classy_sexpr::ToSExpr;
+    use classy_sexpr_proc_macro::sexpr;
+    use classy_syntax::{lexer::Lexer, parser::Parser};
 
     use crate::{
         ast_passes::{func_to_struct_literal::PromoteCallToStructLiteral, AstPass},
         typecheck,
     };
 
-    fn run_test(input: &str, expected: ast::Builder) {
+    fn run_test(input: &str, expected: classy_sexpr::SExpr) {
         let lexer = Lexer::new(input);
         let mut parser = Parser::new(lexer);
         let ast = parser.parse().unwrap();
         let tctx = typecheck::prepare_for_typechecking(&ast);
         let mut pass = PromoteCallToStructLiteral::new(&tctx);
         let actual = pass.run(ast);
-        let expected = expected.build();
-        similar_asserts::assert_eq!(expected: expected, actual: actual);
+        similar_asserts::assert_eq!(expected: expected, actual: actual.to_sexpr());
     }
 
     #[test]
     fn does_not_replace_call_to_normal_function() {
-        let input = r#"main: () -> (); main = foo();"#;
-        let expected = ast::Builder::new().unit_fn("main", |body| {
-            body.function_call(|f| f.name("foo"), |args| args, |kwargs| kwargs)
-        });
-        run_test(input, expected)
+        run_test(
+            r#"main: () -> (); main = foo();"#,
+            sexpr!((
+                (fn {}
+                    (type (fn [] () (poly [] unit)))
+                    main () {
+                        call foo () {}
+                    }
+                )
+            )),
+        )
     }
 
     #[test]
     fn replaces_simple_struct_literal() {
-        let input = r#"type Foo {bar: Int; baz: Int}; main: () -> (); main = Foo(bar=1, baz=2);"#;
-        let expected = ast::Builder::new()
-            .struct_def("Foo", |strct| strct.field("bar", "Int").field("baz", "Int"))
-            .unit_fn("main", |body| {
-                body.struct_literal("Foo", |values| {
-                    values
-                        .add("bar", |e| e.integer(1))
-                        .add("baz", |e| e.integer(2))
-                })
-            });
-        run_test(input, expected)
+        let input = r#"
+            type Foo {bar: Int; baz: Int}
+            main: () -> (); main = Foo { bar=1; baz=2 } 
+        "#;
+        run_test(input, sexpr!((
+            (type Foo [] {
+                record 
+                    [bar (poly [] Int)]
+                    [baz (poly [] Int)]
+            })
+
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                main () {
+                    struct Foo {
+                        ["bar" 1] 
+                        ["baz" 2]
+                    }
+                }
+            )
+        )))
     }
 
     #[test]
     fn recognizes_struct_with_no_fields() {
-        let input = r#"type Foo {}; main: () -> (); main = Foo();"#;
-        let expected = ast::Builder::new()
-            .struct_def("Foo", |strct| strct)
-            .unit_fn("main", |body| body.struct_literal("Foo", |values| values));
-        run_test(input, expected)
+        let input = r#"
+         type Foo {}
+
+         main = Foo {}
+        "#;
+        run_test(input, sexpr!((
+            (type Foo [] {
+                record 
+            })
+
+            (fn {}
+                (type (fn [] () infere))
+                main () {
+                    struct Foo {}
+                }
+            )
+        )))
     }
 }

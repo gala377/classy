@@ -116,15 +116,15 @@ mod tests {
     }
 
     #[test]
-    fn empty_input_returns_eof() {
+    fn empty_input_gives_one_semicolon() {
         let l = Lexer::new("");
-        assert_token!(Eof, l.current());
+        assert_token!(Semicolon, l.current());
         assert_token!(Eof, l.peek());
     }
 
     #[test]
     fn advancing_tokens_past_eof_yields_oef() {
-        assert_lex!([Eof, Eof, Eof, Eof, Eof], Lexer::new(""));
+        assert_lex!([Semicolon, Eof, Eof, Eof, Eof, Eof], Lexer::new(""));
     }
 
     #[test]
@@ -138,6 +138,7 @@ mod tests {
                 Float(1.0),
                 Float(0.1),
                 Float(-1.1),
+                Semicolon,
             ],
             Lexer::new("2 -2 1.0 1. .1 -1.1 ")
         );
