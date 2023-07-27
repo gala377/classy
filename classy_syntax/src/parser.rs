@@ -1766,92 +1766,81 @@ mod tests {
         ))
     }
 
-    // ptest! {
-    //     trailing_lambda_call_in_while_cond,
-    //     "a:()->();a=while(a { b }) { c };",
-    //     ast::Builder::new()
-    //         .unit_fn("a", |body| { body.r#while(
-    //             |cond| {
-    //                 cond.function_call(
-    //                     |c| c.name("a"),
-    //                     |args| args.add_expr(
-    //                         |l| l.lambda_no_types::<&str>(
-    //                             &[],
-    //                             |body| body.sequence(
-    //                                 |seq| seq.add_expr(|e| e.name("b"))))),
-    //                     |k| k)
-    //             },
-    //             |body| { body.add_expr(|e| e.name("c"))
-    //         })})
-    // }
-    // ptest! {
-    //     if_with_instruction_following,
-    //     "a:()->();a { if(b) { c }; d };",
-    //     ast::Builder::new()
-    //         .unit_fn("a", |body| {
-    //             body.sequence(|seq| {
-    //                 seq.add_expr(|e| {
-    //                     e.r#if(
-    //                         |cond| cond.name("b"),
-    //                         |body| body.add_expr(|e| e.name("c")),
-    //                         |e| e)
-    //                     })
-    //                     .add_expr(|e| e.name("d"))
-    //             })
+    ptest! {
+        trailing_lambda_call_in_while_cond,
+        "a:()->();a=while(a { b }) { c };",
+        sexpr!((
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    while
+                        (call a ((lambda () { b })) {})
+                        ( c )
+                })
+        ))
+    }
 
-    //         })
-    // }
+    ptest! {
+        if_with_instruction_following,
+        "a:()->();a { if(b) { c }; d };",
+        sexpr!((
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    (if b { c })
+                    d
+                })
+        ))
+    }
 
-    // ptest! {
-    //     simple_if_else_chain,
-    //     "a:()->();a=if(b){c}else if (d){e} else {f};",
-    //     ast::Builder::new()
-    //         .unit_fn("a", |body| {
-    //             body.r#else_if(
-    //                 |cond| cond.name("b"),
-    //                 |body| body.add_expr(|e| e.name("c")),
-    //                 |els| els.r#if(
-    //                         |cond| cond.name("d"),
-    //                         |body| body.add_expr(|e| e.name("e")),
-    //                         |els2| els2.add_expr(|e| e.name("f"))))
-    //     })
-    // }
+    ptest! {
+        simple_if_else_chain,
+        "a:()->();a=if(b){c}else if (d){e} else {f};",
+        sexpr!((
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    if b { c } (if d { e } { f })
+                })
+        ))
+    }
 
-    // ptest! {
-    //     simple_return_statement,
-    //     "a:()->();a=return a b;",
-    //     ast::Builder::new()
-    //         .unit_fn("a", |body| {
-    //             body.r#return(|e| {
-    //                 e.function_call(
-    //                     |callee| callee.name("a"),
-    //                     |args| args.add_expr(|a| a.name("b")),
-    //                 |k| k)
-    //             })
-    //         })
-    // }
+    ptest! {
+        simple_return_statement,
+        "a:()->();a=return a b;",
+        sexpr!((
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    return (call a (b) {})
+                })
+        ))
+    }
 
-    // ptest! {
-    //     simple_let_expression,
-    //     "a:()->();a=let var = { a };",
-    //     ast::Builder::new()
-    //         .unit_fn("a", |body| {
-    //             body.r#let(
-    //                 "var",
-    //                 |init| init.sequence(|s| s.add_expr(
-    //                     |e| e.name("a")))
-    //             )
-    //         })
-    // }
+    ptest! {
+        simple_let_expression,
+        "a:()->();a=let var = { a };",
+        sexpr!((
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    let var infere { a }
+                })
+        ))
+    }
 
-    // ptest! {
-    //     keyword_arguments,
-    //     "a:()->();a=a(b=c, d=e, a);",
-    //     ast::Builder::new()
-    //         .unit_fn("a", |b| b.function_call(
-    //             |f| f.name("a"),
-    //             |s| s.add_expr(|a| a.name("a")),
-    //             |kw| kw.add("b", |e| e.name("c"))
-    //                    .add("d", |e| e.name("e"))))
-    // }
+    ptest! {
+        keyword_arguments,
+        "a:()->();a=a(b=c, d=e, a);",
+        sexpr!((
+            (fn {}
+                (type (fn [] () (poly [] unit)))
+                a () {
+                    call a (a) {
+                        ["b" c]
+                        ["d" e]
+                     }
+                })
+        ))
+    }
 }
