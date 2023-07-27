@@ -498,10 +498,40 @@ impl<'source> Parser<'source> {
             cases.push((pattern, body, guard));
         }
         let _ = self.expect_token(TokenType::RBrace);
-        Ok(mk_expr(ast::ExprKind::Match {
+        let mut lhs = mk_expr(ast::ExprKind::Match {
             expr: Box::new(expr),
             cases,
-        }))
+        });
+        // chaining matches
+        while let Ok(_) = self.match_token(TokenType::Match) {
+            let _ = self.expect_token(TokenType::LBrace);
+            let mut cases = Vec::new();
+            while self.lexer.current().typ != TokenType::RBrace {
+                let pattern = self.parse_pattern()?;
+                let guard = match self.match_token(TokenType::If) {
+                    Ok(_) => Some(Box::new(self.parse_expr()?)),
+                    _ => None,
+                };
+                let _ = self.expect_token(TokenType::FatArrow);
+                let body = self.parse_expr()?;
+                let _ = self.match_token(TokenType::Semicolon);
+                cases.push((pattern, body, guard));
+            }
+            let _ = self.expect_token(TokenType::RBrace);
+            lhs = mk_expr(ast::ExprKind::Match {
+                expr: Box::new(lhs),
+                cases,
+            });
+        }
+        Ok(lhs)
+    }
+
+    fn parse_expr_or_single_sequence(&mut self) -> ParseRes<ast::Expr> {
+        if self.lexer.current().typ == TokenType::LBrace {
+            self.parse_expr_sequence()
+        } else {
+            self.parse_expr()
+        }
     }
 
     fn parse_fn_call(&mut self, func: ast::Expr) -> ParseRes<ast::Expr> {
@@ -536,9 +566,11 @@ impl<'source> Parser<'source> {
                         })),
                     })
                     .collect::<Result<Vec<_>, _>>()?;
-                let body =
-                    self.parse_expr()
-                        .error(self, beg, "Expected a trailing lambda's body")?;
+                let body = self.parse_expr_or_single_sequence().error(
+                    self,
+                    beg,
+                    "Expected a trailing lambda's body",
+                )?;
                 let lambda = ast::ExprKind::Lambda {
                     parameters: parameters
                         .into_iter()
@@ -556,7 +588,7 @@ impl<'source> Parser<'source> {
                     TokenType::Identifier(name) => {
                         // form of func(args) this => { lambda body }
                         let _ = self.expect_token(TokenType::FatArrow);
-                        let body = self.parse_expr().error(
+                        let body = self.parse_expr_or_single_sequence().error(
                             self,
                             beg,
                             "expected trailing lambda's body",
@@ -584,7 +616,7 @@ impl<'source> Parser<'source> {
                             .collect();
                         let _ = self.expect_token(TokenType::RParen);
                         let _ = self.expect_token(TokenType::FatArrow);
-                        let body = self.parse_expr().error(
+                        let body = self.parse_expr_or_single_sequence().error(
                             self,
                             beg,
                             "expected trailing lambda's body",
@@ -619,6 +651,18 @@ impl<'source> Parser<'source> {
             // form of func arg
             // if there is no name, rbrace following then its just a normal expression
             let mut check_for_trailing_lambda = false;
+            /*
+                TODO: By changing parse_term to parse expression we can fix parsing
+                a b.c (this parses to a(b).c instead of a(b.c))
+                however this also makes this code weird
+                foo a b
+                it passes as foo(a(b))
+                which is again unexpected
+                and would also make
+                foo a match {}
+                parse as foo(a match {})
+                instead of (foo a) match {}
+            */
             let mut args = match self.parse_term().map(|e| e.kind) {
                 // no name or brace following, just a normal expression
                 Err(ParseErr::WrongRule) => return Ok(func),
@@ -626,7 +670,7 @@ impl<'source> Parser<'source> {
                 Ok(ast::ExprKind::Name(name)) => {
                     if self.match_token(TokenType::FatArrow).is_ok() {
                         // func name => { lambda body }
-                        let body = self.parse_expr().error(
+                        let body = self.parse_expr_or_single_sequence().error(
                             self,
                             beg,
                             "Expected trailing lambda's body",
@@ -669,9 +713,11 @@ impl<'source> Parser<'source> {
                             typ: ast::Typ::ToInfere,
                         }];
                         let _ = self.expect_token(TokenType::FatArrow);
-                        let body =
-                            self.parse_expr()
-                                .error(self, beg, "expected trailing lambdas body")?;
+                        let body = self.parse_expr_or_single_sequence().error(
+                            self,
+                            beg,
+                            "expected trailing lambdas body",
+                        )?;
                         args.push(ast::ExprKind::Lambda {
                             parameters,
                             body: Box::new(body),
@@ -684,7 +730,7 @@ impl<'source> Parser<'source> {
                             self.parse_delimited(Self::parse_possibly_typed_name, TokenType::Comma);
                         let _ = self.expect_token(TokenType::RParen);
                         let _ = self.expect_token(TokenType::FatArrow);
-                        let body = self.parse_expr_sequence().error(
+                        let body = self.parse_expr_or_single_sequence().error(
                             self,
                             beg,
                             "Expected trailing lambdas body",
@@ -845,9 +891,11 @@ impl<'source> Parser<'source> {
                 if self.match_token(TokenType::FatArrow).is_ok() {
                     // lambda literal in form
                     // arg => expr
-                    let body = self
-                        .parse_expr()
-                        .error(self, beg, "expected lambdas body")?;
+                    let body = self.parse_expr_or_single_sequence().error(
+                        self,
+                        beg,
+                        "expected lambdas body",
+                    )?;
                     return Ok(mk_expr(ast::ExprKind::Lambda {
                         parameters: vec![ast::TypedName {
                             name,
@@ -1335,6 +1383,9 @@ mod tests {
                 Ok(())
             }
         };
+        ($name:ident, $source:literal) => {
+            compile_error!("please provide expected value using sexpr! macro");
+        }
     }
 
     ptest! {
@@ -1878,7 +1929,7 @@ mod tests {
 
     ptest! {
         parsing_trailing_lambda_splitted_chain_call,
-        r"foo = foo.a {
+        r"foo = foo.a b => {
             1
         }.b 1",
         sexpr!((
@@ -1887,9 +1938,86 @@ mod tests {
                 foo () {
                     method (
                         method foo a (
-                            (lambda () { 1 })
+                            (lambda ([b infere]) { 1 })
                         ) {}
                     ) b (1) {}
+                })
+        ))
+    }
+
+    ptest! {
+        match_works_on_weird_function_calls,
+        r"foo = foo b match {}",
+        sexpr!((
+            (fn {}
+                (type (fn [] () infere))
+                foo () {
+                    match (call foo (b) {}) {}
+                })
+        ))
+    }
+
+    ptest! {
+        match_with_trailing_lambda,
+        r"foo = foo b {} match {}",
+        sexpr!((
+            (fn {}
+                (type (fn [] () infere))
+                foo () {
+                    match (call foo (b (lambda () {})) {}) {}
+                })
+        ))
+    }
+
+    ptest! {
+        match_a_match,
+        r"foo = a match {
+        } match {
+        }
+        ",
+        sexpr!((
+            (fn {}
+                (type (fn [] () infere))
+                foo () {
+                    match (match a {}) {}
+                })
+        ))
+    }
+
+    ptest! {
+        basic_patterns,
+        r#"foo = a match {
+            Foo{} => 1
+            foo => 2
+            A(a, b) => 3
+            A.B => 4
+            C => 5
+            (1, 2, 3) => 6
+            1 => 7
+            "hello" => 8
+            true => 9
+            false => 10
+            () => 11
+            {a: b} => 12
+        }"#,
+        sexpr!((
+            (fn {}
+                (type (fn [] () infere))
+                foo () {
+                    match a {
+                        ([struct Foo ()] 1)
+                        (foo 2)
+                        ([struct A (a b)] 3)
+                        ([A B] 4)
+                        (C 5)
+                        ((tuple 1 2 3) 6)
+                        (1 7)
+                        ("hello" 8)
+                        (true 9)
+                        (false 10)
+                        (() 11)
+                        ([struct ["a" b]] 12)
+                    }
                 })
         ))
     }

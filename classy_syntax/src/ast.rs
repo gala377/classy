@@ -744,7 +744,7 @@ impl classy_sexpr::ToSExpr for PatternKind {
             PatternKind::Int(i) => sexpr!($i),
             PatternKind::Bool(b) => sexpr!($b),
             PatternKind::Rest(s) => sexpr!((rest #s)),
-            PatternKind::TypeSpecifier(name, rest) => sexpr!(($name $rest)),
+            PatternKind::TypeSpecifier(name, rest) => sexpr!((#name $rest)),
         }
     }
 }
