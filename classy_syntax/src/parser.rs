@@ -1843,4 +1843,26 @@ mod tests {
                 })
         ))
     }
+
+    ptest! {
+        function_definition_without_header_infers_type,
+        "foo (a, b, c) = 10;",
+        sexpr!((
+            (fn {}
+                (type (fn [] (infere infere infere) infere))
+                foo (a b c) 10)
+        ))
+    }
+
+    ptest! {
+        empty_function_definition_without_header,
+        "foo { 10 };",
+        sexpr!((
+            (fn {}
+                (type (fn [] () infere))
+                foo () {
+                    10
+            })
+        ))
+    }
 }
