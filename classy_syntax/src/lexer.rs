@@ -7,6 +7,7 @@ pub struct Lexer<'a> {
     tokens: logos::Lexer<'a, TokenType>,
     curr_token: Token,
     peek_token: Token,
+    inserted_semicolon_on_eof: bool,
 }
 
 impl<'source> Lexer<'source> {
@@ -20,6 +21,7 @@ impl<'source> Lexer<'source> {
             tokens: TokenType::lexer(source),
             curr_token: Self::DUMMY,
             peek_token: Self::DUMMY,
+            inserted_semicolon_on_eof: false,
         };
         lex.advance();
         lex.advance();
@@ -29,7 +31,7 @@ impl<'source> Lexer<'source> {
     pub fn advance(&mut self) -> Token {
         let insert_semicolon =
             !IGNORE_NEWLINE.contains(&std::mem::discriminant(&self.peek_token.typ));
-        let new_peek = Self::bump(&mut self.tokens, insert_semicolon);
+        let new_peek = self.bump(insert_semicolon);
         let peek = std::mem::replace(&mut self.peek_token, new_peek);
         std::mem::replace(&mut self.curr_token, peek)
     }
@@ -42,23 +44,30 @@ impl<'source> Lexer<'source> {
         &self.peek_token
     }
 
-    fn bump(tokens: &mut logos::Lexer<TokenType>, insert_semicolon: bool) -> Token {
+    fn bump(&mut self, insert_semicolon: bool) -> Token {
         use TokenType::*;
-        let tok = tokens.next();
+        let tok = self.tokens.next();
         match tok {
             Some(NewLine) if insert_semicolon => Token {
                 typ: Semicolon,
-                span: tokens.span(),
+                span: self.tokens.span(),
             },
-            Some(NewLine) => skip_new_lines(tokens),
+            Some(NewLine) => skip_new_lines(&mut self.tokens),
             Some(typ) => Token {
                 typ,
-                span: tokens.span(),
+                span: self.tokens.span(),
             },
-            None => Token {
+            None if self.inserted_semicolon_on_eof => Token {
                 typ: Eof,
-                span: tokens.span(),
+                span: self.tokens.span(),
             },
+            None => {
+                self.inserted_semicolon_on_eof = true;
+                Token {
+                    typ: Semicolon,
+                    span: self.tokens.span(),
+                }
+            }
         }
     }
 }
