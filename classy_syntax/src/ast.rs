@@ -16,13 +16,11 @@ fn default<T: Default>() -> T {
 }
 
 #[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
 pub struct Program {
     pub items: Vec<TopLevelItem>,
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
 pub enum TopLevelItem {
     TypeDefinition(TypeDefinition),
     FunctionDefinition(FunctionDefinition),
@@ -31,7 +29,6 @@ pub enum TopLevelItem {
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
 pub struct ConstDefinition {
     pub id: usize,
     pub name: String,
@@ -48,7 +45,6 @@ pub struct TypeDefinition {
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
 pub enum DefinedType {
     Record(Record),
     ADT(ADT),
@@ -56,26 +52,22 @@ pub enum DefinedType {
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
 pub struct Record {
     pub fields: Vec<TypedName>,
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
 pub struct ADT {
     pub discriminants: Vec<Discriminant>,
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
 pub struct Discriminant {
     pub constructor: String,
     pub arguments: DiscriminantKind,
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
 pub enum DiscriminantKind {
     Empty,
     Tuple(Vec<Typ>),
@@ -83,20 +75,17 @@ pub enum DiscriminantKind {
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
 pub struct Alias {
     pub for_type: Typ,
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
 pub struct TypedName {
     pub name: String,
     pub typ: Typ,
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
 pub struct FunctionDefinition {
     pub name: String,
     pub typ: Typ,
@@ -106,7 +95,6 @@ pub struct FunctionDefinition {
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
 pub struct MethodsBlock {
     pub name: Option<String>,
     pub typ: Typ,
@@ -140,14 +128,12 @@ pub struct TypeVariable {
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
 pub struct Expr {
     pub id: usize,
     pub kind: ExprKind,
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
 pub enum ExprKind {
     Unit,
     Sequence(Vec<Expr>),
@@ -278,7 +264,6 @@ pub enum PatternKind {
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
 pub struct Path(pub Vec<String>);
 
 impl Path {
@@ -295,503 +280,6 @@ impl Path {
             }
         }
         match_segment(expr).map(Path)
-    }
-}
-
-/// Explicit PartialEq implementations to skip span comparison.
-/// Only used in tests.
-#[cfg(test)]
-impl PartialEq for TypeDefinition {
-    fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
-            && self.type_variables == other.type_variables
-            && self.definition == other.definition
-    }
-}
-
-/// Builders are only used in tests to create AST to test against
-pub struct Builder {
-    pub res: Program,
-}
-
-impl Builder {
-    pub fn new() -> Self {
-        Self {
-            res: Program { items: Vec::new() },
-        }
-    }
-
-    pub fn empty_struct(mut self, name: impl Into<String>) -> Self {
-        self.res.items.push(TopLevelItem::TypeDefinition(
-            StructDefBuilder::new().name(name).build(),
-        ));
-        self
-    }
-
-    pub fn struct_def(
-        mut self,
-        name: impl Into<String>,
-        str_builder: impl FnOnce(StructDefBuilder) -> StructDefBuilder,
-    ) -> Self {
-        let r#struct = StructDefBuilder::new().name(name);
-        let r#struct = str_builder(r#struct);
-        self.res
-            .items
-            .push(TopLevelItem::TypeDefinition(r#struct.build()));
-        self
-    }
-
-    pub fn adt_def(
-        mut self,
-        name: impl Into<String>,
-        adt_builder: impl FnOnce(AdtDefBuilder) -> AdtDefBuilder,
-    ) -> Self {
-        let adt = AdtDefBuilder::new().name(name);
-        let adt = adt_builder(adt);
-        self.res
-            .items
-            .push(TopLevelItem::TypeDefinition(adt.build()));
-        self
-    }
-
-    pub fn unit_fn(
-        self,
-        name: impl Into<String>,
-        body: impl FnOnce(ExprBuilder) -> ExprBuilder,
-    ) -> Self {
-        self.func_def(name, Vec::new(), |args| args, Typ::Unit, body)
-    }
-
-    pub fn func_def(
-        mut self,
-        name: impl Into<String>,
-        generics: Vec<String>,
-        parameters: impl FnOnce(TypedNameListBuilder) -> TypedNameListBuilder,
-        ret: Typ,
-        body: impl FnOnce(ExprBuilder) -> ExprBuilder,
-    ) -> Self {
-        let parameters = parameters(default()).build();
-        let body = body(default()).build();
-        let mut arg_types = Vec::new();
-        let mut arg_names = Vec::new();
-        for TypedName { name, typ } in parameters {
-            arg_types.push(typ);
-            arg_names.push(name);
-        }
-        self.res
-            .items
-            .push(TopLevelItem::FunctionDefinition(FunctionDefinition {
-                name: name.into(),
-                parameters: arg_names,
-                typ: Typ::Function {
-                    args: arg_types,
-                    generics,
-                    ret: Box::new(ret),
-                },
-                body,
-                attributes: Vec::new(),
-            }));
-        self
-    }
-
-    pub fn build(self) -> Program {
-        self.res
-    }
-}
-
-pub struct StructDefBuilder {
-    name: String,
-    fields: Vec<TypedName>,
-    type_variables: Vec<TypeVariable>,
-}
-
-impl StructDefBuilder {
-    pub fn new() -> Self {
-        Self {
-            name: String::new(),
-            fields: Vec::new(),
-            type_variables: Vec::new(),
-        }
-    }
-
-    pub fn name(mut self, name: impl Into<String>) -> Self {
-        self.name = name.into();
-        self
-    }
-    pub fn field(mut self, name: impl Into<String>, typ: impl Into<String>) -> Self {
-        self.fields.push(TypedName {
-            name: name.into(),
-            typ: Typ::Name(typ.into()),
-        });
-        self
-    }
-
-    pub fn type_var(mut self, name: impl Into<String>) -> Self {
-        self.type_variables.push(TypeVariable { name: name.into() });
-        self
-    }
-
-    pub fn build(self) -> TypeDefinition {
-        TypeDefinition {
-            name: self.name,
-            definition: DefinedType::Record(Record {
-                fields: self.fields,
-            }),
-            type_variables: self.type_variables,
-            span: 0..0,
-        }
-    }
-}
-
-#[derive(Default)]
-pub struct AdtDefBuilder {
-    name: String,
-    type_vars: Vec<TypeVariable>,
-    discriminants: Vec<Discriminant>,
-}
-
-impl AdtDefBuilder {
-    pub fn new() -> Self {
-        Self {
-            name: String::new(),
-            type_vars: Vec::new(),
-            discriminants: Vec::new(),
-        }
-    }
-
-    pub fn name(mut self, name: impl Into<String>) -> Self {
-        self.name = name.into();
-        self
-    }
-
-    pub fn discriminant(mut self, name: impl Into<String>, arguments: &[impl AsRef<str>]) -> Self {
-        self.discriminants.push(Discriminant {
-            constructor: name.into(),
-            arguments: DiscriminantKind::Tuple(
-                arguments
-                    .iter()
-                    .map(|typ| Typ::Name(typ.as_ref().into()))
-                    .collect(),
-            ),
-        });
-        self
-    }
-
-    pub fn empty_discriminant(self, name: impl Into<String>) -> Self {
-        let arguments: &[&'static str] = &[];
-        self.discriminant(name, arguments)
-    }
-
-    pub fn type_var(mut self, name: impl Into<String>) -> Self {
-        self.type_vars.push(TypeVariable { name: name.into() });
-        self
-    }
-
-    pub fn build(self) -> TypeDefinition {
-        TypeDefinition {
-            name: self.name,
-            span: 0..0,
-            type_variables: self.type_vars,
-            definition: DefinedType::ADT(ADT {
-                discriminants: self.discriminants,
-            }),
-        }
-    }
-}
-
-#[derive(Default)]
-pub struct TypedNameListBuilder {
-    res: Vec<TypedName>,
-}
-
-impl TypedNameListBuilder {
-    pub fn name(mut self, name: impl Into<String>, typ: impl Into<String>) -> Self {
-        self.res.push(TypedName {
-            name: name.into(),
-            typ: Typ::Name(typ.into()),
-        });
-        self
-    }
-
-    pub fn build(self) -> Vec<TypedName> {
-        self.res
-    }
-}
-
-fn fake_expr(kind: ExprKind) -> Expr {
-    Expr { id: 0, kind }
-}
-
-#[derive(Default)]
-pub struct ExprBuilder {
-    res: Option<Expr>,
-}
-
-impl ExprBuilder {
-    pub fn integer(mut self, val: isize) -> Self {
-        assert!(self.res.is_none());
-        self.res = Some(fake_expr(ExprKind::IntConst(val)));
-        self
-    }
-
-    pub fn float(mut self, val: f64) -> Self {
-        assert!(self.res.is_none());
-        self.res = Some(fake_expr(ExprKind::FloatConst(val)));
-        self
-    }
-
-    pub fn name(mut self, s: impl Into<String>) -> Self {
-        assert!(self.res.is_none());
-        self.res = Some(fake_expr(ExprKind::Name(s.into())));
-        self
-    }
-
-    pub fn function_call(
-        mut self,
-        callee: impl FnOnce(ExprBuilder) -> ExprBuilder,
-        args: impl FnOnce(ExprListBuilder) -> ExprListBuilder,
-        kwargs: impl FnOnce(KwArgsBuilder) -> KwArgsBuilder,
-    ) -> Self {
-        assert!(self.res.is_none());
-        let func = callee(default()).build();
-        let args = args(default()).build();
-        let kwargs = kwargs(default()).build();
-        self.res = Some(fake_expr(ExprKind::FunctionCall {
-            func: Box::new(func),
-            args,
-            kwargs,
-        }));
-        self
-    }
-
-    pub fn access(
-        mut self,
-        lhs: impl FnOnce(ExprBuilder) -> ExprBuilder,
-        field: impl Into<String>,
-    ) -> Self {
-        assert!(self.res.is_none());
-        let expr = lhs(default()).build();
-        self.res = Some(fake_expr(ExprKind::Access {
-            val: Box::new(expr),
-            field: field.into(),
-        }));
-        self
-    }
-
-    pub fn tuple(mut self, vals: impl FnOnce(ExprListBuilder) -> ExprListBuilder) -> Self {
-        assert!(self.res.is_none());
-        self.res = Some(fake_expr(ExprKind::Tuple(vals(default()).build())));
-        self
-    }
-
-    pub fn unit(mut self) -> Self {
-        assert!(self.res.is_none());
-        self.res = Some(fake_expr(ExprKind::Unit));
-        self
-    }
-
-    pub fn sequence(mut self, exprs: impl FnOnce(ExprListBuilder) -> ExprListBuilder) -> Self {
-        assert!(self.res.is_none());
-        self.res = Some(fake_expr(ExprKind::Sequence(exprs(default()).build())));
-        self
-    }
-
-    pub fn assignment(
-        mut self,
-        lhs: impl FnOnce(ExprBuilder) -> ExprBuilder,
-        rhs: impl FnOnce(ExprBuilder) -> ExprBuilder,
-    ) -> Self {
-        assert!(self.res.is_none());
-        let lhs = lhs(default()).build();
-        let rhs = rhs(default()).build();
-        self.res = Some(fake_expr(ExprKind::Assignment {
-            lval: Box::new(lhs),
-            rval: Box::new(rhs),
-        }));
-        self
-    }
-
-    pub fn lambda_no_types<P: Into<String> + Clone>(
-        mut self,
-        parameters: &[P],
-        body: impl FnOnce(ExprBuilder) -> ExprBuilder,
-    ) -> Self {
-        assert!(self.res.is_none());
-        let body = body(default()).build();
-        self.res = Some(fake_expr(ExprKind::Lambda {
-            parameters: parameters
-                .iter()
-                .cloned()
-                .map(|name| TypedName {
-                    name: name.into(),
-                    typ: Typ::ToInfere,
-                })
-                .collect(),
-            body: Box::new(body),
-        }));
-        self
-    }
-
-    pub fn lambda(
-        mut self,
-        parameters: impl FnOnce(TypedNameListBuilder) -> TypedNameListBuilder,
-        body: impl FnOnce(ExprBuilder) -> ExprBuilder,
-    ) -> Self {
-        assert!(self.res.is_none());
-        let body = body(default()).build();
-        self.res = Some(fake_expr(ExprKind::Lambda {
-            parameters: parameters(default()).build(),
-            body: Box::new(body),
-        }));
-        self
-    }
-
-    pub fn typed_expr(
-        mut self,
-        expr: impl FnOnce(ExprBuilder) -> ExprBuilder,
-        typ: impl Into<String>,
-    ) -> Self {
-        assert!(self.res.is_none());
-        let expr = expr(default()).build();
-        self.res = Some(fake_expr(ExprKind::TypedExpr {
-            expr: Box::new(expr),
-            typ: Typ::Name(typ.into()),
-        }));
-        self
-    }
-
-    pub fn r#return(mut self, expr: impl FnOnce(ExprBuilder) -> ExprBuilder) -> Self {
-        assert!(self.res.is_none());
-        let expr = expr(default()).build();
-        self.res = Some(fake_expr(ExprKind::Return(Box::new(expr))));
-        self
-    }
-
-    pub fn r#while(
-        mut self,
-        cond: impl FnOnce(ExprBuilder) -> ExprBuilder,
-        body: impl FnOnce(ExprListBuilder) -> ExprListBuilder,
-    ) -> Self {
-        let cond = cond(default()).build();
-        let body = fake_expr(ExprKind::Sequence(body(default()).build()));
-        self.res = Some(fake_expr(ExprKind::While {
-            cond: Box::new(cond),
-            body: Box::new(body),
-        }));
-        self
-    }
-
-    pub fn r#if(
-        mut self,
-        cond: impl FnOnce(ExprBuilder) -> ExprBuilder,
-        body: impl FnOnce(ExprListBuilder) -> ExprListBuilder,
-        r#else: impl FnOnce(ExprListBuilder) -> ExprListBuilder,
-    ) -> Self {
-        let cond = cond(default()).build();
-        let body = fake_expr(ExprKind::Sequence(body(default()).build()));
-        let r#else = r#else(default()).build();
-        let r#else = if r#else.is_empty() {
-            None
-        } else {
-            Some(Box::new(fake_expr(ExprKind::Sequence(r#else))))
-        };
-        self.res = Some(fake_expr(ExprKind::If {
-            cond: Box::new(cond),
-            body: Box::new(body),
-            else_body: r#else,
-        }));
-        self
-    }
-
-    pub fn r#else_if(
-        mut self,
-        cond: impl FnOnce(ExprBuilder) -> ExprBuilder,
-        body: impl FnOnce(ExprListBuilder) -> ExprListBuilder,
-        r#else: impl FnOnce(ExprBuilder) -> ExprBuilder,
-    ) -> Self {
-        let cond = cond(default()).build();
-        let body = fake_expr(ExprKind::Sequence(body(default()).build()));
-        let r#else = r#else(default()).build();
-        let r#else = Box::new(r#else);
-        self.res = Some(fake_expr(ExprKind::If {
-            cond: Box::new(cond),
-            body: Box::new(body),
-            else_body: Some(r#else),
-        }));
-        self
-    }
-
-    pub fn try_build(self) -> Option<Expr> {
-        self.res
-    }
-
-    pub fn r#let(
-        mut self,
-        name: impl Into<String>,
-        init: impl FnOnce(ExprBuilder) -> ExprBuilder,
-    ) -> Self {
-        let init = init(default()).build();
-        self.res = Some(fake_expr(ExprKind::Let {
-            name: name.into(),
-            typ: Typ::ToInfere,
-            init: Box::new(init),
-        }));
-        self
-    }
-
-    pub fn struct_literal(
-        mut self,
-        strct: impl Into<String>,
-        values: impl FnOnce(KwArgsBuilder) -> KwArgsBuilder,
-    ) -> Self {
-        let values = values(default()).build();
-        self.res = Some(fake_expr(ExprKind::StructLiteral {
-            strct: Path(vec![strct.into()]),
-            values,
-        }));
-        self
-    }
-
-    pub fn build(self) -> Expr {
-        self.res.unwrap()
-    }
-}
-
-#[derive(Default)]
-pub struct ExprListBuilder {
-    res: Vec<Expr>,
-}
-
-impl ExprListBuilder {
-    pub fn build(self) -> Vec<Expr> {
-        self.res
-    }
-
-    pub fn add_expr(mut self, f: impl FnOnce(ExprBuilder) -> ExprBuilder) -> Self {
-        let expr = f(default()).build();
-        self.res.push(expr);
-        self
-    }
-}
-
-#[derive(Default)]
-pub struct KwArgsBuilder {
-    res: HashMap<String, Expr>,
-}
-
-impl KwArgsBuilder {
-    pub fn build(self) -> HashMap<String, Expr> {
-        self.res
-    }
-
-    pub fn add(
-        mut self,
-        name: impl Into<String>,
-        expr: impl FnOnce(ExprBuilder) -> ExprBuilder,
-    ) -> KwArgsBuilder {
-        let expr = expr(default()).build();
-        self.res.insert(name.into(), expr);
-        self
     }
 }
 impl Expr {
