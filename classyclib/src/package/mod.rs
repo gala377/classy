@@ -178,11 +178,11 @@ fn serialize_type(tctx: &TypCtx, typ: &typecheck::r#type::Type, top_level: bool)
             } else {
                 let node = tctx.nodes.get(def).unwrap();
                 match node {
-                    classy_syntax::ast::TopLevelItem::TypeDefinition(ast::TypeDefinition {
+                    classy_syntax::ast::TopLevelItemKind::TypeDefinition(ast::TypeDefinition {
                         name,
                         ..
                     }) => Type::Name(name.clone()),
-                    classy_syntax::ast::TopLevelItem::FunctionDefinition(_) => {
+                    classy_syntax::ast::TopLevelItemKind::FunctionDefinition(_) => {
                         panic!("No struct node should map to a function definition")
                     }
                     def => unimplemented!("{def:?}"),

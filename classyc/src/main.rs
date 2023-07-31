@@ -91,7 +91,7 @@ fn compile(
     gatherer.visit(&res);
     let runtime_functions: HashSet<String> = gatherer.res.into_iter().collect();
     for def in &res.items {
-        if let ast::TopLevelItem::FunctionDefinition(fdef) = def {
+        if let ast::TopLevelItemKind::FunctionDefinition(fdef) = &def.kind {
             let emmiter = classyclib::ir::Emitter::new(&tctx, &tenv);
             let block = emmiter.emit_fn(fdef);
             println!("\n\n\nFunction definition {:#?}", fdef.name);

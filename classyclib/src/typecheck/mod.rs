@@ -51,7 +51,7 @@ pub fn resolve_type_names(mut ctx: TypCtx) -> TypCtx {
     let nodes = ctx.nodes.clone();
     for (def_id, def) in &nodes {
         match def {
-            ast::TopLevelItem::TypeDefinition(ast::TypeDefinition {
+            ast::TopLevelItemKind::TypeDefinition(ast::TypeDefinition {
                 name,
                 definition,
                 type_variables,
@@ -66,14 +66,16 @@ pub fn resolve_type_names(mut ctx: TypCtx) -> TypCtx {
                     &mut type_updates,
                 );
             }
-            ast::TopLevelItem::ConstDefinition(ast::ConstDefinition { name, typ, .. }) => {
+            ast::TopLevelItemKind::ConstDefinition(ast::ConstDefinition { name, typ, .. }) => {
                 ast_to_type::resolve_const_def(name, typ, &mut ctx);
             }
 
-            ast::TopLevelItem::FunctionDefinition(ast::FunctionDefinition {
-                name, typ, ..
+            ast::TopLevelItemKind::FunctionDefinition(ast::FunctionDefinition {
+                name,
+                typ,
+                ..
             }) => ast_to_type::resolve_fn_def(typ, &mut ctx, name),
-            ast::TopLevelItem::MethodsBlock(ast::MethodsBlock {
+            ast::TopLevelItemKind::MethodsBlock(ast::MethodsBlock {
                 name: _name,
                 typ,
                 methods,

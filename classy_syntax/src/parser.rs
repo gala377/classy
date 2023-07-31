@@ -60,13 +60,25 @@ impl<'source> Parser<'source> {
                 return Ok(ast::Program { items });
             }
             if let Ok(str_def) = self.parse_type_definition() {
-                items.push(ast::TopLevelItem::TypeDefinition(str_def));
+                items.push(ast::TopLevelItem {
+                    id: DUMMY_AST_ID,
+                    kind: ast::TopLevelItemKind::TypeDefinition(str_def),
+                });
             } else if let Ok(fun_def) = self.parse_function_definition(true) {
-                items.push(ast::TopLevelItem::FunctionDefinition(fun_def));
+                items.push(ast::TopLevelItem {
+                    id: DUMMY_AST_ID,
+                    kind: ast::TopLevelItemKind::FunctionDefinition(fun_def),
+                });
             } else if let Ok(meth_block) = self.parse_methods_block() {
-                items.push(ast::TopLevelItem::MethodsBlock(meth_block));
+                items.push(ast::TopLevelItem {
+                    id: DUMMY_AST_ID,
+                    kind: ast::TopLevelItemKind::MethodsBlock(meth_block),
+                });
             } else if let Ok(const_def) = self.parse_const_definition() {
-                items.push(ast::TopLevelItem::ConstDefinition(const_def))
+                items.push(ast::TopLevelItem {
+                    id: DUMMY_AST_ID,
+                    kind: ast::TopLevelItemKind::ConstDefinition(const_def),
+                })
             } else if let Ok(_) = self.match_token(TokenType::Semicolon) {
                 // just do nothing, eat hanging semicolons
             } else {

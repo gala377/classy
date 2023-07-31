@@ -21,7 +21,13 @@ pub struct Program {
 }
 
 #[derive(Debug, Clone)]
-pub enum TopLevelItem {
+pub struct TopLevelItem {
+    pub id: usize,
+    pub kind: TopLevelItemKind,
+}
+
+#[derive(Debug, Clone)]
+pub enum TopLevelItemKind {
     TypeDefinition(TypeDefinition),
     FunctionDefinition(FunctionDefinition),
     MethodsBlock(MethodsBlock),
@@ -505,11 +511,17 @@ impl classy_sexpr::ToSExpr for Program {
 
 impl classy_sexpr::ToSExpr for TopLevelItem {
     fn to_sexpr(self) -> classy_sexpr::SExpr {
+        sexpr!(${self.kind})
+    }
+}
+
+impl classy_sexpr::ToSExpr for TopLevelItemKind {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
         match self {
-            TopLevelItem::TypeDefinition(def) => sexpr!($def),
-            TopLevelItem::FunctionDefinition(def) => sexpr!($def),
-            TopLevelItem::MethodsBlock(_) => todo!(),
-            TopLevelItem::ConstDefinition(def) => sexpr!($def),
+            TopLevelItemKind::TypeDefinition(def) => sexpr!($def),
+            TopLevelItemKind::FunctionDefinition(def) => sexpr!($def),
+            TopLevelItemKind::MethodsBlock(_) => todo!(),
+            TopLevelItemKind::ConstDefinition(def) => sexpr!($def),
         }
     }
 }

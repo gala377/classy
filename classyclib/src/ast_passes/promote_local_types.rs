@@ -40,12 +40,15 @@ impl Folder for PromoteAnonTypes {
     fn fold_program(&mut self, program: ast::Program) -> ast::Program {
         let mut program = ast::fold::fold_program(self, program);
         for (name, record) in self.types_to_promote.iter() {
-            let typ = ast::TopLevelItem::TypeDefinition(ast::TypeDefinition {
-                name: name.clone(),
-                type_variables: Vec::new(),
-                definition: ast::DefinedType::Record(record.clone()),
-                span: 0..0,
-            });
+            let typ = ast::TopLevelItem {
+                id: 0,
+                kind: ast::TopLevelItemKind::TypeDefinition(ast::TypeDefinition {
+                    name: name.clone(),
+                    type_variables: Vec::new(),
+                    definition: ast::DefinedType::Record(record.clone()),
+                    span: 0..0,
+                }),
+            };
             program.items.push(typ);
         }
         program

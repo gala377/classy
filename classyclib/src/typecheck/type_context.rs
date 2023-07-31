@@ -21,7 +21,7 @@ pub struct TypCtx {
     /// Associates a type name with its type id.
     pub types: HashMap<Name, TypeId>,
     /// Associates a definition id with its original ast type definition node.
-    pub nodes: HashMap<DefId, ast::TopLevelItem>,
+    pub nodes: HashMap<DefId, ast::TopLevelItemKind>,
     /// Associates names of items, that are not types, like variables or
     /// functions with their type.
     pub variables: HashMap<Name, TypeId>,
@@ -193,28 +193,28 @@ impl TypCtx {
     pub fn add_type_node(&mut self, node: &ast::TypeDefinition) -> DefId {
         let id = self.next_id();
         self.nodes
-            .insert(id, ast::TopLevelItem::TypeDefinition(node.clone()));
+            .insert(id, ast::TopLevelItemKind::TypeDefinition(node.clone()));
         id
     }
 
     pub fn add_const_node(&mut self, node: &ast::ConstDefinition) -> DefId {
         let id = self.next_id();
         self.nodes
-            .insert(id, ast::TopLevelItem::ConstDefinition(node.clone()));
+            .insert(id, ast::TopLevelItemKind::ConstDefinition(node.clone()));
         id
     }
 
     pub fn add_methods_block_node(&mut self, node: &ast::MethodsBlock) -> DefId {
         let id = self.next_id();
         self.nodes
-            .insert(id, ast::TopLevelItem::MethodsBlock(node.clone()));
+            .insert(id, ast::TopLevelItemKind::MethodsBlock(node.clone()));
         id
     }
 
     pub fn add_fn_node(&mut self, node: &ast::FunctionDefinition) -> DefId {
         let id = self.next_id();
         self.nodes
-            .insert(id, ast::TopLevelItem::FunctionDefinition(node.clone()));
+            .insert(id, ast::TopLevelItemKind::FunctionDefinition(node.clone()));
         id
     }
 
@@ -295,7 +295,7 @@ impl TypCtx {
 
     pub fn def_id_to_typ_id(&self, id: DefId) -> TypeId {
         match self.nodes.get(&id) {
-            Some(ast::TopLevelItem::TypeDefinition(node)) => {
+            Some(ast::TopLevelItemKind::TypeDefinition(node)) => {
                 let name = &node.name;
                 *self.types.get(name).unwrap()
             }
@@ -305,15 +305,15 @@ impl TypCtx {
 
     pub fn name_by_def_id(&self, id: DefId) -> String {
         match self.nodes.get(&id) {
-            Some(ast::TopLevelItem::TypeDefinition(node)) => node.name.clone(),
-            Some(ast::TopLevelItem::FunctionDefinition(node)) => node.name.clone(),
+            Some(ast::TopLevelItemKind::TypeDefinition(node)) => node.name.clone(),
+            Some(ast::TopLevelItemKind::FunctionDefinition(node)) => node.name.clone(),
             _ => panic!("expected type definition"),
         }
     }
 
     pub fn fn_def_id(&self, name: &str) -> Option<DefId> {
         for (id, def) in &self.nodes {
-            if let ast::TopLevelItem::FunctionDefinition(node) = def {
+            if let ast::TopLevelItemKind::FunctionDefinition(node) = def {
                 if node.name == name {
                     return Some(*id);
                 }

@@ -11,6 +11,10 @@ pub trait Visitor<'ast>: Sized {
         walk_top_level_item(self, node)
     }
 
+    fn visit_top_level_item_kind(&mut self, node: &'ast ast::TopLevelItemKind) {
+        walk_top_level_item_kind(self, node)
+    }
+
     fn visit_fn_def(&mut self, def: &'ast ast::FunctionDefinition) {
         walk_function_def(self, def)
     }
@@ -212,12 +216,15 @@ pub fn walk_program<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::Program)
     }
 }
 
-pub fn walk_top_level_item<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::TopLevelItem) {
+pub fn walk_top_level_item_kind<'ast, V: Visitor<'ast>>(
+    v: &mut V,
+    node: &'ast ast::TopLevelItemKind,
+) {
     match node {
-        ast::TopLevelItem::FunctionDefinition(fn_def) => v.visit_fn_def(fn_def),
-        ast::TopLevelItem::TypeDefinition(t_def) => v.visit_type_def(t_def),
-        ast::TopLevelItem::MethodsBlock(meth) => v.visit_methods_block(meth),
-        ast::TopLevelItem::ConstDefinition(def) => v.visit_const_definition(def),
+        ast::TopLevelItemKind::FunctionDefinition(fn_def) => v.visit_fn_def(fn_def),
+        ast::TopLevelItemKind::TypeDefinition(t_def) => v.visit_type_def(t_def),
+        ast::TopLevelItemKind::MethodsBlock(meth) => v.visit_methods_block(meth),
+        ast::TopLevelItemKind::ConstDefinition(def) => v.visit_const_definition(def),
     }
 }
 
@@ -634,4 +641,8 @@ pub fn walk_let_rec<'ast, V: Visitor<'ast>>(
     for def in definitions {
         v.visit_local_function_def(def);
     }
+}
+
+pub fn walk_top_level_item<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::TopLevelItem) {
+    v.visit_top_level_item_kind(&node.kind)
 }

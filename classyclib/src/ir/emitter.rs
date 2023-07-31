@@ -44,7 +44,11 @@ impl SourceEmitter {
         tenv: &TypeEnv,
     ) -> HashMap<String, IrFunction> {
         for decl in program.items {
-            if let ast::TopLevelItem::FunctionDefinition(def) = decl {
+            if let ast::TopLevelItem {
+                id: _,
+                kind: ast::TopLevelItemKind::FunctionDefinition(def),
+            } = decl
+            {
                 let emmiter = FunctionEmitter::new(tctx, tenv);
                 let instrcs = emmiter.emit_fn(&def);
                 self.functions.insert(def.name, instrcs);

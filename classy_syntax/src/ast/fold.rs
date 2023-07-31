@@ -2,12 +2,11 @@ use std::collections::HashMap;
 
 use crate::ast::{
     DefinedType, Expr, ExprKind, FunctionDefinition, Path, Pattern, PatternKind, Program,
-    TopLevelItem, Typ, TypeDefinition, TypeVariable, TypedName,
+    TopLevelItemKind, Typ, TypeDefinition, TypeVariable, TypedName,
 };
 
-use super::{ConstDefinition, MethodsBlock};
+use super::{ConstDefinition, MethodsBlock, TopLevelItem};
 
-/// TODO: Not all travelsal methods are implemented yet.
 pub trait Folder: Sized {
     fn fold_program(&mut self, program: Program) -> Program {
         fold_program(self, program)
@@ -15,6 +14,10 @@ pub trait Folder: Sized {
 
     fn fold_top_level_item(&mut self, item: TopLevelItem) -> TopLevelItem {
         fold_top_level_item(self, item)
+    }
+
+    fn fold_top_level_item_kind(&mut self, item: TopLevelItemKind) -> TopLevelItemKind {
+        fold_top_level_item_kind(self, item)
     }
 
     fn fold_function_definition(&mut self, def: FunctionDefinition) -> FunctionDefinition {
@@ -312,19 +315,22 @@ pub fn fold_program<F: Folder>(folder: &mut F, program: Program) -> Program {
     Program { items: new_items }
 }
 
-pub fn fold_top_level_item<F: Folder>(folder: &mut F, item: TopLevelItem) -> TopLevelItem {
+pub fn fold_top_level_item_kind<F: Folder>(
+    folder: &mut F,
+    item: TopLevelItemKind,
+) -> TopLevelItemKind {
     match item {
-        TopLevelItem::FunctionDefinition(def) => {
-            TopLevelItem::FunctionDefinition(folder.fold_function_definition(def))
+        TopLevelItemKind::FunctionDefinition(def) => {
+            TopLevelItemKind::FunctionDefinition(folder.fold_function_definition(def))
         }
-        TopLevelItem::TypeDefinition(def) => {
-            TopLevelItem::TypeDefinition(folder.fold_type_definition(def))
+        TopLevelItemKind::TypeDefinition(def) => {
+            TopLevelItemKind::TypeDefinition(folder.fold_type_definition(def))
         }
-        TopLevelItem::MethodsBlock(meths) => {
-            TopLevelItem::MethodsBlock(folder.fold_methods_block(meths))
+        TopLevelItemKind::MethodsBlock(meths) => {
+            TopLevelItemKind::MethodsBlock(folder.fold_methods_block(meths))
         }
-        TopLevelItem::ConstDefinition(def) => {
-            TopLevelItem::ConstDefinition(folder.fold_const_definition(def))
+        TopLevelItemKind::ConstDefinition(def) => {
+            TopLevelItemKind::ConstDefinition(folder.fold_const_definition(def))
         }
     }
 }
@@ -807,5 +813,12 @@ pub fn fold_local_function_def(
         body: folder.fold_expr(def.body),
         typ: folder.fold_typ(def.typ),
         attributes: folder.fold_attributes(def.attributes),
+    }
+}
+
+pub fn fold_top_level_item(folder: &mut impl Folder, item: TopLevelItem) -> TopLevelItem {
+    TopLevelItem {
+        id: item.id,
+        kind: folder.fold_top_level_item_kind(item.kind),
     }
 }

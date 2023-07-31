@@ -209,14 +209,14 @@ impl Inference {
         inferer.next_var = next_id;
 
         for item in &ast.items {
-            match item {
-                ast::TopLevelItem::FunctionDefinition(fn_def) => {
+            match &item.kind {
+                ast::TopLevelItemKind::FunctionDefinition(fn_def) => {
                     if inferer.already_typechecked.contains(&fn_def.name) {
                         continue;
                     }
                     let _ = inferer.infer_function(tctx, fn_def);
                 }
-                ast::TopLevelItem::ConstDefinition(def) => {
+                ast::TopLevelItemKind::ConstDefinition(def) => {
                     inferer.infer_const_def(tctx, global_scope.clone(), def);
                 }
                 _ => continue,
@@ -398,7 +398,7 @@ impl Inference {
                         .nodes
                         .iter()
                         .find_map(|(_, def)| match def {
-                            ast::TopLevelItem::FunctionDefinition(fn_def)
+                            ast::TopLevelItemKind::FunctionDefinition(fn_def)
                                 if fn_def.name == *name =>
                             {
                                 Some(fn_def)
