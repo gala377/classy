@@ -179,6 +179,7 @@ impl TypCtx {
         self.definitions.insert(id, typ);
     }
 
+    // we want to get rid of that somehow
     fn next_id(&mut self) -> TypeId {
         let res = self.next_id;
         self.next_id += 1;

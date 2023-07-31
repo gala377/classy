@@ -1,11 +1,11 @@
 use classy_syntax::ast::{self, Folder};
 
-use crate::{id_provider, session::Session};
+use crate::session::{Session, SharedIdProvider};
 
 use super::AstPass;
 
 pub struct AssignAstIds {
-    id_provider: Option<id_provider::IdProvider>,
+    id_provider: Option<SharedIdProvider>,
 }
 
 impl AssignAstIds {

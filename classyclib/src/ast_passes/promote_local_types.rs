@@ -1,11 +1,11 @@
 use classy_syntax::ast::{self, Folder};
 
-use crate::session::Session;
+use crate::{id_provider::IdProvider, session::Session};
 
 use super::AstPass;
 
 pub struct PromoteAnonTypes {
-    id: usize,
+    id_provider: IdProvider,
     types_to_promote: Vec<(String, ast::Record)>,
     current_function: String,
 }
@@ -25,16 +25,12 @@ impl Default for PromoteAnonTypes {
 impl PromoteAnonTypes {
     pub fn new() -> Self {
         Self {
-            id: 0,
+            // we want this to be explicitly new one and not the one shared in the session.
+            // The reason for that is that we do not care about the uniqueness of the ids here.
+            id_provider: IdProvider::new(),
             current_function: "<not in function>".to_owned(),
             types_to_promote: Vec::new(),
         }
-    }
-
-    pub fn next_id(&mut self) -> usize {
-        let id = self.id;
-        self.id += 1;
-        id
     }
 }
 
@@ -67,7 +63,7 @@ impl Folder for PromoteAnonTypes {
     }
 
     fn fold_anon_type(&mut self, fields: Vec<(String, ast::Expr)>) -> ast::ExprKind {
-        let id = self.next_id();
+        let id = self.id_provider.next();
         let name = format!("{}@anon_{}", self.current_function, id);
         let record_fields = fields
             .iter()

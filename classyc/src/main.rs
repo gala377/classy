@@ -83,7 +83,7 @@ fn compile(
         println!("AST: {:#?}", res);
         return None;
     }
-    let tenv = typecheck::run(&mut tctx, &res);
+    let tenv = typecheck::run(&mut tctx, &res, &sess);
 
     let mut constant_pool = ConstantPool::new();
     let mut functions = HashMap::new();

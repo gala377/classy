@@ -19,4 +19,8 @@ impl IdProvider {
         self.id.set(id + 1);
         id
     }
+
+    pub fn last(&self) -> UniqueId {
+        self.id.get()
+    }
 }

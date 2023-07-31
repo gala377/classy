@@ -1,9 +1,12 @@
 use core::panic;
 use std::collections::{HashMap, VecDeque};
 
-use crate::typecheck::{
-    constraints::Constraint,
-    r#type::{Type, TypeFolder},
+use crate::{
+    session::SharedIdProvider,
+    typecheck::{
+        constraints::Constraint,
+        r#type::{Type, TypeFolder},
+    },
 };
 
 use super::{r#type::DeBruijn, type_context::TypCtx};
@@ -24,15 +27,15 @@ impl TypeFolder for FreshTypeReplacer {
 pub(super) struct ConstraintSolver<'ctx> {
     pub substitutions: Vec<(usize, Type)>,
     pub tctx: &'ctx TypCtx,
-    pub next_var: usize,
+    pub id_provider: SharedIdProvider,
 }
 
 impl<'ctx> ConstraintSolver<'ctx> {
-    pub fn new(next_var: usize, tctx: &'ctx TypCtx) -> Self {
+    pub fn new(tctx: &'ctx TypCtx, id_provider: SharedIdProvider) -> Self {
         Self {
             substitutions: Vec::new(),
             tctx,
-            next_var,
+            id_provider,
         }
     }
 
@@ -327,9 +330,7 @@ impl<'ctx> ConstraintSolver<'ctx> {
     }
 
     fn fresh_type(&mut self) -> Type {
-        let var = self.next_var;
-        self.next_var += 1;
-        Type::Fresh(var)
+        Type::Fresh(self.id_provider.next())
     }
 }
 

@@ -6,13 +6,17 @@ use std::{
 
 use classy_syntax::ast::{self, ExprKind, Visitor};
 
-use crate::typecheck::{
-    constraints::Constraint,
-    constrait_solver::{instance, ConstraintSolver, FreshTypeReplacer},
-    fix_fresh::{self, generalize_type_above, generalize_types},
-    r#type::{Type, TypeFolder},
-    scope::Scope,
-    type_context::TypCtx,
+use crate::{
+    id_provider::UniqueId,
+    session::{Session, SharedIdProvider},
+    typecheck::{
+        constraints::Constraint,
+        constrait_solver::{instance, ConstraintSolver, FreshTypeReplacer},
+        fix_fresh::{self, generalize_type_above, generalize_types},
+        r#type::{Type, TypeFolder},
+        scope::Scope,
+        type_context::TypCtx,
+    },
 };
 
 use super::{ast_to_type::PrefexScope, r#type::DeBruijn};
@@ -20,9 +24,10 @@ use super::{ast_to_type::PrefexScope, r#type::DeBruijn};
 /// Maps unique node id in the ast with its type.
 pub type TypeEnv = HashMap<usize, Type>;
 
-pub fn run(tctx: &mut TypCtx, ast: &ast::Program) -> TypeEnv {
+pub fn run(tctx: &mut TypCtx, ast: &ast::Program, session: &Session) -> TypeEnv {
     tctx.remove_to_infere_type();
-    let mut cons = Inference::infer_types(tctx, ast);
+
+    let mut cons = Inference::infer_types(tctx, ast, session);
 
     println!("{}", tctx.debug_string());
     println!("SUBSTITUTIONS");
@@ -59,32 +64,34 @@ impl<'ast> ast::Visitor<'ast> for GetNode {
     }
 }
 
-pub(super) struct Inference {
+pub(super) struct Inference<'sess> {
     // the scope, maps names to types
     scope: Rc<RefCell<Scope>>,
     // allows matching expression ids with types
-    env: HashMap<usize, Type>,
+    env: HashMap<UniqueId, Type>,
     constraints: Vec<Constraint>,
-    next_var: usize,
     ret_t: Option<Type>,
     call_stack: Vec<String>,
     already_typechecked: HashSet<String>,
     typecheck_until_generalization: HashSet<String>,
     generalize_after: usize,
+    id_provider: SharedIdProvider,
+    session: &'sess Session,
 }
 
-impl Inference {
-    pub fn new(scope: Rc<RefCell<Scope>>) -> Self {
+impl<'sess> Inference<'sess> {
+    pub fn new(scope: Rc<RefCell<Scope>>, session: &'sess Session) -> Self {
         Self {
             scope,
             env: HashMap::new(),
             constraints: Vec::new(),
-            next_var: 0,
+            id_provider: session.id_provider(),
             ret_t: None,
             already_typechecked: HashSet::new(),
             typecheck_until_generalization: HashSet::new(),
             call_stack: Vec::new(),
             generalize_after: 0,
+            session,
         }
     }
 
@@ -101,12 +108,13 @@ impl Inference {
             scope,
             env: HashMap::new(),
             constraints: Vec::new(),
-            next_var: self.next_var,
+            id_provider: self.id_provider.clone(),
             ret_t: self.ret_t.clone(),
             call_stack: self.call_stack.clone(),
             typecheck_until_generalization: self.typecheck_until_generalization.clone(),
             already_typechecked: self.already_typechecked.clone(),
             generalize_after: self.generalize_after,
+            session: self.session,
         };
         let ret = f(&mut sub);
         self.merge(sub);
@@ -147,14 +155,14 @@ impl Inference {
             scope: global_scope.clone(),
             env: HashMap::new(),
             constraints: Vec::new(),
-            next_var: self.next_var,
+            id_provider: self.id_provider.clone(),
             ret_t: None,
             call_stack: self.call_stack.clone(),
             already_typechecked: self.already_typechecked.clone(),
             typecheck_until_generalization: self.typecheck_until_generalization.clone(),
             generalize_after: 0,
+            session: self.session,
         };
-        inferer.next_var = self.next_var;
         println!("Generating constraints for {debug_name}");
         let mut prefex = PrefexScope::new();
         inferer.generate_constrains_for_function(tctx, global_scope.clone(), &mut prefex, fn_def);
@@ -170,11 +178,10 @@ impl Inference {
             // Only now we solve constraints after we gathered all information
             // after mutally recursive calls in the call stack.
             println!("Solving constraints");
-            let mut solver = ConstraintSolver::new(inferer.next_var, tctx);
+            let mut solver = ConstraintSolver::new(tctx, self.id_provider.clone());
             let constraints = inferer.constraints.clone();
             solver.solve(constraints);
             println!("Constraints solved {debug_name}");
-            inferer.next_var = solver.next_var;
             let mut substitutions = solver.substitutions.into_iter().collect();
             fix_fresh::fix_types_after_inference(&mut substitutions, tctx, &mut inferer.env);
             // drain removes the functions from the chain so we won't try to
@@ -199,14 +206,16 @@ impl Inference {
         dbg!(tctx.type_of(&fn_def.name).unwrap())
     }
 
-    pub fn infer_types(tctx: &mut TypCtx, ast: &ast::Program) -> Self {
+    /// Entry point to typechecking.
+    ///
+    /// Creates an instance of type inferer and runs it on the program.
+    /// Then returns itself with all the information gathered.
+    pub fn infer_types(tctx: &mut TypCtx, ast: &ast::Program, session: &'sess Session) -> Self {
         // create fresh variables for anonymous types
-        let replace_to_infere = &mut ReplaceInferTypes::default();
+        let replace_to_infere = &mut ReplaceInferTypes::new(session.id_provider());
         tctx.fold_types(replace_to_infere);
-        let next_id = replace_to_infere.next_id;
         let global_scope = Rc::new(RefCell::new(Scope::from_type_ctx(tctx)));
-        let mut inferer = Inference::new(global_scope.clone());
-        inferer.next_var = next_id;
+        let mut inferer = Inference::new(global_scope.clone(), session);
 
         for item in &ast.items {
             match &item.kind {
@@ -285,14 +294,14 @@ impl Inference {
             scope: global_scope.clone(),
             env: HashMap::new(),
             constraints: Vec::new(),
-            next_var: self.next_var,
             ret_t: None,
             call_stack: self.call_stack.clone(),
             already_typechecked: self.already_typechecked.clone(),
             typecheck_until_generalization: self.typecheck_until_generalization.clone(),
             generalize_after: 0,
+            id_provider: self.id_provider.clone(),
+            session: self.session,
         };
-        inferer.next_var = self.next_var;
         let const_actual_type = {
             let const_scope = Scope::new(global_scope.clone());
             inferer.in_scope(const_scope.clone(), |scope| {
@@ -304,10 +313,9 @@ impl Inference {
         inferer
             .constraints
             .push(Constraint::Eq(const_actual_type, t));
-        let mut solver = ConstraintSolver::new(inferer.next_var, tctx);
+        let mut solver = ConstraintSolver::new(tctx, self.id_provider.clone());
         let constraints = inferer.constraints.clone();
         solver.solve(constraints);
-        inferer.next_var = solver.next_var;
         let mut substitutions = solver.substitutions.into_iter().collect();
         fix_fresh::fix_types_after_inference(&mut substitutions, tctx, &mut inferer.env);
         generalize_types(tctx, &name, global_scope.clone(), &mut inferer.env);
@@ -322,7 +330,6 @@ impl Inference {
 
     pub fn merge_without_constraints(&mut self, other: Self) {
         self.env.extend(other.env);
-        self.next_var = other.next_var;
         // not sure we need extend here but it is just for safety
         self.already_typechecked.extend(other.already_typechecked);
         self.generalize_after = std::cmp::max(self.generalize_after, other.generalize_after);
@@ -888,7 +895,7 @@ impl Inference {
         prefex_scope: &mut PrefexScope,
         tctx: &mut TypCtx,
     ) {
-        let fresh_types_below = self.next_var;
+        let fresh_types_below = self.id_provider.last();
         // Add definitions with their types
         println!("INFERING LET REC");
         println!("DEFINITIONS {definitions:?}");
@@ -904,14 +911,14 @@ impl Inference {
             scope: self.scope.clone(),
             env: HashMap::new(),
             constraints: Vec::new(),
-            next_var: self.next_var,
+            id_provider: self.id_provider.clone(),
             ret_t: None,
             call_stack: self.call_stack.clone(),
             already_typechecked: self.already_typechecked.clone(),
             typecheck_until_generalization: self.typecheck_until_generalization.clone(),
             generalize_after: 0,
+            session: self.session,
         };
-        inferer.next_var = self.next_var;
         for def in definitions {
             inferer.generate_constrains_for_function(tctx, self.scope.clone(), prefex_scope, def);
         }
@@ -922,10 +929,9 @@ impl Inference {
            TODO: During this solcing constraint solver looks up name
            for type of "arg" which is Generic(0, 0), it should be generic(1, 0)
         */
-        let mut solver = ConstraintSolver::new(inferer.next_var, tctx);
+        let mut solver = ConstraintSolver::new(tctx, self.id_provider.clone());
         let constraints = inferer.constraints.clone();
         solver.solve(constraints);
-        inferer.next_var = solver.next_var;
         let mut substitutions = solver.substitutions.into_iter().collect();
         fix_fresh::fix_types_after_inference(&mut substitutions, tctx, &mut inferer.env);
         println!("Constraints are solved");
@@ -954,9 +960,7 @@ impl Inference {
     }
 
     fn fresh_type(&mut self) -> Type {
-        let var = self.next_var;
-        self.next_var += 1;
-        Type::Fresh(var)
+        Type::Fresh(self.id_provider.next())
     }
 
     fn instance_if_possible(&mut self, t: &Type) -> Type {
@@ -1115,16 +1119,19 @@ impl Inference {
     }
 }
 
-#[derive(Default)]
 struct ReplaceInferTypes {
-    next_id: usize,
+    id_provider: SharedIdProvider,
+}
+
+impl ReplaceInferTypes {
+    fn new(id_provider: SharedIdProvider) -> Self {
+        Self { id_provider }
+    }
 }
 
 impl TypeFolder for ReplaceInferTypes {
     fn fold_to_infere(&mut self) -> Type {
-        let id = self.next_id;
-        self.next_id += 1;
-        Type::Fresh(id)
+        Type::Fresh(self.id_provider.next())
     }
 }
 
@@ -1173,7 +1180,7 @@ mod tests {
         let res = ast_passes::run_befor_type_context_passes(res, &sess);
         let mut tctx = typecheck::prepare_for_typechecking(&res);
         let res = ast_passes::run_before_typechecking_passes(&tctx, res, &sess);
-        typecheck::inference::run(&mut tctx, &res);
+        typecheck::inference::run(&mut tctx, &res, &sess);
         println!("Final ast {res:#?}");
     }
 
