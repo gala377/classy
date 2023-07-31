@@ -1160,6 +1160,7 @@ impl TypeFolder for RequiresTypeChecking {
 mod tests {
     use crate::{
         ast_passes::{self},
+        session::Session,
         typecheck,
     };
     use classy_syntax::{lexer::Lexer, parser::Parser};
@@ -1168,9 +1169,10 @@ mod tests {
         let lex = Lexer::new(source);
         let mut parser = Parser::new(lex);
         let res = parser.parse().unwrap();
-        let res = ast_passes::run_befor_type_context_passes(res);
+        let sess = Session::new();
+        let res = ast_passes::run_befor_type_context_passes(res, &sess);
         let mut tctx = typecheck::prepare_for_typechecking(&res);
-        let res = ast_passes::run_before_typechecking_passes(&tctx, res);
+        let res = ast_passes::run_before_typechecking_passes(&tctx, res, &sess);
         typecheck::inference::run(&mut tctx, &res);
         println!("Final ast {res:#?}");
     }
