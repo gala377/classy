@@ -291,7 +291,7 @@ impl Path {
 impl Expr {
     pub fn pretty(&self) -> String {
         match &self.kind {
-            ExprKind::Unit => "".to_string(),
+            ExprKind::Unit => "()".to_string(),
             ExprKind::Sequence(exprs) => {
                 let mut res = "seq { ".to_string();
                 for expr in exprs {

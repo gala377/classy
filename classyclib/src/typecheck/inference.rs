@@ -43,7 +43,9 @@ pub fn run(tctx: &mut TypCtx, ast: &ast::Program, session: &Session) -> TypeEnv 
         println!(
             "{} -> {typ_repr:<25}|{:<50}",
             id,
-            node.found.unwrap().pretty()
+            node.found
+                .map(|x| x.pretty())
+                .unwrap_or_else(|| "NOT FOUND".to_owned()),
         );
     }
     remove_aliases_in_env(&mut cons.env, tctx);
@@ -1337,8 +1339,8 @@ mod tests {
             main {
                 let a = Foo { a = 1;  b = "Hello"}
                 let anon = type { foo = a; bar = "World" }
-                is_foo anon.foo
-                is_string anon.bar
+                is_foo(anon.foo)
+                is_string(anon.bar)
             }
         "#;
         run_typechecker(source)
@@ -1353,7 +1355,7 @@ mod tests {
             main: () -> ()
             main {
                 let anon = type { a = type { b = type { c = "Hello" } } }
-                is_string anon.a.b.c
+                is_string(anon.a.b.c)
             }
         "#;
         run_typechecker(source)
@@ -1433,7 +1435,7 @@ mod tests {
             main: () -> ()
             main {
                 let arr = array[1]
-                is_int arr[0]
+                is_int(arr[0])
             }
         "#;
         run_typechecker(source)
@@ -1450,7 +1452,7 @@ mod tests {
             main {
                 let arr = array[1]
                 let a: String = arr[0]
-                is_int arr[0]
+                is_int(arr[0])
             }
         "#;
         run_typechecker(source)
@@ -1466,7 +1468,7 @@ mod tests {
             main {
                 let arr = array[1]
                 arr[0] = 1
-                is_int arr[0]
+                is_int(arr[0])
             }
         "#;
         run_typechecker(source)
