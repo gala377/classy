@@ -1,7 +1,6 @@
-
 use classy_syntax::ast::{self, Folder};
 
-use crate::scope::Scope;
+use crate::{scope::Scope, session::Session};
 
 use super::AstPass;
 
@@ -23,7 +22,7 @@ impl ImplicitForall {
 }
 
 impl AstPass for ImplicitForall {
-    fn run(&mut self, ast: ast::Program) -> ast::Program {
+    fn run(&mut self, ast: ast::Program, _: &Session) -> ast::Program {
         self.fold_program(ast)
     }
 }

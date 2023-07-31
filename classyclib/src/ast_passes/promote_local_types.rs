@@ -1,5 +1,7 @@
 use classy_syntax::ast::{self, Folder};
 
+use crate::session::Session;
+
 use super::AstPass;
 
 pub struct PromoteAnonTypes {
@@ -9,7 +11,7 @@ pub struct PromoteAnonTypes {
 }
 
 impl AstPass for PromoteAnonTypes {
-    fn run(&mut self, ast: ast::Program) -> ast::Program {
+    fn run(&mut self, ast: ast::Program, _: &Session) -> ast::Program {
         self.fold_program(ast)
     }
 }

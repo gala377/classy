@@ -1,5 +1,7 @@
 use classy_syntax::ast::{self, Visitor};
 
+use crate::session::Session;
+
 use super::AstPass;
 pub struct VerifyLvalues;
 
@@ -23,7 +25,7 @@ impl<'ast> ast::Visitor<'ast> for VerifyLvalues {
 }
 
 impl AstPass for VerifyLvalues {
-    fn run(&mut self, ast: ast::Program) -> ast::Program {
+    fn run(&mut self, ast: ast::Program, _: &Session) -> ast::Program {
         self.visit(&ast);
         ast
     }

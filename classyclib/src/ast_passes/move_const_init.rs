@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use classy_syntax::ast::{self, Folder, Visitor};
 
+use crate::session::Session;
+
 use super::AstPass;
 
 pub struct MoveConstInit {
@@ -17,7 +19,7 @@ impl MoveConstInit {
 }
 
 impl AstPass for MoveConstInit {
-    fn run(&mut self, ast: ast::Program) -> ast::Program {
+    fn run(&mut self, ast: ast::Program, _: &Session) -> ast::Program {
         self.visit(&ast);
         self.fold_program(ast)
     }

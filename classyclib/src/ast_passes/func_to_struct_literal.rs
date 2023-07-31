@@ -1,6 +1,7 @@
 use classy_syntax::ast::{self, ExprKind};
 
 use crate::ast_passes;
+use crate::session::Session;
 use crate::typecheck::r#type::Type;
 use crate::typecheck::type_context::TypCtx;
 
@@ -196,7 +197,7 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
 }
 
 impl<'ctx> ast_passes::AstPass for PromoteCallToStructLiteral<'ctx> {
-    fn run(&mut self, ast: ast::Program) -> ast::Program {
+    fn run(&mut self, ast: ast::Program, _: &Session) -> ast::Program {
         ast::fold::fold_program(self, ast)
     }
 }
@@ -310,7 +311,8 @@ mod tests {
         let ast = parser.parse().unwrap();
         let tctx = typecheck::prepare_for_typechecking(&ast);
         let mut pass = PromoteCallToStructLiteral::new(&tctx);
-        let actual = pass.run(ast);
+        let sess = crate::session::Session::new();
+        let actual = pass.run(ast, &sess);
         similar_asserts::assert_eq!(expected: expected, actual: actual.to_sexpr());
     }
 
