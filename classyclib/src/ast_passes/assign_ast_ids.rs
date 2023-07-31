@@ -2,29 +2,29 @@ use classy_syntax::ast::{self, Folder};
 
 use super::AstPass;
 
-pub struct AssignExprId {
+pub struct AssignAstIds {
     id: usize,
 }
 
-impl Default for AssignExprId {
+impl Default for AssignAstIds {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl AssignExprId {
+impl AssignAstIds {
     pub fn new() -> Self {
         Self { id: 1 }
     }
 }
 
-impl AstPass for AssignExprId {
+impl AstPass for AssignAstIds {
     fn run(&mut self, ast: ast::Program) -> ast::Program {
         self.fold_program(ast)
     }
 }
 
-impl Folder for AssignExprId {
+impl Folder for AssignAstIds {
     fn fold_expr(&mut self, expr: ast::Expr) -> ast::Expr {
         let mut expr = ast::fold::fold_expr(self, expr);
         expr.id = self.id;
@@ -37,5 +37,12 @@ impl Folder for AssignExprId {
         pat.id = self.id;
         self.id += 1;
         pat
+    }
+
+    fn fold_top_level_item(&mut self, item: ast::TopLevelItem) -> ast::TopLevelItem {
+        let mut item = ast::fold::fold_top_level_item(self, item);
+        item.id = self.id;
+        self.id += 1;
+        item
     }
 }

@@ -2,7 +2,7 @@ use classy_syntax::ast;
 
 use crate::typecheck::type_context::TypCtx;
 
-pub mod assign_expr_id;
+pub mod assign_ast_ids;
 pub mod func_to_struct_literal;
 pub mod gather_runtime_functions;
 pub mod implicit_forall;
@@ -20,7 +20,8 @@ pub fn run_befor_type_context_passes(ast: ast::Program) -> ast::Program {
     let ast = promote_local_types::PromoteAnonTypes::new().run(ast);
     let ast = implicit_forall::ImplicitForall::new().run(ast);
     let ast = move_const_init::MoveConstInit::new().run(ast);
-    assign_expr_id::AssignExprId::new().run(ast)
+    let ast = assign_ast_ids::AssignAstIds::new().run(ast);
+    ast
 }
 
 pub fn run_before_typechecking_passes(tctx: &TypCtx, ast: ast::Program) -> ast::Program {
