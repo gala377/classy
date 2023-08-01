@@ -2,8 +2,8 @@ use classy_syntax::ast::{self, ExprKind};
 
 use crate::ast_passes;
 use crate::session::Session;
-use crate::typecheck::types::Type;
 use crate::typecheck::type_context::TypCtx;
+use crate::typecheck::types::Type;
 
 /// TODO: We should have a scope there
 /// in case someone uses variables with the same name as the types
@@ -337,9 +337,11 @@ mod tests {
             type Foo {bar: Int; baz: Int}
             main: () -> (); main = Foo { bar=1; baz=2 } 
         "#;
-        run_test(input, sexpr!((
+        run_test(
+            input,
+            sexpr!((
             (type Foo [] {
-                record 
+                record
                     [bar (poly [] Int)]
                     [baz (poly [] Int)]
             })
@@ -353,7 +355,8 @@ mod tests {
                     }
                 }
             )
-        )))
+        )),
+        )
     }
 
     #[test]
@@ -363,9 +366,11 @@ mod tests {
 
          main = Foo {}
         "#;
-        run_test(input, sexpr!((
+        run_test(
+            input,
+            sexpr!((
             (type Foo [] {
-                record 
+                record
             })
 
             (fn {}
@@ -374,6 +379,7 @@ mod tests {
                     struct Foo {}
                 }
             )
-        )))
+        )),
+        )
     }
 }
