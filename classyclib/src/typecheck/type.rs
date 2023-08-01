@@ -1,4 +1,4 @@
-use std::ops::{Add, AddAssign, Sub, SubAssign};
+use std::ops::{Add, AddAssign, ControlFlow, Sub, SubAssign};
 
 use crate::typecheck::type_context::{Name, TypeId};
 
@@ -140,91 +140,105 @@ impl SubAssign<isize> for DeBruijn {
 }
 
 pub trait TypeFolder: Sized {
-    fn fold_type(&mut self, typ: Type) -> Type {
+    type Error: std::fmt::Debug;
+
+    fn fold_type(&mut self, typ: Type) -> Result<Type, Self::Error> {
         fold_type(self, typ)
     }
 
-    fn fold_int(&mut self) -> Type {
-        Type::Int
+    fn fold_int(&mut self) -> Result<Type, Self::Error> {
+        Result::Ok(Type::Int)
     }
 
-    fn fold_byte(&mut self) -> Type {
-        Type::Byte
+    fn fold_byte(&mut self) -> Result<Type, Self::Error> {
+        Result::Ok(Type::Byte)
     }
 
-    fn fold_uint(&mut self) -> Type {
-        Type::UInt
+    fn fold_uint(&mut self) -> Result<Type, Self::Error> {
+        Result::Ok(Type::UInt)
     }
 
-    fn fold_divergent(&mut self) -> Type {
-        Type::Divergent
+    fn fold_divergent(&mut self) -> Result<Type, Self::Error> {
+        Result::Ok(Type::Divergent)
     }
 
-    fn fold_alias(&mut self, for_type: usize) -> Type {
-        Type::Alias(for_type)
+    fn fold_alias(&mut self, for_type: usize) -> Result<Type, Self::Error> {
+        Result::Ok(Type::Alias(for_type))
     }
 
-    fn fold_bool(&mut self) -> Type {
-        Type::Bool
+    fn fold_bool(&mut self) -> Result<Type, Self::Error> {
+        Result::Ok(Type::Bool)
     }
-    fn fold_float(&mut self) -> Type {
-        Type::Float
+    fn fold_float(&mut self) -> Result<Type, Self::Error> {
+        Result::Ok(Type::Float)
     }
-    fn fold_unit(&mut self) -> Type {
-        Type::Unit
+    fn fold_unit(&mut self) -> Result<Type, Self::Error> {
+        Result::Ok(Type::Unit)
     }
-    fn fold_string(&mut self) -> Type {
-        Type::String
+    fn fold_string(&mut self) -> Result<Type, Self::Error> {
+        Result::Ok(Type::String)
     }
 
-    fn fold_tuple(&mut self, types: Vec<Type>) -> Type {
+    fn fold_tuple(&mut self, types: Vec<Type>) -> Result<Type, Self::Error> {
         fold_tuple(self, types)
     }
 
-    fn fold_to_infere(&mut self) -> Type {
-        Type::ToInfere
+    fn fold_to_infere(&mut self) -> Result<Type, Self::Error> {
+        Ok(Type::ToInfere)
     }
 
-    fn fold_fresh(&mut self, id: usize) -> Type {
-        Type::Fresh(id)
+    fn fold_fresh(&mut self, id: usize) -> Result<Type, Self::Error> {
+        Ok(Type::Fresh(id))
     }
 
-    fn fold_generic(&mut self, debruijn: DeBruijn, id: usize) -> Type {
-        Type::Generic(debruijn, id)
+    fn fold_generic(&mut self, debruijn: DeBruijn, id: usize) -> Result<Type, Self::Error> {
+        Ok(Type::Generic(debruijn, id))
     }
 
-    fn fold_function(&mut self, args: Vec<Type>, ret: Type) -> Type {
+    fn fold_function(&mut self, args: Vec<Type>, ret: Type) -> Result<Type, Self::Error> {
         fold_function(self, args, ret)
     }
 
-    fn fold_struct(&mut self, def: usize, fields: Vec<(String, Type)>) -> Type {
+    fn fold_struct(
+        &mut self,
+        def: usize,
+        fields: Vec<(String, Type)>,
+    ) -> Result<Type, Self::Error> {
         fold_struct(self, def, fields)
     }
 
-    fn fold_array(&mut self, arr_t: Type) -> Type {
+    fn fold_array(&mut self, arr_t: Type) -> Result<Type, Self::Error> {
         fold_array(self, arr_t)
     }
 
-    fn fold_scheme(&mut self, prefex: Vec<Name>, typ: Type) -> Type {
+    fn fold_scheme(&mut self, prefex: Vec<Name>, typ: Type) -> Result<Type, Self::Error> {
         fold_scheme(self, prefex, typ)
     }
 
-    fn fold_application(&mut self, typ: Type, args: Vec<Type>) -> Type {
+    fn fold_application(&mut self, typ: Type, args: Vec<Type>) -> Result<Type, Self::Error> {
         fold_application(self, typ, args)
     }
-    fn fold_adt(&mut self, def: usize, constructors: Vec<(String, Type)>) -> Type {
+    fn fold_adt(
+        &mut self,
+        def: usize,
+        constructors: Vec<(String, Type)>,
+    ) -> Result<Type, Self::Error> {
         fold_adt(self, def, constructors)
     }
 }
 
-pub fn fold_scheme(folder: &mut impl TypeFolder, prefex: Vec<Name>, typ: Type) -> Type {
-    Type::Scheme {
+pub fn fold_scheme<T: TypeFolder>(
+    folder: &mut T,
+    prefex: Vec<Name>,
+    typ: Type,
+) -> Result<Type, T::Error> {
+    Ok(Type::Scheme {
         prefex,
-        typ: Box::new(folder.fold_type(typ)),
-    }
+        typ: Box::new(folder.fold_type(typ)?),
+    })
 }
 
-pub fn fold_type(folder: &mut impl TypeFolder, typ: Type) -> Type {
+pub fn fold_type<T: TypeFolder>(folder: &mut T, typ: Type) -> Result<Type, T::Error> {
     match typ {
         Type::Int => folder.fold_int(),
         Type::UInt => folder.fold_uint(),
@@ -248,38 +262,71 @@ pub fn fold_type(folder: &mut impl TypeFolder, typ: Type) -> Type {
     }
 }
 
-pub fn fold_tuple(folder: &mut impl TypeFolder, types: Vec<Type>) -> Type {
-    let types = types.into_iter().map(|t| folder.fold_type(t));
-    Type::Tuple(types.collect())
+pub fn fold_tuple<T: TypeFolder>(folder: &mut T, types: Vec<Type>) -> Result<Type, T::Error> {
+    let types = types
+        .into_iter()
+        .map(|t| folder.fold_type(t))
+        .collect::<Result<_, _>>()?;
+    Ok(Type::Tuple(types))
 }
 
-pub fn fold_function(folder: &mut impl TypeFolder, args: Vec<Type>, ret: Type) -> Type {
-    let args = args.into_iter().map(|t| folder.fold_type(t)).collect();
-    let ret = folder.fold_type(ret);
-    Type::Function {
+pub fn fold_function<T: TypeFolder>(
+    folder: &mut T,
+    args: Vec<Type>,
+    ret: Type,
+) -> Result<Type, T::Error> {
+    let args = args
+        .into_iter()
+        .map(|t| folder.fold_type(t))
+        .collect::<Result<_, _>>()?;
+    let ret = folder.fold_type(ret)?;
+    Ok(Type::Function {
         args,
         ret: Box::new(ret),
-    }
+    })
 }
 
-pub fn fold_struct(folder: &mut impl TypeFolder, def: usize, fields: Vec<(String, Type)>) -> Type {
+pub fn fold_struct<T: TypeFolder>(
+    folder: &mut T,
+    def: usize,
+    fields: Vec<(String, Type)>,
+) -> Result<Type, T::Error> {
     let fields = fields
         .into_iter()
-        .map(|(name, t)| (name, folder.fold_type(t)))
-        .collect();
-    Type::Struct { def, fields }
+        .map(|(name, t)| folder.fold_type(t).map(|t| (name, t)))
+        .collect::<Result<_, _>>()?;
+    Ok(Type::Struct { def, fields })
 }
 
-pub fn fold_array(folder: &mut impl TypeFolder, arr_t: Type) -> Type {
-    Type::Array(Box::new(folder.fold_type(arr_t)))
+pub fn fold_array<T: TypeFolder>(folder: &mut T, arr_t: Type) -> Result<Type, T::Error> {
+    Ok(Type::Array(Box::new(folder.fold_type(arr_t)?)))
 }
 
-pub fn fold_application(folder: &mut impl TypeFolder, typ: Type, args: Vec<Type>) -> Type {
-    let args = args.into_iter().map(|t| folder.fold_type(t)).collect();
-    Type::App {
-        typ: Box::new(folder.fold_type(typ)),
+pub fn fold_application<T: TypeFolder>(
+    folder: &mut T,
+    typ: Type,
+    args: Vec<Type>,
+) -> Result<Type, T::Error> {
+    let args = args
+        .into_iter()
+        .map(|t| folder.fold_type(t))
+        .collect::<Result<_, _>>()?;
+    Ok(Type::App {
+        typ: Box::new(folder.fold_type(typ)?),
         args,
-    }
+    })
+}
+
+fn fold_adt<T: TypeFolder>(
+    folder: &mut T,
+    def: usize,
+    constructors: Vec<(String, Type)>,
+) -> Result<Type, T::Error> {
+    let constructors = constructors
+        .into_iter()
+        .map(|(name, t)| folder.fold_type(t).map(|t| (name, t)))
+        .collect::<Result<_, _>>()?;
+    Ok(Type::ADT { def, constructors })
 }
 
 pub fn types_eq(ctx: &TypCtx, t1: &Type, t2: &Type) -> bool {
@@ -364,12 +411,4 @@ pub fn types_eq(ctx: &TypCtx, t1: &Type, t2: &Type) -> bool {
         }
         _ => false,
     }
-}
-
-fn fold_adt(folder: &mut impl TypeFolder, def: usize, constructors: Vec<(String, Type)>) -> Type {
-    let constructors = constructors
-        .into_iter()
-        .map(|(name, t)| (name, folder.fold_type(t)))
-        .collect();
-    Type::ADT { def, constructors }
 }

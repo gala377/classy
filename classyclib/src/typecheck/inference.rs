@@ -942,7 +942,7 @@ impl<'sess> Inference<'sess> {
         };
         for def in definitions {
             let t = self.scope.borrow().type_of(&def.name).unwrap();
-            let new_t = replacer.fold_type(t);
+            let new_t = replacer.fold_type(t).unwrap();
             self.scope.borrow_mut().add_variable(&def.name, new_t);
             generalize_type_above(
                 fresh_types_below,
@@ -1132,8 +1132,9 @@ impl ReplaceInferTypes {
 }
 
 impl TypeFolder for ReplaceInferTypes {
-    fn fold_to_infere(&mut self) -> Type {
-        Type::Fresh(self.id_provider.next())
+    type Error = ();
+    fn fold_to_infere(&mut self) -> Result<Type, ()> {
+        Ok(Type::Fresh(self.id_provider.next()))
     }
 }
 
@@ -1159,9 +1160,10 @@ struct RequiresTypeChecking {
 }
 
 impl TypeFolder for RequiresTypeChecking {
-    fn fold_fresh(&mut self, id: usize) -> Type {
+    type Error = ();
+    fn fold_fresh(&mut self, id: usize) -> Result<Type, ()> {
         self.requires_typechecking = true;
-        Type::Fresh(id)
+        Ok(Type::Fresh(id))
     }
 }
 

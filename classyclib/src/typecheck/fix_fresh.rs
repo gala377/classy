@@ -69,7 +69,7 @@ pub fn fix_types_in_env(substitutions: &HashMap<usize, Type>, env: &mut HashMap<
         substitutions: substitutions.clone(),
     };
     for typ in env.values_mut() {
-        *typ = replacer.fold_type(typ.clone());
+        *typ = replacer.fold_type(typ.clone()).unwrap();
     }
 }
 
@@ -81,7 +81,7 @@ fn fix_fresh_vars_in_substitutions(substitutions: &mut HashMap<usize, Type>, tct
         replacer.substitutions.insert(*id, typ.clone());
     }
     for (_, typ) in substitutions.iter_mut() {
-        *typ = replacer.fold_type(typ.clone());
+        *typ = replacer.fold_type(typ.clone()).unwrap();
     }
     tctx.fold_types(&mut replacer);
 }
@@ -92,7 +92,13 @@ struct ReplaceStructsWithAliases<'ctx> {
 }
 
 impl TypeFolder for ReplaceStructsWithAliases<'_> {
-    fn fold_struct(&mut self, def: usize, fields: Vec<(std::string::String, Type)>) -> Type {
+    type Error = ();
+
+    fn fold_struct(
+        &mut self,
+        def: usize,
+        fields: Vec<(std::string::String, Type)>,
+    ) -> Result<Type, ()> {
         if self.top_level {
             let new_folder = &mut ReplaceStructsWithAliases {
                 top_level: false,
@@ -104,7 +110,7 @@ impl TypeFolder for ReplaceStructsWithAliases<'_> {
             match self.tctx.definitions.get(&type_id).unwrap() {
                 // Only replace in case its a plain, non generic struct
                 // if its anything but that then it is probably an instantiated type
-                Type::Struct { .. } => Type::Alias(type_id),
+                Type::Struct { .. } => Ok(Type::Alias(type_id)),
                 t => self.fold_type(t.clone()),
             }
         }
@@ -117,7 +123,7 @@ fn fix_nested_types(substitutions: &mut HashMap<usize, Type>, tctx: &TypCtx) {
             top_level: true,
             tctx,
         };
-        *typ = replacer.fold_type(typ.clone());
+        *typ = replacer.fold_type(typ.clone()).unwrap();
     }
 }
 
@@ -130,7 +136,7 @@ struct GeneralizerHelper {
 
 impl GeneralizerHelper {
     pub fn generalize(&mut self, t: Type) -> Type {
-        let t = self.fold_type(t);
+        let t = self.fold_type(t).unwrap();
         if self.bindings.is_empty() {
             println!("Folded type and bindigns are empty");
             t
@@ -155,28 +161,31 @@ impl GeneralizerHelper {
 }
 
 impl TypeFolder for GeneralizerHelper {
-    fn fold_scheme(&mut self, prefex: Vec<super::type_context::Name>, typ: Type) -> Type {
+    type Error = ();
+
+    fn fold_scheme(
+        &mut self,
+        prefex: Vec<super::type_context::Name>,
+        typ: Type,
+    ) -> Result<Type, ()> {
         self.debruijn += 1;
-        let t = self.fold_type(typ);
+        let t = self.fold_type(typ)?;
         self.debruijn -= 1;
-        Type::Scheme {
+        Ok(Type::Scheme {
             prefex,
             typ: Box::new(t),
-        }
+        })
     }
 
-    fn fold_fresh(&mut self, id: usize) -> Type {
+    fn fold_fresh(&mut self, id: usize) -> Result<Type, ()> {
         if id < self.above {
-            return Type::Fresh(id);
+            return Ok(Type::Fresh(id));
         }
-        match self.bindings.get(&id) {
-            Some(t) => t.clone(),
-            None => {
-                let t = self.new_generic();
-                self.bindings.insert(id, t.clone());
-                t
-            }
-        }
+        Ok(self.bindings.get(&id).cloned().unwrap_or_else(|| {
+            let t = self.new_generic();
+            self.bindings.insert(id, t.clone());
+            t
+        }))
     }
 }
 

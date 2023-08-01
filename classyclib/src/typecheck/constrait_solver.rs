@@ -16,10 +16,11 @@ pub(super) struct FreshTypeReplacer {
 }
 
 impl TypeFolder for FreshTypeReplacer {
-    fn fold_fresh(&mut self, id: usize) -> Type {
+    type Error = ();
+    fn fold_fresh(&mut self, id: usize) -> Result<Type, ()> {
         match self.substitutions.get(&id) {
             Some(t) => self.fold_type(t.clone()),
-            None => Type::Fresh(id),
+            None => Ok(Type::Fresh(id)),
         }
     }
 }
@@ -345,18 +346,18 @@ fn replace_in_constraints(id: usize, for_t: Type, cons: &mut VecDeque<Constraint
     for c in cons {
         *c = match c {
             Constraint::Eq(t1, t2) => Constraint::Eq(
-                replacer.fold_type(t1.clone()),
-                replacer.fold_type(t2.clone()),
+                replacer.fold_type(t1.clone()).unwrap(),
+                replacer.fold_type(t2.clone()).unwrap(),
             ),
             Constraint::HasField { t, field, of_type } => Constraint::HasField {
-                t: replacer.fold_type(t.clone()),
+                t: replacer.fold_type(t.clone()).unwrap(),
                 field: field.clone(),
-                of_type: replacer.fold_type(of_type.clone()),
+                of_type: replacer.fold_type(of_type.clone()).unwrap(),
             },
             Constraint::HasCase { t, case, of_type } => Constraint::HasCase {
-                t: replacer.fold_type(t.clone()),
+                t: replacer.fold_type(t.clone()).unwrap(),
                 case: case.clone(),
-                of_type: replacer.fold_type(of_type.clone()),
+                of_type: replacer.fold_type(of_type.clone()).unwrap(),
             },
             Constraint::HasMethod {
                 receiver,
@@ -364,10 +365,14 @@ fn replace_in_constraints(id: usize, for_t: Type, cons: &mut VecDeque<Constraint
                 args,
                 ret,
             } => Constraint::HasMethod {
-                receiver: replacer.fold_type(receiver.clone()),
+                receiver: replacer.fold_type(receiver.clone()).unwrap(),
                 method: method.clone(),
-                args: args.iter().map(|t| replacer.fold_type(t.clone())).collect(),
-                ret: replacer.fold_type(ret.clone()),
+                args: args
+                    .iter()
+                    .map(|t| replacer.fold_type(t.clone()))
+                    .collect::<Result<_, _>>()
+                    .unwrap(),
+                ret: replacer.fold_type(ret.clone()).unwrap(),
             },
         }
     }
@@ -380,41 +385,46 @@ struct Instatiator<'tctx> {
 }
 
 impl<'ctx> TypeFolder for Instatiator<'ctx> {
-    fn fold_scheme(&mut self, prefex: Vec<super::type_context::Name>, typ: Type) -> Type {
+    type Error = ();
+    fn fold_scheme(
+        &mut self,
+        prefex: Vec<super::type_context::Name>,
+        typ: Type,
+    ) -> Result<Type, ()> {
         println!("Instatiating scheme {prefex:?} {typ:?}");
         self.deruijn += 1;
-        let typ = self.fold_type(typ);
+        let typ = self.fold_type(typ)?;
         self.deruijn -= 1;
         if self.deruijn == DeBruijn(-1) {
             println!("Instatiated scheme to {typ:?}");
-            return typ;
+            return Ok(typ);
         }
         println!("Not a top level so returning scheme of {typ:?}");
-        Type::Scheme {
+        Ok(Type::Scheme {
             prefex,
             typ: Box::new(typ),
-        }
+        })
     }
 
-    fn fold_generic(&mut self, def: DeBruijn, id: usize) -> Type {
+    fn fold_generic(&mut self, def: DeBruijn, id: usize) -> Result<Type, ()> {
         println!(
             "Instatiating generic {def:?} {id} current ({:?}, {})",
             self.deruijn, self.for_gen
         );
         if def != self.deruijn {
-            return Type::Generic(def, id);
+            return Ok(Type::Generic(def, id));
         }
         if self.for_gen == id {
             match &self.instatiated {
-                Type::Generic(d, i) => Type::Generic(self.deruijn.clone() + d.0, *i),
-                t => t.clone(),
+                Type::Generic(d, i) => Ok(Type::Generic(self.deruijn.clone() + d.0, *i)),
+                t => Ok(t.clone()),
             }
         } else {
-            Type::Generic(def, id)
+            Ok(Type::Generic(def, id))
         }
     }
 
-    fn fold_alias(&mut self, for_type: usize) -> Type {
+    fn fold_alias(&mut self, for_type: usize) -> Result<Type, ()> {
         println!("Resolving alias {for_type}");
         let resolved = self.tctx.resolve_alias(for_type);
         println!("Resolved alias {resolved:?}");
@@ -432,7 +442,7 @@ pub fn instance(tctx: &TypCtx, args: Vec<Type>, scheme_t: Type) -> Type {
     match &scheme_t {
         // Special case when we just need to unpack a scheme
         Type::Scheme { prefex, typ } if args.is_empty() && prefex.is_empty() => {
-            return ShiftDebruijn.fold_type(*typ.clone());
+            return ShiftDebruijn.fold_type(*typ.clone()).unwrap();
         }
         Type::Scheme { prefex, .. } => {
             assert_eq!(
@@ -456,14 +466,15 @@ pub fn instance(tctx: &TypCtx, args: Vec<Type>, scheme_t: Type) -> Type {
             tctx,
             deruijn: DeBruijn(-1),
         };
-        replacer.fold_type(acc)
+        replacer.fold_type(acc).unwrap()
     });
-    ShiftDebruijn.fold_type(new_t)
+    ShiftDebruijn.fold_type(new_t).unwrap()
 }
 
 struct ShiftDebruijn;
 impl TypeFolder for ShiftDebruijn {
-    fn fold_generic(&mut self, index: DeBruijn, pos: usize) -> Type {
-        Type::Generic(index - 1, pos)
+    type Error = ();
+    fn fold_generic(&mut self, index: DeBruijn, pos: usize) -> Result<Type, ()> {
+        Ok(Type::Generic(index - 1, pos))
     }
 }

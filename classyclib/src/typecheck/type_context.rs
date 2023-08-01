@@ -54,8 +54,9 @@ impl TypCtx {
         let new_types = self
             .definitions
             .iter()
-            .map(|(id, t)| (*id, folder.fold_type(t.clone())))
-            .collect();
+            .map(|(id, t)| folder.fold_type(t.clone()).map(|t| (*id, t)))
+            .collect::<Result<_, _>>()
+            .unwrap();
         self.definitions = new_types;
     }
 }
