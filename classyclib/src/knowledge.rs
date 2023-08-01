@@ -254,11 +254,15 @@ impl Database {
 
     pub fn hash_type(&self, typ: &Type) -> Result<u64, QueryError> {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        self.hash_with_hasher(typ, &mut hasher)?;
+        self.hash_type_with_hasher(typ, &mut hasher)?;
         Ok(hasher.finish())
     }
 
-    pub fn hash_with_hasher<H: Hasher>(&self, typ: &Type, state: &mut H) -> Result<(), QueryError> {
+    pub fn hash_type_with_hasher<H: Hasher>(
+        &self,
+        typ: &Type,
+        state: &mut H,
+    ) -> Result<(), QueryError> {
         std::mem::discriminant(typ).hash(state);
         match typ {
             Type::Struct { def, .. } => state.write_usize(*def),
@@ -268,35 +272,35 @@ impl Database {
                 // hash differently
                 state.write_usize(args.len());
                 for arg in args {
-                    self.hash_with_hasher(arg, state)?;
+                    self.hash_type_with_hasher(arg, state)?;
                 }
-                self.hash_with_hasher(ret, state)?;
+                self.hash_type_with_hasher(ret, state)?;
             }
             Type::Tuple(args) => {
                 // write length so that tuples and functions with the same number of arguments
                 // hash differently
                 state.write_usize(args.len());
                 for arg in args {
-                    self.hash_with_hasher(arg, state)?;
+                    self.hash_type_with_hasher(arg, state)?;
                 }
             }
             Type::Array(inner) => {
-                self.hash_with_hasher(inner, state)?;
+                self.hash_type_with_hasher(inner, state)?;
             }
             Type::Alias(for_type) => {
                 let resolved = self.resolve_alias(TypeId(*for_type))?.assert_resolved();
-                self.hash_with_hasher(&resolved, state)?;
+                self.hash_type_with_hasher(&resolved, state)?;
             }
             Type::ToInfere => return Err(QueryError::InvalidHash(Type::ToInfere)),
             Type::Scheme { prefex, typ } => {
                 state.write_usize(prefex.len());
-                self.hash_with_hasher(typ, state)?;
+                self.hash_type_with_hasher(typ, state)?;
             }
             Type::App { typ, args } => {
-                self.hash_with_hasher(typ, state)?;
+                self.hash_type_with_hasher(typ, state)?;
                 state.write_usize(args.len());
                 for arg in args {
-                    self.hash_with_hasher(arg, state)?;
+                    self.hash_type_with_hasher(arg, state)?;
                 }
             }
             Type::Generic(debruijn, index) => {
