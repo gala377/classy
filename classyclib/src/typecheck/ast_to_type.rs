@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use classy_syntax::ast;
 
 use super::{
-    r#type::{DeBruijn, Type},
     type_context::{MethodSet, TypCtx, TypeId},
+    types::{DeBruijn, Type},
 };
 use crate::scope::Scope;
 

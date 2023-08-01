@@ -5,8 +5,8 @@ use std::sync::Arc;
 use classyclib::code::constant_pool::ConstantPool;
 use classyclib::code::{self, Code};
 
-use classyclib::typecheck::r#type::Type;
 use classyclib::typecheck::type_context::TypCtx;
+use classyclib::typecheck::types::Type;
 
 use crate::mem::ptr::{ErasedNonNull, NonNullPtr};
 

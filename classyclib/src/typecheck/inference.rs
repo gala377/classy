@@ -13,13 +13,13 @@ use crate::{
         constraints::Constraint,
         constrait_solver::{instance, ConstraintSolver, FreshTypeReplacer},
         fix_fresh::{self, generalize_type_above, generalize_types},
-        r#type::{Type, TypeFolder},
         scope::Scope,
         type_context::TypCtx,
+        types::{Type, TypeFolder},
     },
 };
 
-use super::{ast_to_type::PrefexScope, r#type::DeBruijn};
+use super::{ast_to_type::PrefexScope, types::DeBruijn};
 
 /// Maps unique node id in the ast with its type.
 pub type TypeEnv = HashMap<usize, Type>;

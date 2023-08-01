@@ -160,15 +160,15 @@ fn deserialize_type(typ: &Type) -> ast::Typ {
     }
 }
 
-fn serialize_type(tctx: &TypCtx, typ: &typecheck::r#type::Type, top_level: bool) -> Type {
+fn serialize_type(tctx: &TypCtx, typ: &typecheck::types::Type, top_level: bool) -> Type {
     match typ {
-        typecheck::r#type::Type::Int => Type::Name("Int".to_owned()),
-        typecheck::r#type::Type::Float => Type::Name("Float".to_owned()),
-        typecheck::r#type::Type::Bool => Type::Name("Bool".to_owned()),
-        typecheck::r#type::Type::String => Type::Name("String".to_owned()),
-        typecheck::r#type::Type::UInt => Type::Name("UInt".to_owned()),
-        typecheck::r#type::Type::Unit => Type::Unit,
-        typecheck::r#type::Type::Struct { def, fields } => {
+        typecheck::types::Type::Int => Type::Name("Int".to_owned()),
+        typecheck::types::Type::Float => Type::Name("Float".to_owned()),
+        typecheck::types::Type::Bool => Type::Name("Bool".to_owned()),
+        typecheck::types::Type::String => Type::Name("String".to_owned()),
+        typecheck::types::Type::UInt => Type::Name("UInt".to_owned()),
+        typecheck::types::Type::Unit => Type::Unit,
+        typecheck::types::Type::Struct { def, fields } => {
             if top_level {
                 let fields = fields
                     .iter()
@@ -189,8 +189,8 @@ fn serialize_type(tctx: &TypCtx, typ: &typecheck::r#type::Type, top_level: bool)
                 }
             }
         }
-        typecheck::r#type::Type::ADT { .. } => todo!(),
-        typecheck::r#type::Type::Function { args, ret } => {
+        typecheck::types::Type::ADT { .. } => todo!(),
+        typecheck::types::Type::Function { args, ret } => {
             let args = args
                 .iter()
                 .map(|t| serialize_type(tctx, t, false))
@@ -198,13 +198,13 @@ fn serialize_type(tctx: &TypCtx, typ: &typecheck::r#type::Type, top_level: bool)
             let ret = Box::new(serialize_type(tctx, ret, false));
             Type::Function { args, ret }
         }
-        typecheck::r#type::Type::Tuple(vals) => Type::Tuple(
+        typecheck::types::Type::Tuple(vals) => Type::Tuple(
             vals.iter()
                 .map(|t| serialize_type(tctx, t, false))
                 .collect(),
         ),
-        typecheck::r#type::Type::Array(_) => todo!(),
-        typecheck::r#type::Type::Alias(id) => tctx
+        typecheck::types::Type::Array(_) => todo!(),
+        typecheck::types::Type::Alias(id) => tctx
             .types
             .iter()
             .find(|(_, tid)| **tid == *id)
@@ -215,11 +215,11 @@ fn serialize_type(tctx: &TypCtx, typ: &typecheck::r#type::Type, top_level: bool)
                     .map(|typ| serialize_type(tctx, typ, top_level))
             })
             .unwrap(),
-        typecheck::r#type::Type::Divergent => panic!("Cannot serialize divergent type"),
-        typecheck::r#type::Type::ToInfere => panic!("Cannot serialize to infere type"),
-        typecheck::r#type::Type::Generic(_, _) => todo!("Cannot serialize generic type"),
-        typecheck::r#type::Type::Scheme { .. } => todo!("Cannot serialize schema type"),
-        typecheck::r#type::Type::Fresh(_) => {
+        typecheck::types::Type::Divergent => panic!("Cannot serialize divergent type"),
+        typecheck::types::Type::ToInfere => panic!("Cannot serialize to infere type"),
+        typecheck::types::Type::Generic(_, _) => todo!("Cannot serialize generic type"),
+        typecheck::types::Type::Scheme { .. } => todo!("Cannot serialize schema type"),
+        typecheck::types::Type::Fresh(_) => {
             panic!("Fresh variables should not be present after type inference")
         }
         _ => unimplemented!(),

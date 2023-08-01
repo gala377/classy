@@ -2,7 +2,7 @@ use classy_syntax::ast::{self, ExprKind};
 
 use crate::ast_passes;
 use crate::session::Session;
-use crate::typecheck::r#type::Type;
+use crate::typecheck::types::Type;
 use crate::typecheck::type_context::TypCtx;
 
 /// TODO: We should have a scope there

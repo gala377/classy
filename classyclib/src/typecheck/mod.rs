@@ -8,8 +8,8 @@ pub mod fix_fresh;
 pub mod inference;
 pub mod instance;
 pub mod scope;
-pub mod r#type;
 pub mod type_context;
+pub mod types;
 
 use classy_syntax::{
     self,
@@ -19,8 +19,8 @@ use std::collections::HashMap;
 
 use add_types::AddTypes;
 use alias_resolver::AliasResolver;
-use r#type::*;
 use type_context::*;
+use types::*;
 
 pub use inference::run;
 
@@ -98,7 +98,7 @@ pub fn dedup_trivially_eq_types(ctx: &mut TypCtx) {
             if t_id_1 == t_id_2 {
                 continue;
             }
-            if !r#type::types_eq(ctx, typ_1, typ_2) {
+            if !types::types_eq(ctx, typ_1, typ_2) {
                 continue;
             }
             // different ids pointing to the same type
@@ -233,8 +233,8 @@ fn replace_aliases_with_map(typ: &Type, map: &HashMap<TypeId, TypeId>) -> Type {
 mod tests {
     use crate::typecheck::{
         self,
-        r#type::Type,
         type_context::{TypCtx, TypeId},
+        types::Type,
     };
     use classy_syntax::{ast::Visitor, lexer::Lexer, parser::Parser};
     use std::collections::HashMap;

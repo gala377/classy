@@ -1,4 +1,4 @@
-use crate::typecheck::r#type::{Type, TypeFolder};
+use crate::typecheck::types::{Type, TypeFolder};
 use classy_syntax::ast;
 use std::collections::HashMap;
 

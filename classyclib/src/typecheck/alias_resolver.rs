@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::typecheck::{
-    r#type::Type,
     type_context::{TypCtx, TypeId},
+    types::Type,
 };
 
 use super::type_context::MethodSet;

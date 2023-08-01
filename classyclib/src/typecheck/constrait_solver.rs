@@ -5,11 +5,11 @@ use crate::{
     session::SharedIdProvider,
     typecheck::{
         constraints::Constraint,
-        r#type::{Type, TypeFolder},
+        types::{Type, TypeFolder},
     },
 };
 
-use super::{r#type::DeBruijn, type_context::TypCtx};
+use super::{type_context::TypCtx, types::DeBruijn};
 
 pub(super) struct FreshTypeReplacer {
     pub substitutions: HashMap<usize, Type>,

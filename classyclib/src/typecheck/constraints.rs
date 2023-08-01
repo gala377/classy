@@ -1,4 +1,4 @@
-use super::r#type::Type;
+use super::types::Type;
 
 #[derive(Debug, Clone)]
 pub enum Constraint {

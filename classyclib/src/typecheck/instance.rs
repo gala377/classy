@@ -7,7 +7,7 @@ use crate::{
 };
 use thiserror::Error;
 
-use super::r#type::{DeBruijn, Type, TypeFolder};
+use super::types::{DeBruijn, Type, TypeFolder};
 
 #[derive(Error, Debug)]
 pub enum InstantiationError {
@@ -264,14 +264,4 @@ fn union_slices(
         .zip(b.into_iter())
         .map(|(a, b)| union(db, a.clone(), b.clone(), subs))
         .collect::<Result<Vec<_>, _>>()
-}
-
-/// Returns the un-schemed, un-applied type.
-pub fn base_type(db: &Database, t: Type) -> Result<Type, QueryError> {
-    match t {
-        Type::Alias(id) => base_type(db, db.resolve_alias(TypeId(id))?),
-        Type::Scheme { typ, .. } => base_type(db, *typ),
-        Type::App { typ, .. } => base_type(db, *typ),
-        t => Ok(t),
-    }
 }

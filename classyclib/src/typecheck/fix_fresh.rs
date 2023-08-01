@@ -2,9 +2,9 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use super::{
     constrait_solver::FreshTypeReplacer,
-    r#type::{DeBruijn, Type, TypeFolder},
     scope::Scope,
     type_context::TypCtx,
+    types::{DeBruijn, Type, TypeFolder},
 };
 
 pub fn fix_types_after_inference(
@@ -104,7 +104,7 @@ impl TypeFolder for ReplaceStructsWithAliases<'_> {
                 top_level: false,
                 tctx: self.tctx,
             };
-            super::r#type::fold_struct(new_folder, def, fields)
+            super::types::fold_struct(new_folder, def, fields)
         } else {
             let type_id = self.tctx.def_id_to_typ_id(def);
             match self.tctx.definitions.get(&type_id).unwrap() {

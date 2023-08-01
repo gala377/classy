@@ -5,8 +5,8 @@ use classy_syntax::ast;
 use crate::typecheck::{
     constrait_solver::instance,
     inference::TypeEnv,
-    r#type::Type,
     type_context::{DefId, TypCtx},
+    types::Type,
 };
 
 use super::instr::{Address, Block, Instruction, IsRef, Label, Op};

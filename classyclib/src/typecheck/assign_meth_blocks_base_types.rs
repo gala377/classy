@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use super::{
-    r#type::Type,
     type_context::{MethodSet, TypCtx},
+    types::Type,
 };
 
 pub fn assign_base_types(mut tctx: TypCtx) -> TypCtx {

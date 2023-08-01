@@ -1,8 +1,8 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use super::{
-    r#type::Type,
     type_context::{TypCtx, TypeId},
+    types::Type,
 };
 
 pub struct Scope {
