@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::ast::{
-    DefinedType, Expr, ExprKind, FunctionDefinition, Path, Pattern, PatternKind, Program,
-    TopLevelItemKind, Typ, TypeDefinition, TypeVariable, TypedName,
+    DefinedType, Expr, ExprKind, FunctionDefinition, Name, Pattern, PatternKind, Program,
+    TopLevelItemKind, Typ, TypeDefinition, TypeVariable, TypedIdentifier,
 };
 
 use super::{ConstDefinition, MethodsBlock, TopLevelItem};
@@ -48,7 +48,7 @@ pub trait Folder: Sized {
         fold_type(self, typ)
     }
 
-    fn fold_name(&mut self, name: String) -> String {
+    fn fold_name(&mut self, name: Name) -> Name {
         name
     }
 
@@ -87,7 +87,7 @@ pub trait Folder: Sized {
         fold_tuple(self, fields)
     }
 
-    fn fold_lambda(&mut self, params: Vec<TypedName>, body: Expr) -> ExprKind {
+    fn fold_lambda(&mut self, params: Vec<TypedIdentifier>, body: Expr) -> ExprKind {
         fold_lambda(self, params, body)
     }
 
@@ -115,7 +115,7 @@ pub trait Folder: Sized {
         fold_typed_expression(self, expr, typ)
     }
 
-    fn fold_struct_literal(&mut self, strct: Path, values: HashMap<String, Expr>) -> ExprKind {
+    fn fold_struct_literal(&mut self, strct: Name, values: HashMap<String, Expr>) -> ExprKind {
         fold_struct_literal(self, strct, values)
     }
 
@@ -190,7 +190,7 @@ pub trait Folder: Sized {
     }
 
     fn fold_name_pattern(&mut self, name: String) -> PatternKind {
-        PatternKind::Name(name)
+        PatternKind::Var(name)
     }
 
     fn fold_wildcard_pattern(&mut self) -> PatternKind {
@@ -219,13 +219,13 @@ pub trait Folder: Sized {
 
     fn fold_struct_pattern(
         &mut self,
-        strct: String,
+        strct: Name,
         fields: HashMap<String, Pattern>,
     ) -> PatternKind {
         fold_struct_pattern(self, strct, fields)
     }
 
-    fn fold_tuple_struct_pattern(&mut self, strct: String, fields: Vec<Pattern>) -> PatternKind {
+    fn fold_tuple_struct_pattern(&mut self, strct: Name, fields: Vec<Pattern>) -> PatternKind {
         fold_tuple_struct_pattern(self, strct, fields)
     }
 
@@ -237,13 +237,13 @@ pub trait Folder: Sized {
         PatternKind::Rest(name)
     }
 
-    fn fold_type_specified_pattern(&mut self, name: String, typ: Pattern) -> PatternKind {
+    fn fold_type_specified_pattern(&mut self, name: Name, typ: Pattern) -> PatternKind {
         fold_type_specified_pattern(self, name, typ)
     }
 
     fn fold_adt_struct_constructor(
         &mut self,
-        name: String,
+        name: Name,
         case: String,
         fields: Vec<(String, Expr)>,
     ) -> ExprKind {
@@ -252,14 +252,14 @@ pub trait Folder: Sized {
 
     fn fold_adt_tuple_constructor(
         &mut self,
-        name: String,
+        name: Name,
         case: String,
         fields: Vec<Expr>,
     ) -> ExprKind {
         fold_adt_tuple_constructor(self, name, case, fields)
     }
 
-    fn fold_adt_unit_constructor(&mut self, name: String, case: String) -> ExprKind {
+    fn fold_adt_unit_constructor(&mut self, name: Name, case: String) -> ExprKind {
         ExprKind::AdtUnitConstructor {
             typ: name,
             constructor: case,
@@ -270,7 +270,7 @@ pub trait Folder: Sized {
         Typ::Unit
     }
 
-    fn fold_name_type(&mut self, name: String) -> Typ {
+    fn fold_name_type(&mut self, name: Name) -> Typ {
         Typ::Name(name)
     }
 
@@ -340,7 +340,7 @@ pub fn fold_function_definition<F: Folder>(
     def: FunctionDefinition,
 ) -> FunctionDefinition {
     FunctionDefinition {
-        name: folder.fold_name(def.name),
+        name: def.name,
         parameters: folder.fold_function_params(def.parameters),
         body: folder.fold_expr(def.body),
         typ: folder.fold_typ(def.typ),
@@ -486,7 +486,7 @@ pub fn fold_tuple(folder: &mut impl Folder, fields: Vec<Expr>) -> ExprKind {
     ExprKind::Tuple(new_vals)
 }
 
-pub fn fold_lambda(folder: &mut impl Folder, params: Vec<TypedName>, body: Expr) -> ExprKind {
+pub fn fold_lambda(folder: &mut impl Folder, params: Vec<TypedIdentifier>, body: Expr) -> ExprKind {
     ExprKind::Lambda {
         parameters: params,
         body: Box::new(folder.fold_expr(body)),
@@ -514,7 +514,7 @@ pub fn fold_typed_expression(folder: &mut impl Folder, expr: Expr, typ: Typ) -> 
 
 pub fn fold_struct_literal(
     folder: &mut impl Folder,
-    strct: Path,
+    strct: Name,
     values: HashMap<String, Expr>,
 ) -> ExprKind {
     ExprKind::StructLiteral {
@@ -597,7 +597,7 @@ pub fn fold_array_pattern(folder: &mut impl Folder, fields: Vec<Pattern>) -> Pat
 
 pub fn fold_struct_pattern(
     folder: &mut impl Folder,
-    strct: String,
+    strct: Name,
     fields: HashMap<String, Pattern>,
 ) -> PatternKind {
     let mut new_fields = Vec::new();
@@ -612,7 +612,7 @@ pub fn fold_struct_pattern(
 
 pub fn fold_tuple_struct_pattern(
     folder: &mut impl Folder,
-    strct: String,
+    strct: Name,
     fields: Vec<Pattern>,
 ) -> PatternKind {
     let mut new_fields = Vec::new();
@@ -628,7 +628,7 @@ pub fn fold_tuple_struct_pattern(
 pub fn fold_pattern_kind(folder: &mut impl Folder, pat: PatternKind) -> PatternKind {
     match pat {
         PatternKind::Unit => folder.fold_unit_pattern(),
-        PatternKind::Name(name) => folder.fold_name_pattern(name),
+        PatternKind::Var(name) => folder.fold_name_pattern(name),
         PatternKind::Wildcard => folder.fold_wildcard_pattern(),
         PatternKind::Int(val) => folder.fold_int_pattern(val),
         PatternKind::Bool(val) => folder.fold_bool_pattern(val),
@@ -647,7 +647,7 @@ pub fn fold_pattern_kind(folder: &mut impl Folder, pat: PatternKind) -> PatternK
 
 pub fn fold_type_specified_pattern(
     folder: &mut impl Folder,
-    name: String,
+    name: Name,
     pattern: Pattern,
 ) -> PatternKind {
     PatternKind::TypeSpecifier(name, Box::new(folder.fold_pattern(pattern)))
@@ -655,7 +655,7 @@ pub fn fold_type_specified_pattern(
 
 pub fn fold_adt_struct_constructor(
     folder: &mut impl Folder,
-    name: String,
+    name: Name,
     case: String,
     fields: Vec<(String, Expr)>,
 ) -> ExprKind {
@@ -672,7 +672,7 @@ pub fn fold_adt_struct_constructor(
 
 pub fn fold_adt_tuple_constructor(
     folder: &mut impl Folder,
-    name: String,
+    name: Name,
     case: String,
     fields: Vec<Expr>,
 ) -> ExprKind {
@@ -787,7 +787,7 @@ pub fn fold_method_call(
 pub fn fold_const_definition(folder: &mut impl Folder, def: ConstDefinition) -> ConstDefinition {
     ConstDefinition {
         id: def.id,
-        name: folder.fold_name(def.name),
+        name: def.name,
         typ: folder.fold_typ(def.typ),
         init: folder.fold_expr(def.init),
     }
@@ -808,7 +808,7 @@ pub fn fold_local_function_def(
     def: FunctionDefinition,
 ) -> FunctionDefinition {
     FunctionDefinition {
-        name: folder.fold_name(def.name),
+        name: def.name,
         parameters: folder.fold_function_params(def.parameters),
         body: folder.fold_expr(def.body),
         typ: folder.fold_typ(def.typ),

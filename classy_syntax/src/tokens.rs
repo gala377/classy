@@ -86,6 +86,8 @@ pub enum TokenType {
     // Operators
     #[token(":")]
     Colon,
+    #[token("::")]
+    DoubleColon,
     #[token(";")]
     Semicolon,
     #[token(",")]
@@ -95,11 +97,17 @@ pub enum TokenType {
     #[token("=>")]
     FatArrow,
     #[token("=")]
-    Assignment,
+    EqualSign,
     #[token(".", priority = 3)]
     Dot,
     #[token("*")]
     Star,
+    #[token("+")]
+    Plus,
+    #[token("-")]
+    Dash,
+    #[token("/")]
+    Slash,
 
     // Others
     #[regex(r"[ \t\f]+", logos::skip)]

@@ -216,6 +216,15 @@ impl Parse for SExprParser {
             let final_expr = syn::parse::<Expr>(ret.into()).unwrap();
             return Ok(Self { final_expr });
         }
+        if let Ok(ident) = input.call(syn::Path::parse) {
+            let final_expr = quote! {
+                classy_sexpr::SExpr::Atom(classy_sexpr::Atom::Symbol(stringify!(#ident).to_string().split(' ').collect::<Vec<_>>().join("")))
+            }
+            .into();
+            let final_expr = syn::parse::<Expr>(final_expr).unwrap();
+            return Ok(Self { final_expr });
+        }
+
         if let Ok(ident) = input.call(Ident::parse_any) {
             let final_expr = quote! {
                 classy_sexpr::SExpr::Atom(classy_sexpr::Atom::Symbol(stringify!(#ident).to_string()))

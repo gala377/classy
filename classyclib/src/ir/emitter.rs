@@ -581,7 +581,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
     fn emit_pattern(&mut self, to_match: Address, pattern: &ast::Pattern, next_label: Label) {
         let id = pattern.id;
         match &pattern.kind {
-            ast::PatternKind::Name(n) => {
+            ast::PatternKind::Var(n) => {
                 if n.chars().take(1).all(|c| c.is_uppercase()) {
                     let t = self.env.get(&id).unwrap();
                     let constructor = self.get_constructors(t);

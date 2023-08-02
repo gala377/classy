@@ -478,7 +478,7 @@ impl<'sess> Inference<'sess> {
                 self.env.insert(id, lambda_t.clone());
                 let args_t = parameters
                     .iter()
-                    .map(|ast::TypedName { typ, .. }| match &typ {
+                    .map(|ast::TypedIdentifier { typ, .. }| match &typ {
                         ast::Typ::ToInfere => self.fresh_type(),
                         typ => {
                             self.ast_type_to_type(&self.scope.clone().borrow(), prefex_scope, typ)
@@ -755,7 +755,7 @@ impl<'sess> Inference<'sess> {
     fn infer_in_pattern(&mut self, pattern: &ast::Pattern) -> Type {
         let id = pattern.id;
         match &pattern.kind {
-            ast::PatternKind::Name(n) => {
+            ast::PatternKind::Var(n) => {
                 let typ = self.fresh_type();
                 self.env.insert(id, typ.clone());
                 if n.starts_with(char::is_uppercase) {

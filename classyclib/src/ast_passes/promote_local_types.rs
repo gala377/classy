@@ -67,7 +67,7 @@ impl Folder for PromoteAnonTypes {
         let name = format!("{}@anon_{}", self.current_function, id);
         let record_fields = fields
             .iter()
-            .map(|(name, _)| ast::TypedName {
+            .map(|(name, _)| ast::TypedIdentifier {
                 name: name.clone(),
                 typ: ast::Typ::ToInfere,
             })

@@ -148,7 +148,7 @@ impl<'ast> ast::Visitor<'ast> for FunctionsOrderer {
         self.visit_expr(init);
     }
 
-    fn visit_name(&mut self, node: &'ast str) {
+    fn visit_identifier(&mut self, node: &'ast str) {
         if self.variables.contains(node) {
             return;
         }

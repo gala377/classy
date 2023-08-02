@@ -76,7 +76,7 @@ fn read_package(pkg: &Package, tctx: &mut TypCtx) {
                 let fields = fields
                     .iter()
                     .map(|(name, typ)| (name.clone(), deserialize_type(typ)))
-                    .map(|(name, typ)| ast::TypedName { name, typ })
+                    .map(|(name, typ)| ast::TypedIdentifier { name, typ })
                     .collect();
                 ast::DefinedType::Record(ast::Record { fields })
             }

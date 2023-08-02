@@ -15,6 +15,31 @@ fn default<T: Default>() -> T {
     Default::default()
 }
 
+/// Represents an identifier in source
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Name {
+    pub path: Vec<String>,
+    pub identifier: String,
+}
+
+impl classy_sexpr::ToSExpr for Name {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        classy_sexpr::SExpr::Atom(classy_sexpr::Atom::Symbol(self.pretty()))
+    }
+}
+
+impl Name {
+    pub fn pretty(&self) -> String {
+        let mut res = String::new();
+        for part in &self.path {
+            res.push_str(&part);
+            res.push_str("::");
+        }
+        res.push_str(&self.identifier);
+        res
+    }
+}
+
 #[derive(Debug)]
 pub struct Program {
     pub items: Vec<TopLevelItem>,
@@ -59,7 +84,7 @@ pub enum DefinedType {
 
 #[derive(Debug, Clone)]
 pub struct Record {
-    pub fields: Vec<TypedName>,
+    pub fields: Vec<TypedIdentifier>,
 }
 
 #[derive(Debug, Clone)]
@@ -86,7 +111,7 @@ pub struct Alias {
 }
 
 #[derive(Debug, Clone)]
-pub struct TypedName {
+pub struct TypedIdentifier {
     pub name: String,
     pub typ: Typ,
 }
@@ -110,7 +135,7 @@ pub struct MethodsBlock {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Typ {
     Unit,
-    Name(String),
+    Name(Name),
     Application {
         callee: Box<Typ>,
         args: Vec<Typ>,
@@ -151,7 +176,7 @@ pub enum ExprKind {
     StringConst(String),
     FloatConst(f64),
     BoolConst(bool),
-    Name(String),
+    Name(Name),
     FunctionCall {
         func: Box<Expr>,
         args: Vec<Expr>,
@@ -163,7 +188,7 @@ pub enum ExprKind {
     },
     Tuple(Vec<Expr>),
     Lambda {
-        parameters: Vec<TypedName>,
+        parameters: Vec<TypedIdentifier>,
         body: Box<Expr>,
     },
     TypedExpr {
@@ -171,21 +196,21 @@ pub enum ExprKind {
         typ: Typ,
     },
     StructLiteral {
-        strct: Path,
+        strct: Name,
         values: HashMap<String, Expr>,
     },
     AdtTupleConstructor {
-        typ: String,
+        typ: Name,
         constructor: String,
         args: Vec<Expr>,
     },
     AdtStructConstructor {
-        typ: String,
+        typ: Name,
         constructor: String,
         fields: Vec<(String, Expr)>,
     },
     AdtUnitConstructor {
-        typ: String,
+        typ: Name,
         constructor: String,
     },
     While {
@@ -240,14 +265,14 @@ pub struct Pattern {
 #[derive(Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum PatternKind {
-    Name(String),
+    Var(String),
     Tuple(Vec<Pattern>),
     Struct {
-        strct: String,
+        strct: Name,
         fields: HashMap<String, Pattern>,
     },
     TupleStruct {
-        strct: String,
+        strct: Name,
         fields: Vec<Pattern>,
     },
     AnonStruct {
@@ -266,28 +291,9 @@ pub enum PatternKind {
     /// Patterns in form Type.Case pattern
     /// used when one wants to explicitly specify the type
     /// to look for cases in
-    TypeSpecifier(String, Box<Pattern>),
+    TypeSpecifier(Name, Box<Pattern>),
 }
 
-#[derive(Debug, Clone)]
-pub struct Path(pub Vec<String>);
-
-impl Path {
-    pub fn try_from_expr(expr: Expr) -> Option<Self> {
-        fn match_segment(expr: Expr) -> Option<Vec<String>> {
-            match expr.kind {
-                ExprKind::Name(val) => Some(vec![val]),
-                ExprKind::Access { val, field } => {
-                    let mut path = match_segment(*val)?;
-                    path.push(field);
-                    Some(path)
-                }
-                _ => None,
-            }
-        }
-        match_segment(expr).map(Path)
-    }
-}
 impl Expr {
     pub fn pretty(&self) -> String {
         match &self.kind {
@@ -319,7 +325,7 @@ impl Expr {
                 let res = b.to_string();
                 res
             }
-            ExprKind::Name(n) => n.clone(),
+            ExprKind::Name(n) => n.pretty(),
             ExprKind::FunctionCall { func, args, kwargs } => {
                 let mut res = func.pretty();
                 res.push_str("(");
@@ -350,7 +356,7 @@ impl Expr {
             }
             ExprKind::Lambda { parameters, body } => {
                 let mut res = "fn (".to_string();
-                for TypedName { name, .. } in parameters {
+                for TypedIdentifier { name, .. } in parameters {
                     res.push_str(&name);
                 }
                 res.push_str(") ");
@@ -359,7 +365,7 @@ impl Expr {
             }
             ExprKind::TypedExpr { expr, .. } => expr.pretty(),
             ExprKind::StructLiteral { strct, values } => {
-                let mut res = strct.0.join(".");
+                let mut res = strct.pretty();
                 res.push_str(" { ");
                 for (name, val) in values {
                     res.push_str(&format!("{} = {}, ", name, val.pretty()));
@@ -372,7 +378,7 @@ impl Expr {
                 constructor,
                 args,
             } => {
-                let mut res = format!("{}::{}", typ, constructor);
+                let mut res = format!("{}.{}", typ.pretty(), constructor);
                 res.push_str("(");
                 for arg in args {
                     res.push_str(&arg.pretty());
@@ -386,7 +392,7 @@ impl Expr {
                 constructor,
                 fields,
             } => {
-                let mut res = format!("{}::{}", typ, constructor);
+                let mut res = format!("{}.{}", typ.pretty(), constructor);
                 res.push_str("{ ");
                 for (name, val) in fields {
                     res.push_str(&format!("{} = {}, ", name, val.pretty()));
@@ -395,7 +401,7 @@ impl Expr {
                 res
             }
             ExprKind::AdtUnitConstructor { typ, constructor } => {
-                format!("{}::{}", typ, constructor)
+                format!("{}.{}", typ.pretty(), constructor)
             }
             ExprKind::While { cond, body } => {
                 let mut res = "while ".to_string();
@@ -633,7 +639,7 @@ impl classy_sexpr::ToSExpr for DiscriminantKind {
     }
 }
 
-impl classy_sexpr::ToSExpr for TypedName {
+impl classy_sexpr::ToSExpr for TypedIdentifier {
     fn to_sexpr(self) -> classy_sexpr::SExpr {
         let name = self.name;
         sexpr!((#name ${self.typ}))
@@ -643,7 +649,7 @@ impl classy_sexpr::ToSExpr for Typ {
     fn to_sexpr(self) -> classy_sexpr::SExpr {
         match self {
             Typ::Unit => sexpr!(unit),
-            Typ::Name(n) => classy_sexpr::SExpr::Atom(classy_sexpr::Atom::Symbol(n)),
+            Typ::Name(n) => sexpr!($n),
             Typ::Application { callee, args } => sexpr!(($callee $args)),
             Typ::Array(inner) => sexpr!((array $inner)),
             Typ::Function {
@@ -677,7 +683,7 @@ impl classy_sexpr::ToSExpr for ExprKind {
                 sexpr!((float $f))
             }
             ExprKind::BoolConst(b) => sexpr!($b),
-            ExprKind::Name(n) => sexpr!(#n),
+            ExprKind::Name(n) => sexpr!($n),
             ExprKind::FunctionCall { func, args, kwargs } => sexpr!((call $func $args $kwargs)),
             ExprKind::Access { val, field } => sexpr!((access $val #field)),
             ExprKind::Tuple(t) => sexpr!((tuple @ t)),
@@ -729,12 +735,6 @@ impl classy_sexpr::ToSExpr for ExprKind {
     }
 }
 
-impl classy_sexpr::ToSExpr for Path {
-    fn to_sexpr(self) -> classy_sexpr::SExpr {
-        classy_sexpr::SExpr::Atom(classy_sexpr::Atom::Symbol(self.0[0].clone()))
-    }
-}
-
 impl classy_sexpr::ToSExpr for Pattern {
     fn to_sexpr(self) -> classy_sexpr::SExpr {
         sexpr!(${self.kind})
@@ -744,10 +744,10 @@ impl classy_sexpr::ToSExpr for Pattern {
 impl classy_sexpr::ToSExpr for PatternKind {
     fn to_sexpr(self) -> classy_sexpr::SExpr {
         match self {
-            PatternKind::Name(n) => sexpr!(#n),
+            PatternKind::Var(n) => sexpr!(#n),
             PatternKind::Tuple(t) => sexpr!((tuple @ t)),
-            PatternKind::Struct { strct, fields } => sexpr!((struct #strct $fields)),
-            PatternKind::TupleStruct { strct, fields } => sexpr!((struct #strct $fields)),
+            PatternKind::Struct { strct, fields } => sexpr!((struct $strct $fields)),
+            PatternKind::TupleStruct { strct, fields } => sexpr!((struct $strct $fields)),
             PatternKind::AnonStruct { fields } => sexpr!((struct @ fields)),
             PatternKind::Array(inner) => sexpr!((array $inner)),
             PatternKind::Wildcard => sexpr!(_),
@@ -756,7 +756,7 @@ impl classy_sexpr::ToSExpr for PatternKind {
             PatternKind::Int(i) => sexpr!($i),
             PatternKind::Bool(b) => sexpr!($b),
             PatternKind::Rest(s) => sexpr!((rest #s)),
-            PatternKind::TypeSpecifier(name, rest) => sexpr!((#name $rest)),
+            PatternKind::TypeSpecifier(name, rest) => sexpr!(($name $rest)),
         }
     }
 }

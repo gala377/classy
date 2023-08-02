@@ -3,7 +3,7 @@ use std::ops::Range;
 use thiserror::Error;
 
 use crate::{
-    ast::{self, TypedName},
+    ast::{self, TypedIdentifier},
     lexer::Lexer,
     tokens::{Token, TokenType},
 };
@@ -100,7 +100,7 @@ impl<'source> Parser<'source> {
         let name = self.parse_identifier()?;
         let _ = self.expect_token(TokenType::Colon);
         let typ = self.parse_type()?;
-        let _ = self.expect_token(TokenType::Assignment);
+        let _ = self.expect_token(TokenType::EqualSign);
         let init = self.parse_expr()?;
         let _ = self.expect_token(TokenType::Semicolon);
         Ok(ast::ConstDefinition {
@@ -158,7 +158,7 @@ impl<'source> Parser<'source> {
                 definition,
                 span: beg..self.curr_pos(),
             })
-        } else if self.match_token(TokenType::Assignment).is_ok() {
+        } else if self.match_token(TokenType::EqualSign).is_ok() {
             let for_type =
                 self.parse_type()
                     .error(self, beg, "Expected a type in type alias definition")?;
@@ -278,7 +278,7 @@ impl<'source> Parser<'source> {
         }
         let parameters = self.parse_argument_list()?;
         let body = if self.lexer.current().typ != TokenType::LBrace {
-            let _ = self.match_token(TokenType::Assignment).error(
+            let _ = self.match_token(TokenType::EqualSign).error(
                 self,
                 beg,
                 "Missing = in the function definition",
@@ -320,7 +320,7 @@ impl<'source> Parser<'source> {
         Ok(args)
     }
 
-    fn parse_typed_identifier(&mut self) -> ParseRes<TypedName> {
+    fn parse_typed_identifier(&mut self) -> ParseRes<TypedIdentifier> {
         let beg = self.curr_pos();
         let name = self.parse_identifier()?;
         let _colon =
@@ -329,7 +329,7 @@ impl<'source> Parser<'source> {
         let typ = self
             .parse_type()
             .error(self, beg, &self.expected_err_msg("a type"))?;
-        Ok(ast::TypedName { name, typ })
+        Ok(ast::TypedIdentifier { name, typ })
     }
 
     fn parse_identifier(&mut self) -> ParseRes<String> {
@@ -346,6 +346,18 @@ impl<'source> Parser<'source> {
         } else {
             wrong_rule()
         }
+    }
+
+    fn parse_name(&mut self) -> ParseRes<ast::Name> {
+        let name = self.parse_identifier()?;
+        let mut path = vec![name];
+        while self.match_token(TokenType::DoubleColon).is_ok() {
+            path.push(self.parse_identifier()?);
+        }
+        Ok(ast::Name {
+            path: path[0..path.len() - 1].to_vec(),
+            identifier: path.last().unwrap().clone(),
+        })
     }
 
     fn parse_type(&mut self) -> ParseRes<ast::Typ> {
@@ -386,10 +398,7 @@ impl<'source> Parser<'source> {
     fn parse_atomic_type(&mut self) -> ParseRes<ast::Typ> {
         let beg = self.curr_pos();
         match self.lexer.current().typ.clone() {
-            TokenType::Identifier(name) => {
-                self.lexer.advance();
-                Ok(ast::Typ::Name(name))
-            }
+            TokenType::Identifier(_) => Ok(ast::Typ::Name(self.parse_name()?)),
             TokenType::LBracket => {
                 self.lexer.advance();
                 let inner_t = self.parse_type()?;
@@ -466,7 +475,7 @@ impl<'source> Parser<'source> {
 
     fn parse_assignment(&mut self) -> ParseRes<ast::Expr> {
         let lhs = self.parse_typed_expression()?;
-        if self.match_token(TokenType::Assignment).is_err() {
+        if self.match_token(TokenType::EqualSign).is_err() {
             return Ok(lhs);
         }
         let rhs = self.parse_typed_expression()?;
@@ -564,9 +573,15 @@ impl<'source> Parser<'source> {
                 let parameters = args
                     .into_iter()
                     .map(|arg| match arg.kind {
-                        ast::ExprKind::Name(v) => Ok((v, ast::Typ::ToInfere)),
+                        ast::ExprKind::Name(ast::Name { path, identifier }) if path.is_empty() => {
+                            Ok((identifier, ast::Typ::ToInfere))
+                        }
                         ast::ExprKind::TypedExpr { expr, typ } => match expr.kind {
-                            ast::ExprKind::Name(name) => Ok((name, typ)),
+                            ast::ExprKind::Name(ast::Name { path, identifier })
+                                if path.is_empty() =>
+                            {
+                                Ok((identifier, typ))
+                            }
                             _ => Err(ParseErr::Err(SyntaxError {
                                 msg: "Expected a lambda's arguments list".into(),
                                 span: beg..self.curr_pos(),
@@ -586,7 +601,7 @@ impl<'source> Parser<'source> {
                 let lambda = ast::ExprKind::Lambda {
                     parameters: parameters
                         .into_iter()
-                        .map(|(name, typ)| ast::TypedName { name, typ })
+                        .map(|(name, typ)| ast::TypedIdentifier { name, typ })
                         .collect(),
                     body: Box::new(body),
                 };
@@ -606,7 +621,7 @@ impl<'source> Parser<'source> {
                             "expected trailing lambda's body",
                         )?;
                         let lambda = ast::ExprKind::Lambda {
-                            parameters: vec![ast::TypedName {
+                            parameters: vec![ast::TypedIdentifier {
                                 name,
                                 typ: ast::Typ::ToInfere,
                             }],
@@ -621,7 +636,7 @@ impl<'source> Parser<'source> {
                         let parameters = self
                             .parse_delimited(Self::parse_identifier, TokenType::Comma)
                             .into_iter()
-                            .map(|name| ast::TypedName {
+                            .map(|name| ast::TypedIdentifier {
                                 name,
                                 typ: ast::Typ::ToInfere,
                             })
@@ -679,7 +694,7 @@ impl<'source> Parser<'source> {
                 // no name or brace following, just a normal expression
                 Err(ParseErr::WrongRule) => return Ok(func),
                 Err(e) => return Err(e),
-                Ok(ast::ExprKind::Name(name)) => {
+                Ok(ast::ExprKind::Name(ast::Name { path, identifier })) if path.is_empty() => {
                     if self.match_token(TokenType::FatArrow).is_ok() {
                         // func name => { lambda body }
                         let body = self.parse_expr_or_single_sequence().error(
@@ -688,8 +703,8 @@ impl<'source> Parser<'source> {
                             "Expected trailing lambda's body",
                         )?;
                         let lambda = ast::ExprKind::Lambda {
-                            parameters: vec![ast::TypedName {
-                                name,
+                            parameters: vec![ast::TypedIdentifier {
+                                name: identifier,
                                 typ: ast::Typ::ToInfere,
                             }],
                             body: Box::new(body),
@@ -698,7 +713,7 @@ impl<'source> Parser<'source> {
                     } else {
                         // func name
                         check_for_trailing_lambda = true;
-                        vec![ast::ExprKind::Name(name)]
+                        vec![ast::ExprKind::Name(ast::Name { path, identifier })]
                     }
                 }
                 Ok(body @ ast::ExprKind::Sequence(_)) => {
@@ -717,10 +732,10 @@ impl<'source> Parser<'source> {
             };
             if check_for_trailing_lambda {
                 match self.lexer.current().typ.clone() {
-                    TokenType::Identifier(name) => {
+                    TokenType::Identifier(_) => {
                         // a => expr
-                        self.lexer.advance();
-                        let parameters = vec![ast::TypedName {
+                        let name = self.parse_identifier()?;
+                        let parameters = vec![ast::TypedIdentifier {
                             name,
                             typ: ast::Typ::ToInfere,
                         }];
@@ -775,7 +790,14 @@ impl<'source> Parser<'source> {
             .iter()
             .filter_map(|expr| match &expr.kind {
                 ast::ExprKind::Assignment { lval, rval } => {
-                    if let ast::ExprKind::Name(name) = &lval.as_ref().kind {
+                    if let ast::ExprKind::Name(ast::Name {
+                        path,
+                        identifier: name,
+                    }) = &lval.as_ref().kind
+                    {
+                        if !path.is_empty() {
+                            panic!("Invalid assignment in a function call");
+                        }
                         Some((name.clone(), rval.as_ref().clone()))
                     } else {
                         panic!("Invalid assignment in a function call");
@@ -898,9 +920,9 @@ impl<'source> Parser<'source> {
                 self.lexer.advance();
                 Ok(mk_expr(ast::ExprKind::BoolConst(false)))
             }
-            TokenType::Identifier(name) => {
-                self.lexer.advance();
-                if self.match_token(TokenType::FatArrow).is_ok() {
+            TokenType::Identifier(_) => {
+                let name = self.parse_name()?;
+                if name.path.is_empty() && self.match_token(TokenType::FatArrow).is_ok() {
                     // lambda literal in form
                     // arg => expr
                     let body = self.parse_expr_or_single_sequence().error(
@@ -909,8 +931,8 @@ impl<'source> Parser<'source> {
                         "expected lambdas body",
                     )?;
                     return Ok(mk_expr(ast::ExprKind::Lambda {
-                        parameters: vec![ast::TypedName {
-                            name,
+                        parameters: vec![ast::TypedIdentifier {
+                            name: name.identifier,
                             typ: ast::Typ::ToInfere,
                         }],
                         body: Box::new(body),
@@ -945,23 +967,30 @@ impl<'source> Parser<'source> {
                         // this is a lambda literal in form
                         // (a) => expr
                         return match inner.kind {
-                            ast::ExprKind::Name(name) => {
+                            ast::ExprKind::Name(ast::Name { path, identifier })
+                                if path.is_empty() =>
+                            {
                                 // (name) => expr
                                 let body = self.parse_expr()?;
                                 Ok(mk_expr(ast::ExprKind::Lambda {
-                                    parameters: vec![ast::TypedName {
-                                        name,
+                                    parameters: vec![ast::TypedIdentifier {
+                                        name: identifier,
                                         typ: ast::Typ::ToInfere,
                                     }],
                                     body: Box::new(body),
                                 }))
                             }
                             ast::ExprKind::TypedExpr { expr, typ } => match expr.kind {
-                                ast::ExprKind::Name(name) => {
+                                ast::ExprKind::Name(ast::Name { path, identifier })
+                                    if path.is_empty() =>
+                                {
                                     // (name: type) => expr
                                     let body = self.parse_expr()?;
                                     Ok(mk_expr(ast::ExprKind::Lambda {
-                                        parameters: vec![ast::TypedName { name, typ }],
+                                        parameters: vec![ast::TypedIdentifier {
+                                            name: identifier,
+                                            typ,
+                                        }],
                                         body: Box::new(body),
                                     }))
                                 }
@@ -992,9 +1021,17 @@ impl<'source> Parser<'source> {
                     let parameters = tuple
                         .into_iter()
                         .map(|arg| match arg.kind {
-                            ast::ExprKind::Name(v) => Ok((v, ast::Typ::ToInfere)),
+                            ast::ExprKind::Name(ast::Name { path, identifier })
+                                if path.is_empty() =>
+                            {
+                                Ok((identifier, ast::Typ::ToInfere))
+                            }
                             ast::ExprKind::TypedExpr { expr, typ } => match expr.kind {
-                                ast::ExprKind::Name(name) => Ok((name, typ)),
+                                ast::ExprKind::Name(ast::Name { path, identifier })
+                                    if path.is_empty() =>
+                                {
+                                    Ok((identifier, typ))
+                                }
                                 _ => Err(ParseErr::Err(SyntaxError {
                                     msg: "Expected a lambda's arguments list".into(),
                                     span: beg..self.curr_pos(),
@@ -1010,7 +1047,7 @@ impl<'source> Parser<'source> {
                     return Ok(mk_expr(ast::ExprKind::Lambda {
                         parameters: parameters
                             .into_iter()
-                            .map(|(name, typ)| ast::TypedName { name, typ })
+                            .map(|(name, typ)| ast::TypedIdentifier { name, typ })
                             .collect(),
                         body: Box::new(body),
                     }));
@@ -1069,16 +1106,16 @@ impl<'source> Parser<'source> {
         Ok(mk_expr(ast::ExprKind::Sequence(body)))
     }
 
-    fn parse_possibly_typed_name(&mut self) -> ParseRes<ast::TypedName> {
+    fn parse_possibly_typed_name(&mut self) -> ParseRes<ast::TypedIdentifier> {
         let name = self.parse_identifier()?;
         if self.match_token(TokenType::Colon).is_err() {
-            return Ok(ast::TypedName {
+            return Ok(ast::TypedIdentifier {
                 name,
                 typ: ast::Typ::ToInfere,
             });
         }
         let typ = self.parse_type()?;
-        Ok(ast::TypedName { name, typ })
+        Ok(ast::TypedIdentifier { name, typ })
     }
 
     fn parse_type_expr(&mut self) -> ParseRes<ast::Expr> {
@@ -1092,7 +1129,7 @@ impl<'source> Parser<'source> {
     fn parse_anon_field_def(&mut self) -> ParseRes<(String, ast::Expr)> {
         let beg = self.curr_pos();
         let name = self.parse_identifier()?;
-        let _ = self.expect_token(TokenType::Assignment);
+        let _ = self.expect_token(TokenType::EqualSign);
         let init = self.parse_expr().error(
             self,
             beg,
@@ -1117,7 +1154,7 @@ impl<'source> Parser<'source> {
         } else {
             ast::Typ::ToInfere
         };
-        let _ = self.expect_token(TokenType::Assignment);
+        let _ = self.expect_token(TokenType::EqualSign);
         let init = self.parse_expr().error(
             self,
             beg,
@@ -1186,8 +1223,8 @@ impl<'source> Parser<'source> {
                     fields: fields.into_iter().collect(),
                 }))
             }
-            TokenType::Identifier(name) => {
-                self.lexer.advance();
+            TokenType::Identifier(_) => {
+                let name = self.parse_name()?;
                 if self.match_token(TokenType::LParen).is_ok() {
                     let inner = self.parse_delimited(Self::parse_pattern, TokenType::Comma);
                     let _ = self.expect_token(TokenType::RParen);
@@ -1210,7 +1247,7 @@ impl<'source> Parser<'source> {
                         &case.kind,
                         ast::PatternKind::TupleStruct { .. }
                             | ast::PatternKind::Struct { .. }
-                            | ast::PatternKind::Name(_)
+                            | ast::PatternKind::Var(_)
                     ) {
                         return Err(self.error(beg..self.curr_pos(), "Expected a struct pattern"));
                     }
@@ -1219,10 +1256,13 @@ impl<'source> Parser<'source> {
                         Box::new(case),
                     )));
                 }
-                if name == "_" {
+                if name.path.is_empty() && name.identifier == "_" {
                     return Ok(mk_pattern(ast::PatternKind::Wildcard));
                 }
-                Ok(mk_pattern(ast::PatternKind::Name(name)))
+                if name.path.is_empty() {
+                    return Ok(mk_pattern(ast::PatternKind::Var(name.identifier)));
+                }
+                Err(self.error(beg..self.curr_pos(), "Invalid pattern, expected identifier"))
             }
             TokenType::Star => {
                 self.lexer.advance();
@@ -2030,6 +2070,18 @@ mod tests {
                         (() 11)
                         ([struct ["a" b]] 12)
                     }
+                })
+        ))
+    }
+
+    ptest! {
+        parsing_paths,
+        r#"foo { a::b::c }"#,
+        sexpr!((
+            (fn {}
+                (type (fn [] () infere))
+                foo () {
+                    a::b::c
                 })
         ))
     }

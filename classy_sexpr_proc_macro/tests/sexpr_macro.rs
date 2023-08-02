@@ -74,3 +74,11 @@ fn test_splicing() {
         ))
     )
 }
+
+#[test]
+fn test_paths() {
+    assert_eq!(
+        sexpr!(a::b::c),
+        SExpr::Atom(Atom::Symbol("a::b::c".to_string()))
+    );
+}

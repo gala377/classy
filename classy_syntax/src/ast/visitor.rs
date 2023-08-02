@@ -7,6 +7,8 @@ pub trait Visitor<'ast>: Sized {
         walk_program(self, node)
     }
 
+    fn visit_identifier(&mut self, _node: &'ast str) {}
+
     fn visit_top_level_item(&mut self, node: &'ast ast::TopLevelItem) {
         walk_top_level_item(self, node)
     }
@@ -72,7 +74,7 @@ pub trait Visitor<'ast>: Sized {
         walk_tuple(self, fields)
     }
 
-    fn visit_lambda(&mut self, params: &'ast [ast::TypedName], body: &'ast ast::Expr) {
+    fn visit_lambda(&mut self, params: &'ast [ast::TypedIdentifier], body: &'ast ast::Expr) {
         walk_lambda(self, params, body)
     }
 
@@ -111,7 +113,7 @@ pub trait Visitor<'ast>: Sized {
 
     fn visit_struct_literal(
         &mut self,
-        strct: &'ast ast::Path,
+        strct: &'ast ast::Name,
         values: &'ast HashMap<String, ast::Expr>,
     ) {
         walk_struct_literal(self, strct, values);
@@ -119,7 +121,7 @@ pub trait Visitor<'ast>: Sized {
 
     fn visit_adt_struct_constructor(
         &mut self,
-        typ: &'ast str,
+        typ: &'ast ast::Name,
         case: &'ast str,
         values: &'ast [(String, ast::Expr)],
     ) {
@@ -128,14 +130,14 @@ pub trait Visitor<'ast>: Sized {
 
     fn visit_adt_tuple_constructor(
         &mut self,
-        typ: &'ast str,
+        typ: &'ast ast::Name,
         case: &'ast str,
         values: &'ast [ast::Expr],
     ) {
         walk_adt_tuple_constructor(self, typ, case, values);
     }
 
-    fn visit_adt_unit_constructor(&mut self, typ: &'ast str, case: &'ast str) {
+    fn visit_adt_unit_constructor(&mut self, typ: &'ast ast::Name, case: &'ast str) {
         walk_adt_unit_constructor(self, typ, case);
     }
 
@@ -175,16 +177,16 @@ pub trait Visitor<'ast>: Sized {
     }
     fn visit_struct_pattern(
         &mut self,
-        strct: &'ast str,
+        strct: &'ast ast::Name,
         fields: &'ast HashMap<String, ast::Pattern>,
     ) {
         walk_struct_pattern(self, strct, fields)
     }
-    fn visit_tuple_struct_pattern(&mut self, strct: &'ast str, fields: &'ast [ast::Pattern]) {
+    fn visit_tuple_struct_pattern(&mut self, strct: &'ast ast::Name, fields: &'ast [ast::Pattern]) {
         walk_tuple_struct_pattern(self, strct, fields)
     }
 
-    fn visit_type_specific_pattern(&mut self, name: &'ast str, pattern: &'ast ast::Pattern) {
+    fn visit_type_specific_pattern(&mut self, name: &'ast ast::Name, pattern: &'ast ast::Pattern) {
         walk_type_specific_pattern(self, name, pattern)
     }
 
@@ -202,7 +204,7 @@ pub trait Visitor<'ast>: Sized {
 
     // leaf nodes
     fn visit_typ(&mut self, _node: &'ast ast::Typ) {}
-    fn visit_name(&mut self, _node: &'ast str) {}
+    fn visit_name(&mut self, _node: &'ast ast::Name) {}
     fn visit_int_const(&mut self, _node: isize) {}
     fn visit_bool_const(&mut self, _val: bool) {}
     fn visit_string_const(&mut self, _node: &'ast str) {}
@@ -341,21 +343,20 @@ pub fn walk_function_call<'ast, V: Visitor<'ast>>(
 
 pub fn walk_let<'ast, V: Visitor<'ast>>(
     v: &mut V,
-    name: &'ast str,
+    _name: &'ast str,
     typ: &'ast ast::Typ,
     init: &'ast ast::Expr,
 ) {
-    v.visit_name(name);
     v.visit_typ(typ);
     v.visit_expr(init)
 }
 pub fn walk_struct_literal<'ast, V: Visitor<'ast>>(
     v: &mut V,
-    strct: &'ast ast::Path,
+    strct: &'ast ast::Name,
     values: &'ast HashMap<String, ast::Expr>,
 ) {
     // TODO: change when we handle proper paths
-    v.visit_name(&strct.0[0]);
+    v.visit_name(strct);
     for val in values.values() {
         v.visit_expr(val);
     }
@@ -383,9 +384,8 @@ pub fn walk_if<'ast, V: Visitor<'ast>>(
     }
 }
 
-pub fn walk_access<'ast, V: Visitor<'ast>>(v: &mut V, val: &'ast ast::Expr, field: &'ast str) {
+pub fn walk_access<'ast, V: Visitor<'ast>>(v: &mut V, val: &'ast ast::Expr, _field: &'ast str) {
     v.visit_expr(val);
-    v.visit_name(field);
 }
 
 pub fn walk_typed_expression<'ast, V: Visitor<'ast>>(
@@ -414,28 +414,22 @@ pub fn walk_tuple<'ast, V: Visitor<'ast>>(v: &mut V, fields: &'ast [ast::Expr]) 
 
 pub fn walk_lambda<'ast, V: Visitor<'ast>>(
     v: &mut V,
-    params: &'ast [ast::TypedName],
+    params: &'ast [ast::TypedIdentifier],
     body: &'ast ast::Expr,
 ) {
     for param in params {
-        v.visit_name(&param.name);
         v.visit_typ(&param.typ);
     }
     v.visit_expr(body);
 }
 
 pub fn walk_function_def<'ast, V: Visitor<'ast>>(v: &mut V, def: &'ast ast::FunctionDefinition) {
-    v.visit_name(&def.name);
     v.visit_typ(&def.typ);
-    for param in &def.parameters {
-        v.visit_name(param);
-    }
     v.visit_expr(&def.body);
 }
 
 pub fn walk_anon_type<'ast, V: Visitor<'ast>>(v: &mut V, fields: &'ast [(String, ast::Expr)]) {
-    for (name, expr) in fields {
-        v.visit_name(name);
+    for (_name, expr) in fields {
         v.visit_expr(expr);
     }
 }
@@ -479,7 +473,7 @@ pub fn walk_match<'ast, V: Visitor<'ast>>(
 
 pub fn walk_pattern_kind<'ast, V: Visitor<'ast>>(v: &mut V, pattern: &'ast ast::PatternKind) {
     match pattern {
-        ast::PatternKind::Name(n) => v.visit_name_pattern(n),
+        ast::PatternKind::Var(n) => v.visit_name_pattern(n),
         ast::PatternKind::Tuple(fs) => v.visit_tuple_pattern(fs),
         ast::PatternKind::Struct { strct, fields } => v.visit_struct_pattern(strct, fields),
         ast::PatternKind::TupleStruct { strct, fields } => {
@@ -513,7 +507,7 @@ pub fn walk_array_pattern<'ast, V: Visitor<'ast>>(v: &mut V, fields: &'ast [ast:
 
 pub fn walk_struct_pattern<'ast, V: Visitor<'ast>>(
     v: &mut V,
-    strct: &'ast str,
+    strct: &'ast ast::Name,
     fields: &'ast HashMap<String, ast::Pattern>,
 ) {
     v.visit_name(strct);
@@ -524,7 +518,7 @@ pub fn walk_struct_pattern<'ast, V: Visitor<'ast>>(
 
 pub fn walk_tuple_struct_pattern<'ast, V: Visitor<'ast>>(
     v: &mut V,
-    strct: &'ast str,
+    strct: &'ast ast::Name,
     fields: &'ast [ast::Pattern],
 ) {
     v.visit_name(strct);
@@ -535,7 +529,7 @@ pub fn walk_tuple_struct_pattern<'ast, V: Visitor<'ast>>(
 
 pub fn walk_type_specific_pattern<'ast, V: Visitor<'ast>>(
     v: &mut V,
-    name: &'ast str,
+    name: &'ast ast::Name,
     pattern: &'ast ast::Pattern,
 ) {
     v.visit_name(name);
@@ -544,26 +538,24 @@ pub fn walk_type_specific_pattern<'ast, V: Visitor<'ast>>(
 
 pub fn walk_adt_struct_constructor<'ast, V: Visitor<'ast>>(
     v: &mut V,
-    typ: &'ast str,
-    case: &'ast str,
+    typ: &'ast ast::Name,
+    _case: &'ast str,
     values: &'ast [(String, ast::Expr)],
 ) {
     v.visit_name(typ);
-    v.visit_name(case);
-    for (name, expr) in values {
-        v.visit_name(name);
+    for (_name, expr) in values {
         v.visit_expr(expr);
     }
 }
 
 pub fn walk_adt_tuple_constructor<'ast, V: Visitor<'ast>>(
     v: &mut V,
-    typ: &'ast str,
+    typ: &'ast ast::Name,
     case: &'ast str,
     values: &'ast [ast::Expr],
 ) {
     v.visit_name(typ);
-    v.visit_name(case);
+    v.visit_identifier(case);
     for expr in values {
         v.visit_expr(expr);
     }
@@ -571,19 +563,18 @@ pub fn walk_adt_tuple_constructor<'ast, V: Visitor<'ast>>(
 
 pub fn walk_adt_unit_constructor<'ast, V: Visitor<'ast>>(
     v: &mut V,
-    typ: &'ast str,
+    typ: &'ast ast::Name,
     case: &'ast str,
 ) {
     v.visit_name(typ);
-    v.visit_name(case);
+    v.visit_identifier(case);
 }
 
 pub fn walk_anon_struct_pattern<'ast, V: Visitor<'ast>>(
     v: &mut V,
     fields: &'ast HashMap<String, ast::Pattern>,
 ) {
-    for (name, pattern) in fields {
-        v.visit_name(name);
+    for (_name, pattern) in fields {
         v.visit_pattern(pattern);
     }
 }
@@ -607,7 +598,7 @@ pub fn walk_method_call<'ast, V: Visitor<'ast>>(
     kwargs: &'ast HashMap<String, ast::Expr>,
 ) {
     v.visit_expr(receiver);
-    v.visit_name(method);
+    v.visit_identifier(method);
     for arg in args {
         v.visit_expr(arg);
     }
@@ -617,7 +608,7 @@ pub fn walk_method_call<'ast, V: Visitor<'ast>>(
 }
 
 pub fn walk_const_definition<'ast, V: Visitor<'ast>>(v: &mut V, def: &'ast ast::ConstDefinition) {
-    v.visit_name(&def.name);
+    v.visit_identifier(&def.name);
     v.visit_typ(&def.typ);
     v.visit_expr(&def.init);
 }
@@ -626,10 +617,10 @@ pub fn walk_local_function_def<'ast, V: Visitor<'ast>>(
     v: &mut V,
     def: &'ast ast::FunctionDefinition,
 ) {
-    v.visit_name(&def.name);
+    v.visit_identifier(&def.name);
     v.visit_typ(&def.typ);
-    for param in &def.parameters {
-        v.visit_name(param);
+    for name in &def.parameters {
+        v.visit_identifier(&name);
     }
     v.visit_expr(&def.body);
 }

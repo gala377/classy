@@ -67,7 +67,7 @@ pub fn resolve_top_level_type(
         }
         ast::DefinedType::Record(ast::Record { fields }) => {
             let mut resolved_fields = Vec::with_capacity(fields.len());
-            for ast::TypedName { name, typ } in fields {
+            for ast::TypedIdentifier { name, typ } in fields {
                 let resolved = resolver.resolve_type(&mut scope, typ);
                 resolved_fields.push((name.clone(), resolved));
             }
