@@ -37,7 +37,7 @@ impl Name {
 }
 
 #[derive(Debug)]
-pub struct Program {
+pub struct SourceFile {
     pub namespace: Option<Namespace>,
     pub items: Vec<TopLevelItem>,
 }
@@ -520,7 +520,7 @@ impl Expr {
     }
 }
 
-impl classy_sexpr::ToSExpr for Program {
+impl classy_sexpr::ToSExpr for SourceFile {
     fn to_sexpr(self) -> classy_sexpr::SExpr {
         match self.namespace {
             Some(namespace) => {

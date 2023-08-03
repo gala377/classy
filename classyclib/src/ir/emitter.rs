@@ -40,7 +40,7 @@ impl SourceEmitter {
 
     pub fn compile(
         mut self,
-        program: ast::Program,
+        program: ast::SourceFile,
         tctx: &mut TypCtx,
         tenv: &TypeEnv,
     ) -> HashMap<String, IrFunction> {

@@ -118,7 +118,7 @@ fn compile(
     Some(vm.load_functions(&mut functions_vec, &constant_pool))
 }
 
-pub fn prepare_type_ctx(mut tctx: TypCtx, ast: &ast::Program) -> TypCtx {
+pub fn prepare_type_ctx(mut tctx: TypCtx, ast: &ast::SourceFile) -> TypCtx {
     let mut add_types = AddTypes::with_primitive_types(&mut tctx);
     add_types.visit(ast);
     tctx = typecheck::resolve_type_names(tctx);

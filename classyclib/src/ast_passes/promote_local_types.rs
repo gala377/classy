@@ -11,7 +11,7 @@ pub struct PromoteAnonTypes {
 }
 
 impl AstPass for PromoteAnonTypes {
-    fn run(&mut self, ast: ast::Program, _: &Session) -> ast::Program {
+    fn run(&mut self, ast: ast::SourceFile, _: &Session) -> ast::SourceFile {
         self.fold_program(ast)
     }
 }
@@ -35,7 +35,7 @@ impl PromoteAnonTypes {
 }
 
 impl Folder for PromoteAnonTypes {
-    fn fold_program(&mut self, program: ast::Program) -> ast::Program {
+    fn fold_program(&mut self, program: ast::SourceFile) -> ast::SourceFile {
         let mut program = ast::fold::fold_program(self, program);
         for (name, record) in self.types_to_promote.iter() {
             let typ = ast::TopLevelItem {

@@ -12,10 +12,10 @@ pub mod promote_local_types;
 pub mod verify_lvalues;
 
 pub trait AstPass {
-    fn run(&mut self, ast: ast::Program, session: &Session) -> ast::Program;
+    fn run(&mut self, ast: ast::SourceFile, session: &Session) -> ast::SourceFile;
 }
 
-pub fn run_befor_type_context_passes(ast: ast::Program, session: &Session) -> ast::Program {
+pub fn run_befor_type_context_passes(ast: ast::SourceFile, session: &Session) -> ast::SourceFile {
     let ast = verify_lvalues::VerifyLvalues.run(ast, session);
     let ast = promote_local_types::PromoteAnonTypes::new().run(ast, session);
     let ast = implicit_forall::ImplicitForall::new().run(ast, session);
@@ -26,9 +26,9 @@ pub fn run_befor_type_context_passes(ast: ast::Program, session: &Session) -> as
 
 pub fn run_before_typechecking_passes(
     tctx: &TypCtx,
-    ast: ast::Program,
+    ast: ast::SourceFile,
     session: &Session,
-) -> ast::Program {
+) -> ast::SourceFile {
     let ast = func_to_struct_literal::PromoteCallToStructLiteral::new(tctx).run(ast, session);
     ast
 }

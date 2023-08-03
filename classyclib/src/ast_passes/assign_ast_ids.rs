@@ -15,7 +15,7 @@ impl AssignAstIds {
 }
 
 impl AstPass for AssignAstIds {
-    fn run(&mut self, ast: ast::Program, session: &Session) -> ast::Program {
+    fn run(&mut self, ast: ast::SourceFile, session: &Session) -> ast::SourceFile {
         self.id_provider = Some(session.id_provider());
         self.fold_program(ast)
     }

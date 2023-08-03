@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
 use crate::ast::{
-    DefinedType, Expr, ExprKind, FunctionDefinition, Name, Pattern, PatternKind, Program,
+    DefinedType, Expr, ExprKind, FunctionDefinition, Name, Pattern, PatternKind, SourceFile,
     TopLevelItemKind, Typ, TypeDefinition, TypeVariable, TypedIdentifier,
 };
 
 use super::{ConstDefinition, MethodsBlock, TopLevelItem};
 
 pub trait Folder: Sized {
-    fn fold_program(&mut self, program: Program) -> Program {
+    fn fold_program(&mut self, program: SourceFile) -> SourceFile {
         fold_program(self, program)
     }
 
@@ -307,12 +307,12 @@ pub trait Folder: Sized {
     }
 }
 
-pub fn fold_program<F: Folder>(folder: &mut F, program: Program) -> Program {
+pub fn fold_program<F: Folder>(folder: &mut F, program: SourceFile) -> SourceFile {
     let mut new_items = Vec::new();
     for item in program.items {
         new_items.push(folder.fold_top_level_item(item));
     }
-    Program {
+    SourceFile {
         namespace: program.namespace,
         items: new_items,
     }

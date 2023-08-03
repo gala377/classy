@@ -24,7 +24,7 @@ use super::{ast_to_type::PrefexScope, types::DeBruijn};
 /// Maps unique node id in the ast with its type.
 pub type TypeEnv = HashMap<usize, Type>;
 
-pub fn run(tctx: &mut TypCtx, ast: &ast::Program, session: &Session) -> TypeEnv {
+pub fn run(tctx: &mut TypCtx, ast: &ast::SourceFile, session: &Session) -> TypeEnv {
     tctx.remove_to_infere_type();
 
     let mut cons = Inference::infer_types(tctx, ast, session);
@@ -212,7 +212,7 @@ impl<'sess> Inference<'sess> {
     ///
     /// Creates an instance of type inferer and runs it on the program.
     /// Then returns itself with all the information gathered.
-    pub fn infer_types(tctx: &mut TypCtx, ast: &ast::Program, session: &'sess Session) -> Self {
+    pub fn infer_types(tctx: &mut TypCtx, ast: &ast::SourceFile, session: &'sess Session) -> Self {
         // create fresh variables for anonymous types
         let replace_to_infere = &mut ReplaceInferTypes::new(session.id_provider());
         tctx.fold_types(replace_to_infere);

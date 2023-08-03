@@ -19,7 +19,7 @@ impl MoveConstInit {
 }
 
 impl AstPass for MoveConstInit {
-    fn run(&mut self, ast: ast::Program, _: &Session) -> ast::Program {
+    fn run(&mut self, ast: ast::SourceFile, _: &Session) -> ast::SourceFile {
         self.visit(&ast);
         self.fold_program(ast)
     }

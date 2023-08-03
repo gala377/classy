@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::ast;
 
 pub trait Visitor<'ast>: Sized {
-    fn visit(&mut self, node: &'ast ast::Program) {
+    fn visit(&mut self, node: &'ast ast::SourceFile) {
         walk_program(self, node)
     }
 
@@ -212,7 +212,7 @@ pub trait Visitor<'ast>: Sized {
     fn visit_unit(&mut self) {}
 }
 
-pub fn walk_program<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::Program) {
+pub fn walk_program<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::SourceFile) {
     for item in &node.items {
         v.visit_top_level_item(item)
     }

@@ -50,7 +50,7 @@ pub struct Parser<'source> {
 }
 
 impl<'source> Parser<'source> {
-    pub fn parse(&mut self) -> Result<ast::Program, Vec<SyntaxError>> {
+    pub fn parse(&mut self) -> Result<ast::SourceFile, Vec<SyntaxError>> {
         let mut items = Vec::new();
         let mut namespace = None;
         loop {
@@ -58,7 +58,7 @@ impl<'source> Parser<'source> {
                 if !self.errors.is_empty() {
                     return Err(self.errors.clone());
                 }
-                return Ok(ast::Program { items, namespace });
+                return Ok(ast::SourceFile { items, namespace });
             }
             if items.is_empty()
                 && namespace.is_none()

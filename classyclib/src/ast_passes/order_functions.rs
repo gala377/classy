@@ -109,7 +109,7 @@ impl FunctionsOrderer {
 }
 
 impl<'ast> ast::Visitor<'ast> for FunctionsOrderer {
-    fn visit(&mut self, prog: &'ast ast::Program) {
+    fn visit(&mut self, prog: &'ast ast::SourceFile) {
         for i in &prog.items {
             self.visit_top_level_item(i);
         }
@@ -209,7 +209,7 @@ impl<'g> CycleFinder<'g> {
 mod tests {
     use classy_syntax::ast::{self, Visitor};
 
-    fn mk_ast(source: &str) -> ast::Program {
+    fn mk_ast(source: &str) -> ast::SourceFile {
         let lexer = classy_syntax::lexer::Lexer::new(source);
         let mut parser = classy_syntax::parser::Parser::new(lexer);
         parser.parse().unwrap()

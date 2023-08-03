@@ -25,7 +25,7 @@ impl<'ast> ast::Visitor<'ast> for VerifyLvalues {
 }
 
 impl AstPass for VerifyLvalues {
-    fn run(&mut self, ast: ast::Program, _: &Session) -> ast::Program {
+    fn run(&mut self, ast: ast::SourceFile, _: &Session) -> ast::SourceFile {
         self.visit(&ast);
         ast
     }

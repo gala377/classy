@@ -248,7 +248,7 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
 }
 
 impl<'ctx> ast_passes::AstPass for PromoteCallToStructLiteral<'ctx> {
-    fn run(&mut self, ast: ast::Program, _: &Session) -> ast::Program {
+    fn run(&mut self, ast: ast::SourceFile, _: &Session) -> ast::SourceFile {
         ast::fold::fold_program(self, ast)
     }
 }

@@ -26,7 +26,7 @@ pub use inference::run;
 
 /// Create a top level type context containing all types and functions with
 /// their respective types in the simplest form possible.
-pub fn prepare_for_typechecking(program: &classy_syntax::ast::Program) -> TypCtx {
+pub fn prepare_for_typechecking(program: &classy_syntax::ast::SourceFile) -> TypCtx {
     let mut tctx = TypCtx::new();
     let mut add_types = AddTypes::with_primitive_types(&mut tctx);
     add_types.visit(program);
