@@ -76,6 +76,13 @@ impl Folder for PromoteAnonTypes {
             fields: record_fields,
         };
         self.types_to_promote.push((name.clone(), record));
-        ast::fold::fold_struct_literal(self, ast::Path(vec![name]), fields.into_iter().collect())
+        ast::fold::fold_struct_literal(
+            self,
+            ast::Name {
+                path: vec![],
+                identifier: name,
+            },
+            fields.into_iter().collect(),
+        )
     }
 }

@@ -15,8 +15,22 @@ pub struct DefinitionId(pub UniqueId);
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TypeId(pub UniqueId);
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PackageId(pub UniqueId);
+
+pub const CURRENT_PACKAGE_ID: PackageId = PackageId(0);
+
+pub struct PackageInfo {
+    pub database: Database,
+}
+
 /// A complete representation of a program that allows for easy quering.
 pub struct Database {
+    /// Mapping for package id to its package info.
+    packages: HashMap<PackageId, PackageInfo>,
+    /// Map of package name to its id.
+    packages_map: HashMap<String, PackageId>,
+
     /// Global variable definitions.
     variable_definitions: HashMap<DefinitionId, ast::ConstDefinition>,
     /// Function and method definitions.

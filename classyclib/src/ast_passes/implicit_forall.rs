@@ -70,12 +70,15 @@ impl ast::Folder for ImplicitForall {
         }
     }
 
-    fn fold_name_type(&mut self, name: String) -> ast::Typ {
-        if name.chars().all(|c| c.is_lowercase())
-            && !self.ignore_names.contains(&name)
-            && !self.prefex.contains(&name)
+    fn fold_name_type(&mut self, name: ast::Name) -> ast::Typ {
+        if !name.path.is_empty() {
+            return ast::Typ::Name(name);
+        }
+        if name.identifier.chars().all(|c| c.is_lowercase())
+            && !self.ignore_names.contains(&name.identifier)
+            && !self.prefex.contains(&name.identifier)
         {
-            self.prefex.push(name.clone());
+            self.prefex.push(name.identifier.clone());
         }
         ast::Typ::Name(name)
     }

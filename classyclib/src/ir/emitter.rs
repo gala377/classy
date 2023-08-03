@@ -1,3 +1,4 @@
+use core::panic;
 use std::collections::HashMap;
 
 use classy_syntax::ast;
@@ -224,7 +225,8 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
             ast::ExprKind::StringConst(v) => Address::ConstantString(v.clone()),
             ast::ExprKind::FloatConst(v) => Address::ConstantFloat(*v),
             ast::ExprKind::BoolConst(v) => Address::ConstantBool(*v),
-            ast::ExprKind::Name(n) => {
+            ast::ExprKind::Name(n) if n.path.is_empty() => {
+                let n = &n.identifier;
                 if let Some(addr) = self.find_in_scopes(n) {
                     return addr;
                 }
@@ -312,7 +314,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 // We should believe into scope analysis but I am pretty sure I did not
                 // do it and this might create a struct when we dont want to because we
                 // reassigned the name of the type to something else
-                let name = strct.0.last().unwrap().clone();
+                let name = strct.identifier.clone();
                 let (def, fields) = self.get_struct_type(&name);
                 let tid = self.tctx.def_id_to_typ_id(def);
                 let struct_address = self.new_temporary(IsRef::Ref);
@@ -335,7 +337,8 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 }
                 struct_address
             }
-            ast::ExprKind::AdtUnitConstructor { typ, constructor } => {
+            ast::ExprKind::AdtUnitConstructor { typ, constructor } if typ.path.is_empty() => {
+                let typ = &typ.identifier;
                 let (def, cons) = self.get_adt_type(typ);
                 let tid = self.tctx.def_id_to_typ_id(def);
                 let adt_address = self.new_temporary(IsRef::Ref);
@@ -359,7 +362,8 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 typ,
                 constructor,
                 args,
-            } => {
+            } if typ.path.is_empty() => {
+                let typ = &typ.identifier;
                 let (def, cons) = self.get_adt_type(typ);
                 let tid = self.tctx.def_id_to_typ_id(def);
                 let adt_address = self.new_temporary(IsRef::Ref);
@@ -391,7 +395,8 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 typ,
                 constructor,
                 fields,
-            } => {
+            } if typ.path.is_empty() => {
+                let typ = &typ.identifier;
                 let (def, cons) = self.get_adt_type(typ);
                 let tid = self.tctx.def_id_to_typ_id(def);
                 let adt_address = self.new_temporary(IsRef::Ref);
@@ -662,7 +667,8 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                     self.emit_pattern(val, p, next_label.clone());
                 }
             }
-            ast::PatternKind::Struct { strct, fields } => {
+            ast::PatternKind::Struct { strct, fields } if strct.path.is_empty() => {
+                let strct = &strct.identifier;
                 let t = self.env.get(&id).unwrap();
                 let struct_fields = match t {
                     Type::Struct { fields, .. } => fields.clone(),
@@ -717,7 +723,8 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                     self.emit_pattern(val, field_pattern, next_label.clone());
                 }
             }
-            ast::PatternKind::TupleStruct { strct, fields } => {
+            ast::PatternKind::TupleStruct { strct, fields } if strct.path.is_empty() => {
+                let strct = &strct.identifier;
                 let constructors = self.get_constructors(self.env.get(&id).unwrap());
                 let (cpos, ctyp) = constructors
                     .iter()
@@ -842,6 +849,7 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
                 });
             }
             ast::PatternKind::Rest(_) => todo!(),
+            _ => panic!("Not supported"),
         }
     }
 
@@ -915,7 +923,8 @@ impl<'ctx, 'env> FunctionEmitter<'ctx, 'env> {
 
     fn emit_lval(&mut self, expr: &ast::Expr) -> Lval {
         match &expr.kind {
-            ast::ExprKind::Name(name) => {
+            ast::ExprKind::Name(name) if name.path.is_empty() => {
+                let name = &name.identifier;
                 if let Some(addr) = self.find_in_scopes(name) {
                     return Lval::Address(addr);
                 }

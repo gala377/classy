@@ -4,6 +4,8 @@ use classy_syntax::ast;
 
 use crate::typecheck::{self, type_context::TypCtx};
 
+pub mod package2;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Type {
     Unit,
@@ -98,7 +100,10 @@ fn read_package(pkg: &Package, tctx: &mut TypCtx) {
                 })
             }
             Type::Name(name) => ast::DefinedType::Alias(ast::Alias {
-                for_type: ast::Typ::Name(name.clone()),
+                for_type: ast::Typ::Name(ast::Name {
+                    path: vec![],
+                    identifier: name.clone(),
+                }),
             }),
             Type::Unit => ast::DefinedType::Alias(ast::Alias {
                 for_type: ast::Typ::Unit,
@@ -141,7 +146,10 @@ fn read_package(pkg: &Package, tctx: &mut TypCtx) {
 
 fn deserialize_type(typ: &Type) -> ast::Typ {
     match typ {
-        Type::Name(name) => ast::Typ::Name(name.clone()),
+        Type::Name(name) => ast::Typ::Name(ast::Name {
+            path: vec![],
+            identifier: name.clone(),
+        }),
         Type::Struct { .. } => panic!("There should be no nested struct types"),
         Type::Function { args, ret } => {
             let args = args.iter().map(deserialize_type).collect();

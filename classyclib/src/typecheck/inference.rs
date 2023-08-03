@@ -386,6 +386,10 @@ impl<'sess> Inference<'sess> {
                 Type::Bool
             }
             ast::ExprKind::Name(name) => {
+                if !name.path.is_empty() {
+                    panic!("pather names are not supported");
+                }
+                let name = &name.identifier;
                 let mut typ = {
                     println!("Checking name {name}");
                     let scope = self.scope.borrow();
@@ -514,10 +518,10 @@ impl<'sess> Inference<'sess> {
                 let ret_t = self.fresh_type();
                 self.env.insert(id, ret_t.clone());
                 assert!(
-                    strct.0.len() == 1,
+                    strct.path.is_empty(),
                     "structs with multiple path segments not implemented yet"
                 );
-                let name = strct.0[0].clone();
+                let name = strct.identifier.clone();
                 let strct_t = self.scope.borrow().lookup_type(&name).unwrap();
                 let strct_t = self.instance_if_possible(&strct_t);
                 let Some(fields) = self.extract_fields(strct_t.clone(), ret_t.clone(), true) else {
@@ -666,6 +670,8 @@ impl<'sess> Inference<'sess> {
                 // So probably befor we create this type we should check if its a scheme
                 // and if it is we should instance it. Thats the same for any other case
                 // even structure creation.
+                assert!(typ.path.is_empty(), "paths are not supported");
+                let typ = &typ.identifier;
                 let t = self.scope.borrow().lookup_type(typ).unwrap();
                 let t = self.instance_if_possible(&t);
                 self.constraints.push(Constraint::Eq(ret.clone(), t));
@@ -687,6 +693,9 @@ impl<'sess> Inference<'sess> {
             } => {
                 let ret = self.fresh_type();
                 self.env.insert(id, ret.clone());
+
+                assert!(typ.path.is_empty(), "paths are not supported");
+                let typ = &typ.identifier;
                 let t = self.scope.borrow().lookup_type(typ).unwrap();
                 let t = self.instance_if_possible(&t);
                 self.constraints.push(Constraint::Eq(ret.clone(), t));
@@ -710,6 +719,9 @@ impl<'sess> Inference<'sess> {
             ast::ExprKind::AdtUnitConstructor { typ, constructor } => {
                 let ret = self.fresh_type();
                 self.env.insert(id, ret.clone());
+
+                assert!(typ.path.is_empty(), "paths are not supported");
+                let typ = &typ.identifier;
                 let t = self.scope.borrow().lookup_type(typ).unwrap();
                 let t = self.instance_if_possible(&t);
                 self.constraints.push(Constraint::Eq(ret.clone(), t));
@@ -749,6 +761,7 @@ impl<'sess> Inference<'sess> {
                 self.infer_let_rec(definitions, prefex_scope, tctx);
                 Type::Unit
             }
+            _ => panic!("panic"),
         }
     }
 
@@ -770,6 +783,8 @@ impl<'sess> Inference<'sess> {
                 typ
             }
             ast::PatternKind::TypeSpecifier(tname, case) => {
+                assert!(tname.path.is_empty(), "paths are not supported");
+                let tname = &tname.identifier;
                 let typ = self
                     .scope
                     .borrow()
@@ -797,6 +812,8 @@ impl<'sess> Inference<'sess> {
             ast::PatternKind::Struct { strct, fields } => {
                 let typ = self.fresh_type();
 
+                assert!(strct.path.is_empty(), "paths are not supported");
+                let strct = &strct.identifier;
                 self.env.insert(id, typ.clone());
                 let inner_types = fields
                     .iter()
@@ -838,6 +855,8 @@ impl<'sess> Inference<'sess> {
             ast::PatternKind::TupleStruct { strct, fields } => {
                 let typ = self.fresh_type();
 
+                assert!(strct.path.is_empty(), "paths are not supported");
+                let strct = &strct.identifier;
                 self.env.insert(id, typ.clone());
                 let inner_types = fields
                     .iter()
@@ -997,16 +1016,18 @@ impl<'sess> Inference<'sess> {
         // convert ast::Typ to Type
         match typ {
             ast::Typ::Unit => Type::Unit,
-            ast::Typ::Name(name) => match prefex_scope.get(name) {
-                Some(i) => {
-                    let pos = prefex_scope.position(name).unwrap();
-                    Type::Generic(DeBruijn(pos as isize), *i)
+            ast::Typ::Name(name) if name.path.is_empty() => {
+                match prefex_scope.get(&name.identifier) {
+                    Some(i) => {
+                        let pos = prefex_scope.position(&name.identifier).unwrap();
+                        Type::Generic(DeBruijn(pos as isize), *i)
+                    }
+                    // TODO: #problem This might lookup a function shich name
+                    // we do not know. So we should solve it here it the type
+                    // of this function is unknown.
+                    None => scope.lookup_type(&name.identifier).expect("unknown type"),
                 }
-                // TODO: #problem This might lookup a function shich name
-                // we do not know. So we should solve it here it the type
-                // of this function is unknown.
-                None => scope.lookup_type(name).expect("unknown type"),
-            },
+            }
             ast::Typ::Application { callee, args } => {
                 let callee = Box::new(self.ast_type_to_type(scope, prefex_scope, callee));
                 let args = args
@@ -1062,6 +1083,7 @@ impl<'sess> Inference<'sess> {
                 Type::Tuple(types)
             }
             ast::Typ::ToInfere => self.fresh_type(),
+            _ => panic!("panic"),
         }
     }
 

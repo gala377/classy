@@ -417,6 +417,9 @@ pub fn fold_expr_kind(folder: &mut impl Folder, expr: ExprKind) -> ExprKind {
             kwargs,
         } => folder.fold_methods_call(*receiver, method, args, kwargs),
         ExprKind::LetRec { definitions } => folder.fold_let_rec(definitions),
+        ExprKind::ResolvedGlobalName { .. } => {
+            panic!("ResolvedGlobalName unsupported")
+        }
     }
 }
 
@@ -712,6 +715,7 @@ pub fn fold_type(folder: &mut impl Folder, typ: Typ) -> Typ {
         Typ::ToInfere => folder.fold_to_infere_type(),
         Typ::Poly(vars, t) => folder.fold_poly_type(vars, *t),
         Typ::Application { callee, args } => folder.fold_application_type(*callee, args),
+        Typ::ResolvedName { .. } => panic!("ResolvedName unsupported"),
     }
 }
 

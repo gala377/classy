@@ -225,16 +225,16 @@ impl<'ctx> TypeResolver<'ctx> {
 
     pub fn resolve_type(&mut self, prefex: &mut PrefexScope, typ: &ast::Typ) -> Type {
         match typ {
-            ast::Typ::Name(n) => match prefex.get(n) {
+            ast::Typ::Name(n) => match prefex.get(&n.identifier) {
                 Some(index) => {
-                    let pos = prefex.position(n).unwrap();
+                    let pos = prefex.position(&n.identifier).unwrap();
                     Type::Generic(DeBruijn(pos as isize), *index)
                 }
                 None => Type::Alias(
                     *self
                         .names
-                        .get(n)
-                        .unwrap_or_else(|| panic!("type not found, {n}")),
+                        .get(&n.identifier)
+                        .unwrap_or_else(|| panic!("type not found, {:?}", n)),
                 ),
             },
             ast::Typ::Tuple(types) => {
@@ -295,6 +295,7 @@ impl<'ctx> TypeResolver<'ctx> {
                     typ: Box::new(t),
                 })
             }
+            t => panic!("Unsupported type {t:?}"),
         }
     }
 }
