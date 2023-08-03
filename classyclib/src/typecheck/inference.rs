@@ -1173,7 +1173,7 @@ pub fn requires_typechecking(t: Type) -> bool {
     let mut r = RequiresTypeChecking {
         requires_typechecking: false,
     };
-    r.fold_type(t);
+    r.fold_type(t).unwrap();
     r.requires_typechecking
 }
 

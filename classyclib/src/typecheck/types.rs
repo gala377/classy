@@ -453,20 +453,20 @@ pub fn types_strictly_eq(db: &Database, t1: &Type, t2: &Type) -> Result<bool, Qu
         _ => {}
     }
     let (t1, t2) = match (t1, t2) {
-        (&Type::Alias(for_type), t2) => {
-            let t1 = db.resolve_alias_ref(crate::knowledge::TypeId(for_type))?;
-            (t1, t2)
-        }
-        (t1, &Type::Alias(for_type)) => {
-            let t2 = db.resolve_alias_ref(crate::knowledge::TypeId(for_type))?;
-            (t1, t2)
-        }
         (&Type::Alias(for_type_1), &Type::Alias(for_type_2)) if for_type_1 == for_type_2 => {
             return Ok(true);
         }
         (&Type::Alias(for_type_1), &Type::Alias(for_type_2)) => {
             let t1 = db.resolve_alias_ref(crate::knowledge::TypeId(for_type_1))?;
             let t2 = db.resolve_alias_ref(crate::knowledge::TypeId(for_type_2))?;
+            (t1, t2)
+        }
+        (&Type::Alias(for_type), t2) => {
+            let t1 = db.resolve_alias_ref(crate::knowledge::TypeId(for_type))?;
+            (t1, t2)
+        }
+        (t1, &Type::Alias(for_type)) => {
+            let t2 = db.resolve_alias_ref(crate::knowledge::TypeId(for_type))?;
             (t1, t2)
         }
         (t1, t2) => (t1, t2),
