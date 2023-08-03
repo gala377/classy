@@ -22,13 +22,12 @@ pub const CURRENT_PACKAGE_ID: PackageId = PackageId(0);
 
 pub struct PackageInfo {
     pub name: String,
-    pub database: Database,
 }
 
 /// A complete representation of a program that allows for easy quering.
 pub struct Database {
     /// Mapping for package id to its package info.
-    packages: Vec<(PackageId, PackageInfo)>,
+    packages: Vec<PackageInfo>,
     /// Map of package name to its id.
     packages_map: HashMap<String, PackageId>,
 
@@ -97,6 +96,26 @@ struct MethodHandle {
 type MethodBlocksMappings = HashMap<TypeId, HashMap<TypeId, MethodHandle>>;
 
 impl Database {
+    const INITIAL_TYPE_MAP_CAPACITY: u64 = 1000;
+
+    pub fn new() -> Self {
+        Self {
+            packages: Vec::new(),
+            packages_map: HashMap::new(),
+            variable_definitions: HashMap::new(),
+            function_definitions: HashMap::new(),
+            type_definitions: HashMap::new(),
+            definition_types: HashMap::new(),
+            type_aliases: HashMap::new(),
+            reverse_type_aliases: TypeHashMap::new(Self::INITIAL_TYPE_MAP_CAPACITY as u64),
+            method_blocks: HashMap::new(),
+        }
+    }
+
+    pub fn add_package(&mut self, package: PackageInfo) {
+        self.packages.push(package)
+    }
+
     pub fn resolve_alias(&self, type_id: TypeId) -> Result<Type, QueryError> {
         self.resolve_alias_ref(type_id).cloned()
     }

@@ -28,12 +28,14 @@ impl SharedIdProvider {
 
 pub struct Session {
     id_provider: SharedIdProvider,
+    current_package: String,
 }
 
 impl Session {
-    pub fn new() -> Self {
+    pub fn new(package: &str) -> Self {
         Self {
             id_provider: SharedIdProvider::new(),
+            current_package: package.into(),
         }
     }
 

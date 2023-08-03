@@ -1203,7 +1203,7 @@ mod tests {
         let lex = Lexer::new(source);
         let mut parser = Parser::new(lex);
         let res = parser.parse().unwrap();
-        let sess = Session::new();
+        let sess = Session::new("test");
         let res = ast_passes::run_befor_type_context_passes(res, &sess);
         let mut tctx = typecheck::prepare_for_typechecking(&res);
         let res = ast_passes::run_before_typechecking_passes(&tctx, res, &sess);

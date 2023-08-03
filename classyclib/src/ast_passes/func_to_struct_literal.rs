@@ -382,7 +382,7 @@ mod tests {
         let ast = parser.parse().unwrap();
         let tctx = typecheck::prepare_for_typechecking(&ast);
         let mut pass = PromoteCallToStructLiteral::new(&tctx);
-        let sess = crate::session::Session::new();
+        let sess = crate::session::Session::new("test");
         let actual = pass.run(ast, &sess);
         similar_asserts::assert_eq!(expected: expected, actual: actual.to_sexpr());
     }

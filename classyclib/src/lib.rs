@@ -2,6 +2,7 @@
 
 pub mod ast_passes;
 pub mod code;
+pub mod compile;
 pub mod discard_values;
 pub mod emitter;
 pub mod id_provider;
