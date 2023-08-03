@@ -100,7 +100,7 @@ fn read_package(pkg: &Package, tctx: &mut TypCtx) {
                 })
             }
             Type::Name(name) => ast::DefinedType::Alias(ast::Alias {
-                for_type: ast::Typ::Name(ast::Name {
+                for_type: ast::Typ::Name(ast::Name::Unresolved {
                     path: vec![],
                     identifier: name.clone(),
                 }),
@@ -146,7 +146,7 @@ fn read_package(pkg: &Package, tctx: &mut TypCtx) {
 
 fn deserialize_type(typ: &Type) -> ast::Typ {
     match typ {
-        Type::Name(name) => ast::Typ::Name(ast::Name {
+        Type::Name(name) => ast::Typ::Name(ast::Name::Unresolved {
             path: vec![],
             identifier: name.clone(),
         }),

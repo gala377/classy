@@ -1,3 +1,5 @@
+use core::panic;
+
 use classy_syntax::ast::{self, Folder};
 
 use crate::{scope::Scope, session::Session};
@@ -71,14 +73,17 @@ impl ast::Folder for ImplicitForall {
     }
 
     fn fold_name_type(&mut self, name: ast::Name) -> ast::Typ {
-        if !name.path.is_empty() {
+        let ast::Name::Unresolved { path, identifier } = name else {
+            panic!("expected unresolved name")
+        };
+        if !path.is_empty() {
             return ast::Typ::Name(name);
         }
-        if name.identifier.chars().all(|c| c.is_lowercase())
-            && !self.ignore_names.contains(&name.identifier)
-            && !self.prefex.contains(&name.identifier)
+        if identifier.chars().all(|c| c.is_lowercase())
+            && !self.ignore_names.contains(&identifier)
+            && !self.prefex.contains(&identifier)
         {
-            self.prefex.push(name.identifier.clone());
+            self.prefex.push(identifier.clone());
         }
         ast::Typ::Name(name)
     }

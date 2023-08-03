@@ -48,7 +48,7 @@ impl ast::fold::Folder for MoveConstInit {
                 kind: ast::ExprKind::Assignment {
                     lval: Box::new(ast::Expr {
                         id: init.id,
-                        kind: ast::ExprKind::Name(ast::Name {
+                        kind: ast::ExprKind::Name(ast::Name::Unresolved {
                             path: vec![],
                             identifier: name.clone(),
                         }),
