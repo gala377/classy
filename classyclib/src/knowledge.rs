@@ -21,13 +21,14 @@ pub struct PackageId(pub UniqueId);
 pub const CURRENT_PACKAGE_ID: PackageId = PackageId(0);
 
 pub struct PackageInfo {
+    pub name: String,
     pub database: Database,
 }
 
 /// A complete representation of a program that allows for easy quering.
 pub struct Database {
     /// Mapping for package id to its package info.
-    packages: HashMap<PackageId, PackageInfo>,
+    packages: Vec<(PackageId, PackageInfo)>,
     /// Map of package name to its id.
     packages_map: HashMap<String, PackageId>,
 
