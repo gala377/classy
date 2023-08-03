@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::format, ops::Range};
+use std::{collections::HashMap, ops::Range};
 
 pub mod fold;
 pub mod visitor;
