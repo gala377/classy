@@ -312,7 +312,10 @@ pub fn fold_program<F: Folder>(folder: &mut F, program: Program) -> Program {
     for item in program.items {
         new_items.push(folder.fold_top_level_item(item));
     }
-    Program { items: new_items }
+    Program {
+        namespace: program.namespace,
+        items: new_items,
+    }
 }
 
 pub fn fold_top_level_item_kind<F: Folder>(

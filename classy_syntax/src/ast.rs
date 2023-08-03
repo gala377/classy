@@ -38,6 +38,7 @@ impl Name {
 
 #[derive(Debug)]
 pub struct Program {
+    pub namespace: Option<Namespace>,
     pub items: Vec<TopLevelItem>,
 }
 
@@ -53,7 +54,6 @@ pub enum TopLevelItemKind {
     FunctionDefinition(FunctionDefinition),
     MethodsBlock(MethodsBlock),
     ConstDefinition(ConstDefinition),
-    Namespace(Namespace),
 }
 
 #[derive(Debug, Clone)]
@@ -522,7 +522,10 @@ impl Expr {
 
 impl classy_sexpr::ToSExpr for Program {
     fn to_sexpr(self) -> classy_sexpr::SExpr {
-        sexpr!(${self.items})
+        match self.namespace {
+            Some(namespace) => sexpr!(($namespace ${self.items})),
+            None => sexpr!(${self.items}),
+        }
     }
 }
 
@@ -539,7 +542,6 @@ impl classy_sexpr::ToSExpr for TopLevelItemKind {
             TopLevelItemKind::FunctionDefinition(def) => sexpr!($def),
             TopLevelItemKind::MethodsBlock(_) => todo!(),
             TopLevelItemKind::ConstDefinition(def) => sexpr!($def),
-            TopLevelItemKind::Namespace(def) => sexpr!($def),
         }
     }
 }

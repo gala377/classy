@@ -52,12 +52,27 @@ pub struct Parser<'source> {
 impl<'source> Parser<'source> {
     pub fn parse(&mut self) -> Result<ast::Program, Vec<SyntaxError>> {
         let mut items = Vec::new();
+        let mut namespace = None;
         loop {
             if self.eof() {
                 if !self.errors.is_empty() {
                     return Err(self.errors.clone());
                 }
-                return Ok(ast::Program { items });
+                return Ok(ast::Program { items, namespace });
+            }
+            if items.is_empty()
+                && namespace.is_none()
+                && self.match_token(TokenType::Namespace).is_ok()
+            {
+                if let Ok(path) = self.parse_name() {
+                    namespace = Some(ast::Namespace { name: path });
+                } else {
+                    self.error(
+                        self.lexer.current().span.clone(),
+                        "Expected a namespace name",
+                    );
+                    return Err(self.errors.clone());
+                }
             }
             if let Ok(str_def) = self.parse_type_definition() {
                 items.push(ast::TopLevelItem {
