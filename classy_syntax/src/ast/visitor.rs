@@ -210,6 +210,10 @@ pub trait Visitor<'ast>: Sized {
     fn visit_string_const(&mut self, _node: &'ast str) {}
     fn visit_float_const(&mut self, _node: f64) {}
     fn visit_unit(&mut self) {}
+
+    fn visit_method(&mut self, node: &'ast ast::FunctionDefinition) {
+        walk_method(self, node)
+    }
 }
 
 pub fn walk_program<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::SourceFile) {
@@ -317,7 +321,6 @@ pub fn walk_expr_kind<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::ExprKi
             kwargs,
         } => v.visit_method_call(receiver, method, args, kwargs),
         ast::ExprKind::LetRec { definitions } => v.visit_let_rec(definitions),
-        ast::ExprKind::ResolvedGlobalName { .. } => panic!("Resolved name unsupported"),
     }
 }
 
@@ -425,6 +428,11 @@ pub fn walk_lambda<'ast, V: Visitor<'ast>>(
 }
 
 pub fn walk_function_def<'ast, V: Visitor<'ast>>(v: &mut V, def: &'ast ast::FunctionDefinition) {
+    v.visit_typ(&def.typ);
+    v.visit_expr(&def.body);
+}
+
+pub fn walk_method<'ast, V: Visitor<'ast>>(v: &mut V, def: &'ast ast::FunctionDefinition) {
     v.visit_typ(&def.typ);
     v.visit_expr(&def.body);
 }
@@ -587,7 +595,7 @@ pub fn walk_pattern<'ast, V: Visitor<'ast>>(v: &mut V, pattern: &'ast ast::Patte
 fn walk_methods_block<'ast, V: Visitor<'ast>>(v: &mut V, meth: &'ast ast::MethodsBlock) {
     v.visit_typ(&meth.typ);
     for method in &meth.methods {
-        v.visit_fn_def(method);
+        v.visit_method(method);
     }
 }
 

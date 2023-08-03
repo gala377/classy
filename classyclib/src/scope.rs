@@ -1,5 +1,7 @@
 use std::{collections::HashMap, hash::Hash};
 
+use classy_syntax::ast;
+
 pub struct Scope<K, V> {
     stack: Vec<HashMap<K, V>>,
 }

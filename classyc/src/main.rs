@@ -74,8 +74,8 @@ fn compile(
 ) -> Option<HashMap<String, NonNullPtr<classyvm::runtime::class::code::Code>>> {
     let mut parser = classy_syntax::parser::Parser::new(classy_syntax::lexer::Lexer::new(source));
     let ast = parser.parse().unwrap();
-    let sess = classyclib::session::Session::new();
-    let ast = classyclib::ast_passes::run_befor_type_context_passes(ast, &sess);
+    let sess = classyclib::session::Session::new("test");
+    let ast = classyclib::ast_passes::run_after_parsing_passes(ast, &sess);
     let mut tctx = typecheck::prepare_for_typechecking(&ast);
     println!("Type ctxt: {}", tctx.debug_string());
     let res = run_before_typechecking_passes(&tctx, ast, &sess);

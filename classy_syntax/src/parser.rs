@@ -118,12 +118,7 @@ impl<'source> Parser<'source> {
         let _ = self.expect_token(TokenType::EqualSign);
         let init = self.parse_expr()?;
         let _ = self.expect_token(TokenType::Semicolon);
-        Ok(ast::ConstDefinition {
-            id: DUMMY_AST_ID,
-            name,
-            typ,
-            init,
-        })
+        Ok(ast::ConstDefinition { name, typ, init })
     }
 
     fn parse_methods_block(&mut self) -> ParseRes<ast::MethodsBlock> {

@@ -36,7 +36,7 @@ impl Name {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SourceFile {
     pub namespace: Option<Namespace>,
     pub items: Vec<TopLevelItem>,
@@ -61,9 +61,26 @@ pub struct Namespace {
     pub name: Name,
 }
 
+impl Namespace {
+    pub fn joined_with(&self, name: &str) -> String {
+        let mut path = match &self.name {
+            Name::Unresolved { path, .. } => path.clone(),
+            _ => panic!("cannot join namespace with non-unresolved name"),
+        };
+        path.push(name.into());
+        path.join("::")
+    }
+
+    pub fn joined(&self) -> String {
+        match &self.name {
+            Name::Unresolved { path, .. } => path.join("::"),
+            _ => panic!("cannot join namespace with non-unresolved name"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ConstDefinition {
-    pub id: usize,
     pub name: String,
     pub typ: Typ,
     pub init: Expr,
@@ -138,10 +155,6 @@ pub struct MethodsBlock {
 pub enum Typ {
     Unit,
     Name(Name),
-    ResolvedName {
-        package: usize,
-        definition: usize,
-    },
     Application {
         callee: Box<Typ>,
         args: Vec<Typ>,
@@ -258,10 +271,6 @@ pub enum ExprKind {
         method: String,
         args: Vec<Expr>,
         kwargs: HashMap<String, Expr>,
-    },
-    ResolvedGlobalName {
-        package: usize,
-        definition: usize,
     },
 }
 
@@ -515,7 +524,6 @@ impl Expr {
                 res.push_str(")");
                 res
             }
-            ExprKind::ResolvedGlobalName { .. } => panic!("resolved name unsupported"),
         }
     }
 }
@@ -683,7 +691,6 @@ impl classy_sexpr::ToSExpr for Typ {
             Typ::Tuple(inner) => sexpr!((tuple @ inner)),
             Typ::Poly(args, t) => sexpr!((poly $args $t)),
             Typ::ToInfere => sexpr!(infere),
-            Typ::ResolvedName { .. } => panic!("resolved name unsupported"),
         }
     }
 }
@@ -755,9 +762,6 @@ impl classy_sexpr::ToSExpr for ExprKind {
                 args,
                 kwargs,
             } => sexpr!((method $receiver #method $args $kwargs)),
-            ExprKind::ResolvedGlobalName { .. } => {
-                panic!("resolved global name unsupported")
-            }
         }
     }
 }

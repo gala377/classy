@@ -112,9 +112,42 @@ impl Database {
         }
     }
 
+    // Package queries
     pub fn add_package(&mut self, package: PackageInfo) {
-        self.packages.push(package)
+        self.packages_map
+            .insert(package.name.clone(), PackageId(self.packages.len()));
+        self.packages.push(package);
     }
+
+    pub fn package_id(&self, of: &str) -> Option<PackageId> {
+        self.packages_map.get(of).cloned()
+    }
+
+    pub fn package_info(&self, of: PackageId) -> Option<&PackageInfo> {
+        self.packages.get(of.0 as usize)
+    }
+    // Definitions
+
+    pub fn add_type_definition(&mut self, id: DefinitionId, definition: ast::TypeDefinition) {
+        assert!(!self.type_definitions.contains_key(&id));
+        self.type_definitions.insert(id, definition);
+    }
+
+    pub fn add_function_definition(
+        &mut self,
+        id: DefinitionId,
+        definition: ast::FunctionDefinition,
+    ) {
+        assert!(!self.function_definitions.contains_key(&id));
+        self.function_definitions.insert(id, definition);
+    }
+
+    pub fn add_const_definition(&mut self, id: DefinitionId, definition: ast::ConstDefinition) {
+        assert!(!self.variable_definitions.contains_key(&id));
+        self.variable_definitions.insert(id, definition);
+    }
+
+    // Type aliasing
 
     pub fn resolve_alias(&self, type_id: TypeId) -> Result<Type, QueryError> {
         self.resolve_alias_ref(type_id).cloned()

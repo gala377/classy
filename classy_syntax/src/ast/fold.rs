@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
 use crate::ast::{
-    DefinedType, Expr, ExprKind, FunctionDefinition, Name, Pattern, PatternKind, SourceFile,
-    TopLevelItemKind, Typ, TypeDefinition, TypeVariable, TypedIdentifier,
+    DefinedType, Discriminant, DiscriminantKind, Expr, ExprKind, FunctionDefinition, Name, Pattern,
+    PatternKind, SourceFile, TopLevelItemKind, Typ, TypeDefinition, TypeVariable, TypedIdentifier,
 };
 
-use super::{ConstDefinition, MethodsBlock, TopLevelItem};
+use super::{Alias, ConstDefinition, MethodsBlock, Record, TopLevelItem, ADT};
 
 pub trait Folder: Sized {
     fn fold_program(&mut self, program: SourceFile) -> SourceFile {
@@ -24,6 +24,10 @@ pub trait Folder: Sized {
         fold_function_definition(self, def)
     }
 
+    fn fold_method_definition(&mut self, def: FunctionDefinition) -> FunctionDefinition {
+        fold_method_definition(self, def)
+    }
+
     fn fold_const_definition(&mut self, def: ConstDefinition) -> ConstDefinition {
         fold_const_definition(self, def)
     }
@@ -37,7 +41,19 @@ pub trait Folder: Sized {
     }
 
     fn fold_defined_type(&mut self, kind: DefinedType) -> DefinedType {
-        kind
+        fold_defined_type(self, kind)
+    }
+
+    fn fold_defined_type_alias(&mut self, alias: Alias) -> DefinedType {
+        fold_defined_type_alias(self, alias)
+    }
+
+    fn fold_defined_type_record(&mut self, record: Record) -> DefinedType {
+        fold_defined_type_record(self, record)
+    }
+
+    fn fold_defined_type_adt(&mut self, adt: ADT) -> DefinedType {
+        fold_defined_type_adt(self, adt)
     }
 
     fn fold_expr(&mut self, expr: Expr) -> Expr {
@@ -305,6 +321,10 @@ pub trait Folder: Sized {
     fn fold_local_function_def(&mut self, def: FunctionDefinition) -> FunctionDefinition {
         fold_local_function_def(self, def)
     }
+
+    fn fold_discriminant_kind(&mut self, kind: DiscriminantKind) -> DiscriminantKind {
+        fold_discriminant_kind(self, kind)
+    }
 }
 
 pub fn fold_program<F: Folder>(folder: &mut F, program: SourceFile) -> SourceFile {
@@ -339,6 +359,19 @@ pub fn fold_top_level_item_kind<F: Folder>(
 }
 
 pub fn fold_function_definition<F: Folder>(
+    folder: &mut F,
+    def: FunctionDefinition,
+) -> FunctionDefinition {
+    FunctionDefinition {
+        name: def.name,
+        parameters: folder.fold_function_params(def.parameters),
+        body: folder.fold_expr(def.body),
+        typ: folder.fold_typ(def.typ),
+        attributes: folder.fold_attributes(def.attributes),
+    }
+}
+
+pub fn fold_method_definition<F: Folder>(
     folder: &mut F,
     def: FunctionDefinition,
 ) -> FunctionDefinition {
@@ -420,9 +453,6 @@ pub fn fold_expr_kind(folder: &mut impl Folder, expr: ExprKind) -> ExprKind {
             kwargs,
         } => folder.fold_methods_call(*receiver, method, args, kwargs),
         ExprKind::LetRec { definitions } => folder.fold_let_rec(definitions),
-        ExprKind::ResolvedGlobalName { .. } => {
-            panic!("ResolvedGlobalName unsupported")
-        }
     }
 }
 
@@ -718,7 +748,6 @@ pub fn fold_type(folder: &mut impl Folder, typ: Typ) -> Typ {
         Typ::ToInfere => folder.fold_to_infere_type(),
         Typ::Poly(vars, t) => folder.fold_poly_type(vars, *t),
         Typ::Application { callee, args } => folder.fold_application_type(*callee, args),
-        Typ::ResolvedName { .. } => panic!("ResolvedName unsupported"),
     }
 }
 
@@ -768,7 +797,7 @@ pub fn fold_methods_block(folder: &mut impl Folder, meths: MethodsBlock) -> Meth
         methods: meths
             .methods
             .into_iter()
-            .map(|def| folder.fold_function_definition(def))
+            .map(|def| folder.fold_method_definition(def))
             .collect(),
     }
 }
@@ -793,7 +822,6 @@ pub fn fold_method_call(
 
 pub fn fold_const_definition(folder: &mut impl Folder, def: ConstDefinition) -> ConstDefinition {
     ConstDefinition {
-        id: def.id,
         name: def.name,
         typ: folder.fold_typ(def.typ),
         init: folder.fold_expr(def.init),
@@ -827,5 +855,65 @@ pub fn fold_top_level_item(folder: &mut impl Folder, item: TopLevelItem) -> TopL
     TopLevelItem {
         id: item.id,
         kind: folder.fold_top_level_item_kind(item.kind),
+    }
+}
+
+pub fn fold_defined_type(folder: &mut impl Folder, kind: DefinedType) -> DefinedType {
+    match kind {
+        DefinedType::Record(fields) => folder.fold_defined_type_record(fields),
+        DefinedType::ADT(cases) => folder.fold_defined_type_adt(cases),
+        DefinedType::Alias(alias) => folder.fold_defined_type_alias(alias),
+    }
+}
+
+pub fn fold_defined_type_record(folder: &mut impl Folder, record: Record) -> DefinedType {
+    DefinedType::Record(Record {
+        fields: record
+            .fields
+            .into_iter()
+            .map(|TypedIdentifier { name, typ }| TypedIdentifier {
+                name,
+                typ: folder.fold_typ(typ),
+            })
+            .collect(),
+    })
+}
+
+pub fn fold_defined_type_adt(folder: &mut impl Folder, adt: ADT) -> DefinedType {
+    DefinedType::ADT(ADT {
+        discriminants: adt
+            .discriminants
+            .into_iter()
+            .map(
+                |Discriminant {
+                     constructor,
+                     arguments,
+                 }| Discriminant {
+                    constructor,
+                    arguments: folder.fold_discriminant_kind(arguments),
+                },
+            )
+            .collect(),
+    })
+}
+
+pub fn fold_defined_type_alias(folder: &mut impl Folder, alias: Alias) -> DefinedType {
+    DefinedType::Alias(Alias {
+        for_type: folder.fold_typ(alias.for_type),
+    })
+}
+
+fn fold_discriminant_kind(folder: &mut impl Folder, kind: DiscriminantKind) -> DiscriminantKind {
+    match kind {
+        DiscriminantKind::Tuple(fields) => {
+            DiscriminantKind::Tuple(fields.into_iter().map(|typ| folder.fold_typ(typ)).collect())
+        }
+        DiscriminantKind::Record(fields) => DiscriminantKind::Record(
+            fields
+                .into_iter()
+                .map(|(name, typ)| (name, folder.fold_typ(typ)))
+                .collect(),
+        ),
+        DiscriminantKind::Empty => DiscriminantKind::Empty,
     }
 }
