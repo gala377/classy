@@ -335,7 +335,6 @@ pub fn fold_top_level_item_kind<F: Folder>(
         TopLevelItemKind::ConstDefinition(def) => {
             TopLevelItemKind::ConstDefinition(folder.fold_const_definition(def))
         }
-        _ => panic!("Unsupported top level item"),
     }
 }
 

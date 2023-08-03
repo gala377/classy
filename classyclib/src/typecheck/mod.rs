@@ -83,7 +83,6 @@ pub fn resolve_type_names(mut ctx: TypCtx) -> TypCtx {
             }) => {
                 ast_to_type::resolve_methods_block(typ, &mut ctx, methods);
             }
-            _ => panic!("Unsuported top level item"),
         }
     }
     for (id, t) in type_updates {
