@@ -523,7 +523,10 @@ impl Expr {
 impl classy_sexpr::ToSExpr for Program {
     fn to_sexpr(self) -> classy_sexpr::SExpr {
         match self.namespace {
-            Some(namespace) => sexpr!(($namespace ${self.items})),
+            Some(namespace) => {
+                let items = self.items;
+                sexpr!(($namespace @items))
+            }
             None => sexpr!(${self.items}),
         }
     }

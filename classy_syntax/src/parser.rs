@@ -65,6 +65,7 @@ impl<'source> Parser<'source> {
                 && self.match_token(TokenType::Namespace).is_ok()
             {
                 if let Ok(path) = self.parse_name() {
+                    let _ = self.expect_token(TokenType::Semicolon);
                     namespace = Some(ast::Namespace { name: path });
                 } else {
                     self.error(
@@ -73,8 +74,7 @@ impl<'source> Parser<'source> {
                     );
                     return Err(self.errors.clone());
                 }
-            }
-            if let Ok(str_def) = self.parse_type_definition() {
+            } else if let Ok(str_def) = self.parse_type_definition() {
                 items.push(ast::TopLevelItem {
                     id: DUMMY_AST_ID,
                     kind: ast::TopLevelItemKind::TypeDefinition(str_def),
@@ -2112,6 +2112,18 @@ mod tests {
                 foo () {
                     a::b::c
                 })
+        ))
+    }
+
+    ptest! {
+        parsing_namespace,
+        r#" namespace foo::bar
+            foo a = () "#,
+        sexpr!((
+            (namespace foo::bar)
+            (fn {}
+                (type (fn [] (infere) infere))
+                foo (a) ())
         ))
     }
 }
