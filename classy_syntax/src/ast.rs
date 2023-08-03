@@ -3,6 +3,7 @@ use std::{collections::HashMap, fmt::format, ops::Range};
 pub mod fold;
 pub mod visitor;
 
+use classy_sexpr::ToSExpr;
 use classy_sexpr_proc_macro::sexpr;
 pub use fold::Folder;
 pub use visitor::Visitor;
@@ -27,12 +28,6 @@ pub enum Name {
         definition: usize,
     },
     Local(String),
-}
-
-impl classy_sexpr::ToSExpr for Name {
-    fn to_sexpr(self) -> classy_sexpr::SExpr {
-        classy_sexpr::SExpr::Atom(classy_sexpr::Atom::Symbol(self.pretty()))
-    }
 }
 
 impl Name {
@@ -771,6 +766,25 @@ impl classy_sexpr::ToSExpr for PatternKind {
             PatternKind::Bool(b) => sexpr!($b),
             PatternKind::Rest(s) => sexpr!((rest #s)),
             PatternKind::TypeSpecifier(name, rest) => sexpr!(($name $rest)),
+        }
+    }
+}
+
+impl ToSExpr for Name {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        match self {
+            Name::Unresolved { path, identifier } => {
+                if path.is_empty() {
+                    return sexpr!(#identifier);
+                }
+                let id = path.join("::").to_string() + "::" + &identifier;
+                sexpr!(#id)
+            }
+            Name::Global {
+                package,
+                definition,
+            } => sexpr!((global $package $definition)),
+            Name::Local(name) => sexpr!(#name),
         }
     }
 }
