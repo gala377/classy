@@ -291,7 +291,10 @@ impl<'ctx> ast::fold::Folder for PromoteCallToStructLiteral<'ctx> {
                 self,
                 ast::Expr {
                     id: val.id,
-                    kind: ast::ExprKind::Name(name),
+                    kind: ast::ExprKind::Name(ast::Name::Unresolved {
+                        path: vec![],
+                        identifier,
+                    }),
                 },
                 field,
             );
@@ -301,18 +304,30 @@ impl<'ctx> ast::fold::Folder for PromoteCallToStructLiteral<'ctx> {
                 self,
                 ast::Expr {
                     id: val.id,
-                    kind: ast::ExprKind::Name(name),
+                    kind: ast::ExprKind::Name(ast::Name::Unresolved {
+                        path: vec![],
+                        identifier,
+                    }),
                 },
                 field,
             );
         };
         match t {
-            Type::Unit => self.fold_adt_unit_constructor(name, field),
+            Type::Unit => self.fold_adt_unit_constructor(
+                ast::Name::Unresolved {
+                    path: vec![],
+                    identifier,
+                },
+                field,
+            ),
             _ => ast::fold::fold_access(
                 self,
                 ast::Expr {
                     id: val.id,
-                    kind: ast::ExprKind::Name(name),
+                    kind: ast::ExprKind::Name(ast::Name::Unresolved {
+                        path: vec![],
+                        identifier,
+                    }),
                 },
                 field,
             ),

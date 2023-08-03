@@ -77,7 +77,7 @@ impl ast::Folder for ImplicitForall {
             panic!("expected unresolved name")
         };
         if !path.is_empty() {
-            return ast::Typ::Name(name);
+            return ast::Typ::Name(ast::Name::Unresolved { path, identifier });
         }
         if identifier.chars().all(|c| c.is_lowercase())
             && !self.ignore_names.contains(&identifier)
@@ -85,7 +85,10 @@ impl ast::Folder for ImplicitForall {
         {
             self.prefex.push(identifier.clone());
         }
-        ast::Typ::Name(name)
+        ast::Typ::Name(ast::Name::Unresolved {
+            path: vec![],
+            identifier,
+        })
     }
 
     fn fold_function_type(

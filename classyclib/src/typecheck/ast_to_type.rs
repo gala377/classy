@@ -225,18 +225,20 @@ impl<'ctx> TypeResolver<'ctx> {
 
     pub fn resolve_type(&mut self, prefex: &mut PrefexScope, typ: &ast::Typ) -> Type {
         match typ {
-            ast::Typ::Name(n) => match prefex.get(&n.identifier) {
-                Some(index) => {
-                    let pos = prefex.position(&n.identifier).unwrap();
-                    Type::Generic(DeBruijn(pos as isize), *index)
+            ast::Typ::Name(ast::Name::Unresolved { path, identifier }) if path.is_empty() => {
+                match prefex.get(identifier) {
+                    Some(index) => {
+                        let pos = prefex.position(identifier).unwrap();
+                        Type::Generic(DeBruijn(pos as isize), *index)
+                    }
+                    None => Type::Alias(
+                        *self
+                            .names
+                            .get(identifier)
+                            .unwrap_or_else(|| panic!("type not found, {:?}", identifier)),
+                    ),
                 }
-                None => Type::Alias(
-                    *self
-                        .names
-                        .get(&n.identifier)
-                        .unwrap_or_else(|| panic!("type not found, {:?}", n)),
-                ),
-            },
+            }
             ast::Typ::Tuple(types) => {
                 let resolved = types.iter().map(|t| self.resolve_type(prefex, t)).collect();
                 self.add_definition(Type::Tuple(resolved))

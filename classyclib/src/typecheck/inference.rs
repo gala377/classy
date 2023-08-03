@@ -385,11 +385,8 @@ impl<'sess> Inference<'sess> {
                 self.env.insert(id, Type::Bool);
                 Type::Bool
             }
-            ast::ExprKind::Name(name) => {
-                if !name.path.is_empty() {
-                    panic!("pather names are not supported");
-                }
-                let name = &name.identifier;
+            ast::ExprKind::Name(ast::Name::Unresolved { path, identifier }) if path.is_empty() => {
+                let name = identifier;
                 let mut typ = {
                     println!("Checking name {name}");
                     let scope = self.scope.borrow();
@@ -514,14 +511,13 @@ impl<'sess> Inference<'sess> {
                 self.env.insert(id, typ_t.clone());
                 typ_t
             }
-            ast::ExprKind::StructLiteral { strct, values } => {
+            ast::ExprKind::StructLiteral {
+                strct: ast::Name::Unresolved { path, identifier },
+                values,
+            } if path.is_empty() => {
                 let ret_t = self.fresh_type();
                 self.env.insert(id, ret_t.clone());
-                assert!(
-                    strct.path.is_empty(),
-                    "structs with multiple path segments not implemented yet"
-                );
-                let name = strct.identifier.clone();
+                let name = identifier.clone();
                 let strct_t = self.scope.borrow().lookup_type(&name).unwrap();
                 let strct_t = self.instance_if_possible(&strct_t);
                 let Some(fields) = self.extract_fields(strct_t.clone(), ret_t.clone(), true) else {
@@ -659,10 +655,10 @@ impl<'sess> Inference<'sess> {
                 ret
             }
             ast::ExprKind::AdtTupleConstructor {
-                typ,
+                typ: ast::Name::Unresolved { path, identifier },
                 constructor,
                 args,
-            } => {
+            } if path.is_empty() => {
                 let ret = self.fresh_type();
                 self.env.insert(id, ret.clone());
                 // TODO: This is a bit of a problem because creating any struct
@@ -670,8 +666,7 @@ impl<'sess> Inference<'sess> {
                 // So probably befor we create this type we should check if its a scheme
                 // and if it is we should instance it. Thats the same for any other case
                 // even structure creation.
-                assert!(typ.path.is_empty(), "paths are not supported");
-                let typ = &typ.identifier;
+                let typ = identifier;
                 let t = self.scope.borrow().lookup_type(typ).unwrap();
                 let t = self.instance_if_possible(&t);
                 self.constraints.push(Constraint::Eq(ret.clone(), t));
@@ -687,15 +682,14 @@ impl<'sess> Inference<'sess> {
                 ret
             }
             ast::ExprKind::AdtStructConstructor {
-                typ,
+                typ: ast::Name::Unresolved { path, identifier },
                 constructor,
                 fields,
-            } => {
+            } if path.is_empty() => {
                 let ret = self.fresh_type();
                 self.env.insert(id, ret.clone());
 
-                assert!(typ.path.is_empty(), "paths are not supported");
-                let typ = &typ.identifier;
+                let typ = identifier;
                 let t = self.scope.borrow().lookup_type(typ).unwrap();
                 let t = self.instance_if_possible(&t);
                 self.constraints.push(Constraint::Eq(ret.clone(), t));
@@ -716,12 +710,14 @@ impl<'sess> Inference<'sess> {
                 });
                 ret
             }
-            ast::ExprKind::AdtUnitConstructor { typ, constructor } => {
+            ast::ExprKind::AdtUnitConstructor {
+                typ: ast::Name::Unresolved { path, identifier },
+                constructor,
+            } if path.is_empty() => {
                 let ret = self.fresh_type();
                 self.env.insert(id, ret.clone());
 
-                assert!(typ.path.is_empty(), "paths are not supported");
-                let typ = &typ.identifier;
+                let typ = identifier;
                 let t = self.scope.borrow().lookup_type(typ).unwrap();
                 let t = self.instance_if_possible(&t);
                 self.constraints.push(Constraint::Eq(ret.clone(), t));
@@ -782,9 +778,10 @@ impl<'sess> Inference<'sess> {
                 }
                 typ
             }
-            ast::PatternKind::TypeSpecifier(tname, case) => {
-                assert!(tname.path.is_empty(), "paths are not supported");
-                let tname = &tname.identifier;
+            ast::PatternKind::TypeSpecifier(ast::Name::Unresolved { path, identifier }, case)
+                if path.is_empty() =>
+            {
+                let tname = identifier;
                 let typ = self
                     .scope
                     .borrow()
@@ -809,11 +806,12 @@ impl<'sess> Inference<'sess> {
                     .push(Constraint::Eq(typ.clone(), Type::Tuple(inner_types)));
                 typ
             }
-            ast::PatternKind::Struct { strct, fields } => {
+            ast::PatternKind::Struct {
+                strct: ast::Name::Unresolved { path, identifier },
+                fields,
+            } if path.is_empty() => {
                 let typ = self.fresh_type();
-
-                assert!(strct.path.is_empty(), "paths are not supported");
-                let strct = &strct.identifier;
+                let strct = identifier;
                 self.env.insert(id, typ.clone());
                 let inner_types = fields
                     .iter()
@@ -852,11 +850,13 @@ impl<'sess> Inference<'sess> {
                 }
                 typ
             }
-            ast::PatternKind::TupleStruct { strct, fields } => {
+            ast::PatternKind::TupleStruct {
+                strct: ast::Name::Unresolved { path, identifier },
+                fields,
+            } if path.is_empty() => {
                 let typ = self.fresh_type();
 
-                assert!(strct.path.is_empty(), "paths are not supported");
-                let strct = &strct.identifier;
+                let strct = identifier;
                 self.env.insert(id, typ.clone());
                 let inner_types = fields
                     .iter()
@@ -907,6 +907,7 @@ impl<'sess> Inference<'sess> {
                 self.env.insert(id, Type::Bool);
                 Type::Bool
             }
+            p => panic!("Pattern {p:?} is not supported yet"),
         }
     }
 
@@ -1016,16 +1017,16 @@ impl<'sess> Inference<'sess> {
         // convert ast::Typ to Type
         match typ {
             ast::Typ::Unit => Type::Unit,
-            ast::Typ::Name(name) if name.path.is_empty() => {
-                match prefex_scope.get(&name.identifier) {
+            ast::Typ::Name(ast::Name::Unresolved { path, identifier }) if path.is_empty() => {
+                match prefex_scope.get(identifier) {
                     Some(i) => {
-                        let pos = prefex_scope.position(&name.identifier).unwrap();
+                        let pos = prefex_scope.position(identifier).unwrap();
                         Type::Generic(DeBruijn(pos as isize), *i)
                     }
                     // TODO: #problem This might lookup a function shich name
                     // we do not know. So we should solve it here it the type
                     // of this function is unknown.
-                    None => scope.lookup_type(&name.identifier).expect("unknown type"),
+                    None => scope.lookup_type(identifier).expect("unknown type"),
                 }
             }
             ast::Typ::Application { callee, args } => {
