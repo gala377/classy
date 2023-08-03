@@ -354,7 +354,7 @@ impl<'source> Parser<'source> {
         while self.match_token(TokenType::DoubleColon).is_ok() {
             path.push(self.parse_identifier()?);
         }
-        Ok(ast::Name {
+        Ok(ast::Name::Unresolved {
             path: path[0..path.len() - 1].to_vec(),
             identifier: path.last().unwrap().clone(),
         })
@@ -573,11 +573,13 @@ impl<'source> Parser<'source> {
                 let parameters = args
                     .into_iter()
                     .map(|arg| match arg.kind {
-                        ast::ExprKind::Name(ast::Name { path, identifier }) if path.is_empty() => {
+                        ast::ExprKind::Name(ast::Name::Unresolved { path, identifier })
+                            if path.is_empty() =>
+                        {
                             Ok((identifier, ast::Typ::ToInfere))
                         }
                         ast::ExprKind::TypedExpr { expr, typ } => match expr.kind {
-                            ast::ExprKind::Name(ast::Name { path, identifier })
+                            ast::ExprKind::Name(ast::Name::Unresolved { path, identifier })
                                 if path.is_empty() =>
                             {
                                 Ok((identifier, typ))
@@ -694,7 +696,9 @@ impl<'source> Parser<'source> {
                 // no name or brace following, just a normal expression
                 Err(ParseErr::WrongRule) => return Ok(func),
                 Err(e) => return Err(e),
-                Ok(ast::ExprKind::Name(ast::Name { path, identifier })) if path.is_empty() => {
+                Ok(ast::ExprKind::Name(ast::Name::Unresolved { path, identifier }))
+                    if path.is_empty() =>
+                {
                     if self.match_token(TokenType::FatArrow).is_ok() {
                         // func name => { lambda body }
                         let body = self.parse_expr_or_single_sequence().error(
@@ -713,7 +717,10 @@ impl<'source> Parser<'source> {
                     } else {
                         // func name
                         check_for_trailing_lambda = true;
-                        vec![ast::ExprKind::Name(ast::Name { path, identifier })]
+                        vec![ast::ExprKind::Name(ast::Name::Unresolved {
+                            path,
+                            identifier,
+                        })]
                     }
                 }
                 Ok(body @ ast::ExprKind::Sequence(_)) => {
@@ -790,7 +797,7 @@ impl<'source> Parser<'source> {
             .iter()
             .filter_map(|expr| match &expr.kind {
                 ast::ExprKind::Assignment { lval, rval } => {
-                    if let ast::ExprKind::Name(ast::Name {
+                    if let ast::ExprKind::Name(ast::Name::Unresolved {
                         path,
                         identifier: name,
                     }) = &lval.as_ref().kind
@@ -921,8 +928,10 @@ impl<'source> Parser<'source> {
                 Ok(mk_expr(ast::ExprKind::BoolConst(false)))
             }
             TokenType::Identifier(_) => {
-                let name = self.parse_name()?;
-                if name.path.is_empty() && self.match_token(TokenType::FatArrow).is_ok() {
+                let ast::Name::Unresolved { path, identifier } = self.parse_name()? else {
+                    panic!()
+                };
+                if path.is_empty() && self.match_token(TokenType::FatArrow).is_ok() {
                     // lambda literal in form
                     // arg => expr
                     let body = self.parse_expr_or_single_sequence().error(
@@ -932,13 +941,16 @@ impl<'source> Parser<'source> {
                     )?;
                     return Ok(mk_expr(ast::ExprKind::Lambda {
                         parameters: vec![ast::TypedIdentifier {
-                            name: name.identifier,
+                            name: identifier,
                             typ: ast::Typ::ToInfere,
                         }],
                         body: Box::new(body),
                     }));
                 }
-                Ok(mk_expr(ast::ExprKind::Name(name)))
+                Ok(mk_expr(ast::ExprKind::Name(ast::Name::Unresolved {
+                    path,
+                    identifier,
+                })))
             }
             TokenType::LParen => {
                 self.lexer.advance();
@@ -967,7 +979,7 @@ impl<'source> Parser<'source> {
                         // this is a lambda literal in form
                         // (a) => expr
                         return match inner.kind {
-                            ast::ExprKind::Name(ast::Name { path, identifier })
+                            ast::ExprKind::Name(ast::Name::Unresolved { path, identifier })
                                 if path.is_empty() =>
                             {
                                 // (name) => expr
@@ -981,7 +993,7 @@ impl<'source> Parser<'source> {
                                 }))
                             }
                             ast::ExprKind::TypedExpr { expr, typ } => match expr.kind {
-                                ast::ExprKind::Name(ast::Name { path, identifier })
+                                ast::ExprKind::Name(ast::Name::Unresolved { path, identifier })
                                     if path.is_empty() =>
                                 {
                                     // (name: type) => expr
@@ -1021,13 +1033,13 @@ impl<'source> Parser<'source> {
                     let parameters = tuple
                         .into_iter()
                         .map(|arg| match arg.kind {
-                            ast::ExprKind::Name(ast::Name { path, identifier })
+                            ast::ExprKind::Name(ast::Name::Unresolved { path, identifier })
                                 if path.is_empty() =>
                             {
                                 Ok((identifier, ast::Typ::ToInfere))
                             }
                             ast::ExprKind::TypedExpr { expr, typ } => match expr.kind {
-                                ast::ExprKind::Name(ast::Name { path, identifier })
+                                ast::ExprKind::Name(ast::Name::Unresolved { path, identifier })
                                     if path.is_empty() =>
                                 {
                                     Ok((identifier, typ))
@@ -1224,12 +1236,14 @@ impl<'source> Parser<'source> {
                 }))
             }
             TokenType::Identifier(_) => {
-                let name = self.parse_name()?;
+                let ast::Name::Unresolved { path, identifier } = self.parse_name()? else {
+                    panic!()
+                };
                 if self.match_token(TokenType::LParen).is_ok() {
                     let inner = self.parse_delimited(Self::parse_pattern, TokenType::Comma);
                     let _ = self.expect_token(TokenType::RParen);
                     return Ok(mk_pattern(ast::PatternKind::TupleStruct {
-                        strct: name,
+                        strct: ast::Name::Unresolved { path, identifier },
                         fields: inner,
                     }));
                 }
@@ -1237,7 +1251,7 @@ impl<'source> Parser<'source> {
                     let fields = self.parse_delimited(Self::parse_pattern_field, TokenType::Comma);
                     let _ = self.expect_token(TokenType::RBrace);
                     return Ok(mk_pattern(ast::PatternKind::Struct {
-                        strct: name,
+                        strct: ast::Name::Unresolved { path, identifier },
                         fields: fields.into_iter().collect(),
                     }));
                 }
@@ -1252,15 +1266,15 @@ impl<'source> Parser<'source> {
                         return Err(self.error(beg..self.curr_pos(), "Expected a struct pattern"));
                     }
                     return Ok(mk_pattern(ast::PatternKind::TypeSpecifier(
-                        name,
+                        ast::Name::Unresolved { path, identifier },
                         Box::new(case),
                     )));
                 }
-                if name.path.is_empty() && name.identifier == "_" {
+                if path.is_empty() && identifier == "_" {
                     return Ok(mk_pattern(ast::PatternKind::Wildcard));
                 }
-                if name.path.is_empty() {
-                    return Ok(mk_pattern(ast::PatternKind::Var(name.identifier)));
+                if path.is_empty() {
+                    return Ok(mk_pattern(ast::PatternKind::Var(identifier)));
                 }
                 Err(self.error(beg..self.curr_pos(), "Invalid pattern, expected identifier"))
             }

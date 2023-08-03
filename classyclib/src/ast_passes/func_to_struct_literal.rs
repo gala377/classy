@@ -29,7 +29,7 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
                 self,
                 ast::Expr {
                     id: expr_id,
-                    kind: ast::ExprKind::Name(ast::Name {
+                    kind: ast::ExprKind::Name(ast::Name::Unresolved {
                         path: vec![],
                         identifier: name.to_owned(),
                     }),
@@ -44,7 +44,7 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
                 self,
                 ast::Expr {
                     id: expr_id,
-                    kind: ast::ExprKind::Name(ast::Name {
+                    kind: ast::ExprKind::Name(ast::Name::Unresolved {
                         path: vec![],
                         identifier: name.into(),
                     }),
@@ -102,18 +102,32 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
         );
         for (name, _) in &body {
             assert!(
-                fields.iter().any(|(n, _)| n == &name.identifier),
+                fields.iter().any(|(n, _)| n
+                    == match name {
+                        ast::Name::Unresolved { identifier, .. } => identifier,
+                        _ => panic!(),
+                    }),
                 "struct {name:?} syntax has unknown field"
             );
         }
         println!("Function call is a struct {name}, so promoting");
         ast::fold::fold_struct_literal(
             self,
-            ast::Name {
+            ast::Name::Unresolved {
                 path: vec![],
                 identifier: name.to_owned(),
             },
-            body.into_iter().map(|(n, v)| (n.identifier, v)).collect(),
+            body.into_iter()
+                .map(|(n, v)| {
+                    (
+                        match n {
+                            ast::Name::Unresolved { identifier, .. } => identifier,
+                            _ => panic!(),
+                        },
+                        v,
+                    )
+                })
+                .collect(),
         )
     }
 
@@ -124,10 +138,11 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
         args: Vec<ast::Expr>,
         kwargs: std::collections::HashMap<String, ast::Expr>,
     ) -> ExprKind {
-        let ast::ExprKind::Name(name) = receiver.kind.clone() else {
+        let ast::ExprKind::Name(ast::Name::Unresolved { path, identifier }) = receiver.kind.clone()
+        else {
             return ast::fold::fold_method_call(self, receiver, field, args, kwargs);
         };
-        let Some(t) = self.tctx.get_type(&name.identifier) else {
+        let Some(t) = self.tctx.get_type(&identifier) else {
             return ast::fold::fold_method_call(self, receiver, field, args, kwargs);
         };
         let Some(t) = resolve_case(self.tctx, &field, &t) else {
@@ -137,7 +152,7 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
             Type::Struct { fields, .. } => {
                 assert!(
                     kwargs.is_empty(),
-                    "use struct {name:?} creation syntax, kwargs are deprecated",
+                    "use struct {identifier:?} creation syntax, kwargs are deprecated",
                 );
                 let [ast::Expr {
                     kind:
@@ -152,11 +167,11 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
                     ..
                 }] = &args[..]
                 else {
-                    panic!("struct {name:?} creation syntax expected a record literal")
+                    panic!("struct {identifier:?} creation syntax expected a record literal")
                 };
                 assert!(
                     parameters.is_empty(),
-                    "struct {name:?} creation syntax expected a record literal"
+                    "struct {identifier:?} creation syntax expected a record literal"
                 );
                 let body = body
                     .iter()
@@ -173,25 +188,44 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
                                 },
                             ..
                         } => (name.to_owned(), *value.clone()),
-                        _ => panic!("struct {name:?} creation syntax expected a record literal"),
+                        _ => panic!(
+                            "struct {identifier:?} creation syntax expected a record literal"
+                        ),
                     })
                     .collect::<Vec<_>>();
                 assert_eq!(
                     body.len(),
                     fields.len(),
-                    "struct {name:?} syntax missing fields"
+                    "struct {identifier:?} syntax missing fields"
                 );
                 for (name, _) in &body {
+                    let ast::Name::Unresolved { identifier, .. } = name else {
+                        panic!();
+                    };
                     assert!(
-                        fields.iter().any(|(n, _)| n == &name.identifier),
+                        fields.iter().any(|(n, _)| n == identifier),
                         "struct {name:?} syntax has unknown field"
                     );
                 }
                 ast::fold::fold_adt_struct_constructor(
                     self,
-                    name,
+                    ast::Name::Unresolved { path, identifier },
                     field,
-                    body.into_iter().map(|(n, v)| (n.identifier, v)).collect(),
+                    body.into_iter()
+                        .map(|(n, v)| {
+                            (
+                                match n {
+                                    ast::Name::Unresolved { path, identifier }
+                                        if path.is_empty() =>
+                                    {
+                                        identifier
+                                    }
+                                    _ => panic!(),
+                                },
+                                v,
+                            )
+                        })
+                        .collect(),
                 )
             }
             Type::Tuple(field_t) => {
@@ -201,7 +235,12 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
                     field_t.len(),
                     "tuple constructors take exactly the number of arguments as there are fields"
                 );
-                ast::fold::fold_adt_tuple_constructor(self, name, field, args)
+                ast::fold::fold_adt_tuple_constructor(
+                    self,
+                    ast::Name::Unresolved { path, identifier },
+                    field,
+                    args,
+                )
             }
             _ => ast::fold::fold_method_call(self, receiver, field, args, kwargs),
         }
@@ -222,9 +261,10 @@ impl<'ctx> ast::fold::Folder for PromoteCallToStructLiteral<'ctx> {
         kwargs: std::collections::HashMap<String, ast::Expr>,
     ) -> ast::ExprKind {
         match func.kind {
-            ast::ExprKind::Name(name) => {
-                self.try_to_resolve_struct(func.id, &name.identifier, args, kwargs)
-            }
+            ast::ExprKind::Name(ast::Name::Unresolved {
+                path,
+                identifier: name,
+            }) if path.is_empty() => self.try_to_resolve_struct(func.id, &name, args, kwargs),
             _ => ast::fold::fold_function_call(self, func, args, kwargs),
         }
     }
@@ -243,8 +283,10 @@ impl<'ctx> ast::fold::Folder for PromoteCallToStructLiteral<'ctx> {
         let ast::ExprKind::Name(name) = val.kind else {
             return ast::fold::fold_access(self, val, field);
         };
-
-        let Some(t) = self.tctx.get_type(&name.identifier) else {
+        let ast::Name::Unresolved { identifier, .. } = name else {
+            panic!();
+        };
+        let Some(t) = self.tctx.get_type(&identifier) else {
             return ast::fold::fold_access(
                 self,
                 ast::Expr {

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Range};
+use std::{collections::HashMap, fmt::format, ops::Range};
 
 pub mod fold;
 pub mod visitor;
@@ -17,9 +17,16 @@ fn default<T: Default>() -> T {
 
 /// Represents an identifier in source
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Name {
-    pub path: Vec<String>,
-    pub identifier: String,
+pub enum Name {
+    Unresolved {
+        path: Vec<String>,
+        identifier: String,
+    },
+    Global {
+        package: usize,
+        definition: usize,
+    },
+    Local(String),
 }
 
 impl classy_sexpr::ToSExpr for Name {
@@ -30,13 +37,7 @@ impl classy_sexpr::ToSExpr for Name {
 
 impl Name {
     pub fn pretty(&self) -> String {
-        let mut res = String::new();
-        for part in &self.path {
-            res.push_str(&part);
-            res.push_str("::");
-        }
-        res.push_str(&self.identifier);
-        res
+        format!("{self:?}")
     }
 }
 
