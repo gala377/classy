@@ -227,6 +227,7 @@ pub fn walk_top_level_item_kind<'ast, V: Visitor<'ast>>(
         ast::TopLevelItemKind::TypeDefinition(t_def) => v.visit_type_def(t_def),
         ast::TopLevelItemKind::MethodsBlock(meth) => v.visit_methods_block(meth),
         ast::TopLevelItemKind::ConstDefinition(def) => v.visit_const_definition(def),
+        _ => panic!("unsupported top level item kind"),
     }
 }
 

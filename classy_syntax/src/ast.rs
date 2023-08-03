@@ -53,6 +53,12 @@ pub enum TopLevelItemKind {
     FunctionDefinition(FunctionDefinition),
     MethodsBlock(MethodsBlock),
     ConstDefinition(ConstDefinition),
+    Namespace(Namespace),
+}
+
+#[derive(Debug, Clone)]
+pub struct Namespace {
+    pub name: Name,
 }
 
 #[derive(Debug, Clone)]
@@ -533,7 +539,14 @@ impl classy_sexpr::ToSExpr for TopLevelItemKind {
             TopLevelItemKind::FunctionDefinition(def) => sexpr!($def),
             TopLevelItemKind::MethodsBlock(_) => todo!(),
             TopLevelItemKind::ConstDefinition(def) => sexpr!($def),
+            TopLevelItemKind::Namespace(def) => sexpr!($def),
         }
+    }
+}
+
+impl ToSExpr for Namespace {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        sexpr!((namespace ${self.name}))
     }
 }
 
