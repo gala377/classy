@@ -7,17 +7,11 @@ use crate::{
 
 use super::AstPass;
 
-enum ResolutionContext {
-    Type,
-    Variable,
-}
-
 pub struct NameResolver<'db> {
     database: &'db Database,
     current_namespace_prefix: String,
     variable_scope: Scope<String, ()>,
     type_scope: Scope<String, ()>,
-    context: ResolutionContext,
 }
 
 impl<'db> NameResolver<'db> {
@@ -27,7 +21,6 @@ impl<'db> NameResolver<'db> {
             current_namespace_prefix: String::new(),
             variable_scope: Scope::new(),
             type_scope: Scope::new(),
-            context: ResolutionContext::Variable,
         }
     }
 }
@@ -503,12 +496,169 @@ mod tests {
     }
 
     #[test]
-    fn type_name_resolution() {
-        todo!()
+    fn resolves_globals_in_types_without_namespace_correctly() {
+        run_test(
+            r"
+                type Foo = X
+            ",
+            sexpr!((
+                    (type Foo [] (alias (poly [] (global 0 10))))
+            )),
+            map! { "X" -> 10 },
+            map! {},
+        );
     }
 
     #[test]
-    fn type_name_resolution_with_forall() {
-        todo!()
+    fn resolves_globals_in_tests_within_other_packages() {
+        run_test(
+            r"
+                type Foo {
+                    foo: foo::X
+                }
+            ",
+            sexpr!((
+                (type Foo [] (record {
+                    foo (poly [] (global 1 10))
+                }))
+            )),
+            map! {},
+            map! {
+                "foo" -> map! {
+                    "X" -> 10
+                }
+            },
+        );
     }
+
+    #[test]
+    fn resolves_names_in_types_in_the_current_namespace() {
+        run_test(
+            r"
+                namespace a::b
+
+                type Foo {
+                    Mk(X)
+                }
+            ",
+            sexpr!((
+                (namespace a::b)
+                (type Foo [] (adt {
+                    Mk [tuple (poly [] (global 0 11))]
+                }))
+            )),
+            map! {
+                "a::b::X" -> 11
+            },
+            map! {},
+        );
+    }
+
+    #[test]
+    fn resolves_names_in_types_in_nested_namespace() {
+        run_test(
+            r"
+                namespace a::b
+
+                type Foo = c::d::x
+            ",
+            sexpr!((
+                (namespace a::b)
+                (type Foo [] (alias {
+                    poly [] (global 0 11)
+                }))
+            )),
+            map! {
+                "a::b::c::d::x" -> 11
+            },
+            map! {},
+        );
+    }
+
+    #[test]
+
+    fn resolves_names_in_types_in_namespaces_of_packages() {
+        run_test(
+            r"
+                type Foo = foo::a::b::X
+            ",
+            sexpr!((
+                (type Foo [] (alias {
+                    poly [] (global 1 11)
+                }))
+            )),
+            map! {},
+            map! {
+                "foo" -> map! {
+                    "a::b::X" -> 11
+                }
+            },
+        );
+    }
+
+    #[test]
+
+    fn mixing_namespace_and_package_names_works_for_types_prioritizing_package_names() {
+        run_test(
+            r"
+                namespace a::b
+
+                foo: (foo::a::b::X) -> ()
+                foo x = ()
+            ",
+            sexpr!((
+                (namespace a::b)
+                (fn {}
+                    (type (fn [] ((poly [] (global 1 11))) (poly [] unit)))
+                    foo (x) ()
+                )
+            )),
+            map! {},
+            map! {
+                "foo" -> map! {
+                    "a::b::X" -> 11
+                }
+            },
+        );
+    }
+
+    // #[test]
+    // fn resplves_local_names() {
+    //     run_test(
+    //         r"
+    //             foo a {
+    //                 foo()
+    //                 let x = 10
+    //                 x
+    //                 a
+    //                 if (true) {
+    //                     let c = 1
+    //                     c
+    //                 } else {
+    //                     a
+    //                 }
+    //                 c
+    //             }
+    //         ",
+    //         sexpr!((
+    //             (fn {}
+    //                 (type (fn [] (infere) infere))
+    //                 foo (a) {
+    //                     (call (global 0 1) () {})
+    //                     (let x infere 10)
+    //                     x
+    //                     a
+    //                     (if true {
+    //                         (let c infere 1)
+    //                         c
+    //                     }
+    //                     { a })
+    //                     (global 0 10)
+    //                 }
+    //             )
+    //         )),
+    //         map! {"c" -> 10, "foo" -> 1},
+    //         map! {},
+    //     );
+    // }
 }
