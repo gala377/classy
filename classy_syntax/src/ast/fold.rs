@@ -302,8 +302,8 @@ pub trait Folder: Sized {
         fold_application_type(self, callee, args)
     }
 
-    fn fold_function_type(&mut self, generics: Vec<String>, args: Vec<Typ>, ret: Typ) -> Typ {
-        fold_function_type(self, generics, args, ret)
+    fn fold_function_type(&mut self, args: Vec<Typ>, ret: Typ) -> Typ {
+        fold_function_type(self, args, ret)
     }
 
     fn fold_tuple_type(&mut self, fields: Vec<Typ>) -> Typ {
@@ -738,11 +738,7 @@ pub fn fold_type(folder: &mut impl Folder, typ: Typ) -> Typ {
     match typ {
         Typ::Unit => folder.fold_unit_type(),
         Typ::Name(name) => folder.fold_name_type(name),
-        Typ::Function {
-            generics,
-            args,
-            ret,
-        } => folder.fold_function_type(generics, args, *ret),
+        Typ::Function { args, ret } => folder.fold_function_type(args, *ret),
         Typ::Tuple(fields) => folder.fold_tuple_type(fields),
         Typ::Array(inner) => folder.fold_array_type(*inner),
         Typ::ToInfere => folder.fold_to_infere_type(),
@@ -755,14 +751,8 @@ pub fn fold_array_type(folder: &mut impl Folder, typ: Typ) -> Typ {
     Typ::Array(Box::new(folder.fold_typ(typ)))
 }
 
-pub fn fold_function_type(
-    folder: &mut impl Folder,
-    generics: Vec<String>,
-    args: Vec<Typ>,
-    ret: Typ,
-) -> Typ {
+pub fn fold_function_type(folder: &mut impl Folder, args: Vec<Typ>, ret: Typ) -> Typ {
     Typ::Function {
-        generics,
         args: args.into_iter().map(|t| folder.fold_typ(t)).collect(),
         ret: Box::new(folder.fold_typ(ret)),
     }

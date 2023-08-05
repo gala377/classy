@@ -1050,31 +1050,13 @@ impl<'sess> Inference<'sess> {
                 let t = Box::new(self.ast_type_to_type(scope, prefex_scope, t));
                 Type::Array(t)
             }
-            ast::Typ::Function {
-                args,
-                ret,
-                generics,
-            } => {
-                if generics.is_empty() {
-                    let args = args
-                        .iter()
-                        .map(|typ| self.ast_type_to_type(scope, prefex_scope, typ))
-                        .collect::<Vec<_>>();
-                    let ret = Box::new(self.ast_type_to_type(scope, prefex_scope, ret));
-                    return Type::Function { args, ret };
-                }
-                prefex_scope.with_scope(|prefex_scope| {
-                    prefex_scope.add_type_vars(generics);
-                    let args = args
-                        .iter()
-                        .map(|typ| self.ast_type_to_type(scope, prefex_scope, typ))
-                        .collect::<Vec<_>>();
-                    let ret = Box::new(self.ast_type_to_type(scope, prefex_scope, ret));
-                    Type::Scheme {
-                        prefex: generics.clone(),
-                        typ: Box::new(Type::Function { args, ret }),
-                    }
-                })
+            ast::Typ::Function { args, ret } => {
+                let args = args
+                    .iter()
+                    .map(|typ| self.ast_type_to_type(scope, prefex_scope, typ))
+                    .collect::<Vec<_>>();
+                let ret = Box::new(self.ast_type_to_type(scope, prefex_scope, ret));
+                return Type::Function { args, ret };
             }
             ast::Typ::Tuple(types) => {
                 let types = types

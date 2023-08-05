@@ -307,7 +307,6 @@ impl<'source> Parser<'source> {
                     .map(|_| ast::Typ::ToInfere)
                     .collect::<Vec<_>>();
                 ast::Typ::Function {
-                    generics: Vec::new(),
                     args,
                     ret: Box::new(ast::Typ::ToInfere),
                 }
@@ -384,14 +383,7 @@ impl<'source> Parser<'source> {
         };
         let typ = self.parse_atomic_type()?;
         if self.match_token(TokenType::LParen).is_err() {
-            return match typ {
-                ast::Typ::Function { args, ret, .. } => Ok(ast::Typ::Function {
-                    args,
-                    ret,
-                    generics,
-                }),
-                t => Ok(ast::Typ::Poly(generics, Box::new(t))),
-            };
+            return Ok(ast::Typ::Poly(generics, Box::new(typ)));
         }
         // type aplication
         let args = self.parse_delimited(Self::parse_type, TokenType::Comma);
@@ -446,7 +438,6 @@ impl<'source> Parser<'source> {
                             ast::Typ::Unit => Vec::new(),
                             other => vec![other],
                         },
-                        generics: Vec::new(),
                         ret: Box::new(ret),
                     });
                 }

@@ -89,7 +89,6 @@ fn read_package(pkg: &Package, tctx: &mut TypCtx) {
                     for_type: ast::Typ::Function {
                         args,
                         ret: Box::new(ret),
-                        generics: Vec::new(),
                     },
                 })
             }
@@ -133,7 +132,6 @@ fn read_package(pkg: &Package, tctx: &mut TypCtx) {
             typ: ast::Typ::Function {
                 args,
                 ret: Box::new(ret),
-                generics: Vec::new(),
             },
             parameters: pars.collect(),
             attributes: Vec::new(),
@@ -156,7 +154,6 @@ fn deserialize_type(typ: &Type) -> ast::Typ {
             let ret = deserialize_type(ret);
             ast::Typ::Function {
                 args,
-                generics: Vec::new(),
                 ret: Box::new(ret),
             }
         }

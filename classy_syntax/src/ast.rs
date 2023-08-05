@@ -160,16 +160,9 @@ pub struct MethodsBlock {
 pub enum Typ {
     Unit,
     Name(Name),
-    Application {
-        callee: Box<Typ>,
-        args: Vec<Typ>,
-    },
+    Application { callee: Box<Typ>, args: Vec<Typ> },
     Array(Box<Typ>),
-    Function {
-        generics: Vec<String>,
-        args: Vec<Typ>,
-        ret: Box<Typ>,
-    },
+    Function { args: Vec<Typ>, ret: Box<Typ> },
     Tuple(Vec<Typ>),
     Poly(Vec<String>, Box<Typ>),
     ToInfere,
@@ -688,11 +681,7 @@ impl classy_sexpr::ToSExpr for Typ {
             Typ::Name(n) => sexpr!($n),
             Typ::Application { callee, args } => sexpr!(($callee $args)),
             Typ::Array(inner) => sexpr!((array $inner)),
-            Typ::Function {
-                generics,
-                args,
-                ret,
-            } => sexpr!((fn $generics $args $ret)),
+            Typ::Function { args, ret } => sexpr!((fn $args $ret)),
             Typ::Tuple(inner) => sexpr!((tuple @ inner)),
             Typ::Poly(args, t) => sexpr!((poly $args $t)),
             Typ::ToInfere => sexpr!(infere),

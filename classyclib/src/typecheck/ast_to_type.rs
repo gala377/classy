@@ -154,7 +154,6 @@ pub fn resolve_methods_block(
     };
     let generics = match for_t {
         ast::Typ::Poly(generics, _) => generics.clone(),
-        ast::Typ::Function { generics, .. } => generics.clone(),
         _ => vec![],
     };
     scope.add_type_vars(&generics);
@@ -243,31 +242,13 @@ impl<'ctx> TypeResolver<'ctx> {
                 let resolved = types.iter().map(|t| self.resolve_type(prefex, t)).collect();
                 self.add_definition(Type::Tuple(resolved))
             }
-            ast::Typ::Function {
-                args,
-                ret,
-                generics,
-            } => {
-                if generics.is_empty() {
-                    let resolved_ars = args.iter().map(|t| self.resolve_type(prefex, t)).collect();
-                    let resolved_ret = self.resolve_type(prefex, ret);
-                    return self.add_definition(Type::Function {
-                        args: resolved_ars,
-                        ret: Box::new(resolved_ret),
-                    });
-                }
-                prefex.with_scope(|scope| {
-                    scope.add_type_vars(generics);
-                    let resolved_args = args.iter().map(|t| self.resolve_type(scope, t)).collect();
-                    let resolved_ret = self.resolve_type(scope, ret);
-                    self.add_definition(Type::Scheme {
-                        prefex: generics.clone(),
-                        typ: Box::new(Type::Function {
-                            args: resolved_args,
-                            ret: Box::new(resolved_ret),
-                        }),
-                    })
-                })
+            ast::Typ::Function { args, ret } => {
+                let resolved_ars = args.iter().map(|t| self.resolve_type(prefex, t)).collect();
+                let resolved_ret = self.resolve_type(prefex, ret);
+                return self.add_definition(Type::Function {
+                    args: resolved_ars,
+                    ret: Box::new(resolved_ret),
+                });
             }
             ast::Typ::Unit => Type::Alias(self.unit_id),
             ast::Typ::ToInfere => Type::Alias(self.to_infere_id),
