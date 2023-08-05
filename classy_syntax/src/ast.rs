@@ -64,7 +64,11 @@ pub struct Namespace {
 impl Namespace {
     pub fn joined_with(&self, name: &str) -> String {
         let mut path = match &self.name {
-            Name::Unresolved { path, .. } => path.clone(),
+            Name::Unresolved { path, identifier } => {
+                let mut path = path.clone();
+                path.push(identifier.clone());
+                path
+            }
             _ => panic!("cannot join namespace with non-unresolved name"),
         };
         path.push(name.into());
@@ -73,7 +77,8 @@ impl Namespace {
 
     pub fn joined(&self) -> String {
         match &self.name {
-            Name::Unresolved { path, .. } => path.join("::"),
+            Name::Unresolved { path, identifier } if path.is_empty() => identifier.clone(),
+            Name::Unresolved { path, identifier } => format!("{}::{}", path.join("::"), identifier),
             _ => panic!("cannot join namespace with non-unresolved name"),
         }
     }

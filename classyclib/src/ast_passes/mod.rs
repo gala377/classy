@@ -22,7 +22,7 @@ pub fn fully_expand_names(
     session: &Session,
     database: &Database,
 ) -> ast::SourceFile {
-    let ast = resolve_names::ResolveNames::new().run(ast, session);
+    let ast = resolve_names::NameResolver::new(database).run(ast, session);
     ast
 }
 

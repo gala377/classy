@@ -22,28 +22,39 @@ pub const CURRENT_PACKAGE_ID: PackageId = PackageId(0);
 
 pub struct PackageInfo {
     pub name: String,
+    pub globals: HashMap<String, DefinitionId>,
+}
+
+impl PackageInfo {
+    pub fn get_definition(&self, name: &str) -> Option<DefinitionId> {
+        self.globals.get(name).cloned()
+    }
 }
 
 /// A complete representation of a program that allows for easy quering.
 pub struct Database {
     /// Mapping for package id to its package info.
-    packages: Vec<PackageInfo>,
+    pub packages: Vec<PackageInfo>,
     /// Map of package name to its id.
-    packages_map: HashMap<String, PackageId>,
+    pub packages_map: HashMap<String, PackageId>,
+
+    /// Global names, as global names in every package need to be unique
+    /// we can map them to their definition id.§
+    pub globals: HashMap<String, DefinitionId>,
 
     /// Global variable definitions.
-    variable_definitions: HashMap<DefinitionId, ast::ConstDefinition>,
+    pub variable_definitions: HashMap<DefinitionId, ast::ConstDefinition>,
     /// Function and method definitions.
-    function_definitions: HashMap<DefinitionId, ast::FunctionDefinition>,
+    pub function_definitions: HashMap<DefinitionId, ast::FunctionDefinition>,
     /// Type definitions.
-    type_definitions: HashMap<DefinitionId, ast::TypeDefinition>,
+    pub type_definitions: HashMap<DefinitionId, ast::TypeDefinition>,
 
     /// A mapping assigning each definition to its respective type.
-    definition_types: HashMap<DefinitionId, TypeId>,
+    pub definition_types: HashMap<DefinitionId, TypeId>,
 
     /// All the type values generated during typechecking.
     /// Maps their respective handle to the value of the type.
-    type_aliases: HashMap<TypeId, Type>,
+    pub type_aliases: HashMap<TypeId, Type>,
 
     /// Maps a type to its type id.
     ///
@@ -52,10 +63,10 @@ pub struct Database {
     /// reverse. In this case this map will recognize such types as equal.
     /// However, as the types are checked using structural equality throughout
     /// typechecking, this collision should not effect it.
-    reverse_type_aliases: TypeHashMap<TypeId>,
+    pub reverse_type_aliases: TypeHashMap<TypeId>,
 
     /// Contains mapping between the base type -> specialisation -> methods
-    method_blocks: MethodBlocksMappings,
+    pub method_blocks: MethodBlocksMappings,
 }
 
 #[derive(Error, Debug)]
@@ -89,11 +100,11 @@ pub struct ResolvedMethod {
     pub substitutions: HashMap<UniqueId, Type>,
 }
 
-struct MethodHandle {
+pub struct MethodHandle {
     name: String,
     definition: DefinitionId,
 }
-type MethodBlocksMappings = HashMap<TypeId, HashMap<TypeId, MethodHandle>>;
+pub type MethodBlocksMappings = HashMap<TypeId, HashMap<TypeId, MethodHandle>>;
 
 impl Database {
     const INITIAL_TYPE_MAP_CAPACITY: u64 = 1000;
@@ -105,6 +116,7 @@ impl Database {
             variable_definitions: HashMap::new(),
             function_definitions: HashMap::new(),
             type_definitions: HashMap::new(),
+            globals: HashMap::new(),
             definition_types: HashMap::new(),
             type_aliases: HashMap::new(),
             reverse_type_aliases: TypeHashMap::new(Self::INITIAL_TYPE_MAP_CAPACITY as u64),
@@ -115,8 +127,15 @@ impl Database {
     // Package queries
     pub fn add_package(&mut self, package: PackageInfo) {
         self.packages_map
-            .insert(package.name.clone(), PackageId(self.packages.len()));
+            .insert(package.name.clone(), PackageId(self.packages.len() + 1));
         self.packages.push(package);
+    }
+
+    pub fn get_package(&self, id: PackageId) -> &PackageInfo {
+        // this is important as the current package id is 0
+        // so we need to subtract 1 to get the correct index
+        // into the dependencies vector
+        &self.packages[(id.0 - 1) as usize]
     }
 
     pub fn package_id(&self, of: &str) -> Option<PackageId> {
@@ -130,6 +149,10 @@ impl Database {
 
     pub fn add_type_definition(&mut self, id: DefinitionId, definition: ast::TypeDefinition) {
         assert!(!self.type_definitions.contains_key(&id));
+        assert!(self
+            .globals
+            .insert(definition.name.clone(), id.clone())
+            .is_none());
         self.type_definitions.insert(id, definition);
     }
 
@@ -139,12 +162,24 @@ impl Database {
         definition: ast::FunctionDefinition,
     ) {
         assert!(!self.function_definitions.contains_key(&id));
+        assert!(self
+            .globals
+            .insert(definition.name.clone(), id.clone())
+            .is_none());
         self.function_definitions.insert(id, definition);
     }
 
     pub fn add_const_definition(&mut self, id: DefinitionId, definition: ast::ConstDefinition) {
         assert!(!self.variable_definitions.contains_key(&id));
+        assert!(self
+            .globals
+            .insert(definition.name.clone(), id.clone())
+            .is_none());
         self.variable_definitions.insert(id, definition);
+    }
+
+    pub fn get_global(&self, name: &str) -> Option<DefinitionId> {
+        self.globals.get(name).cloned()
     }
 
     // Type aliasing
@@ -382,7 +417,7 @@ impl Database {
     }
 }
 
-struct TypeHashMap<V> {
+pub struct TypeHashMap<V> {
     inner: Vec<Vec<(Type, V)>>,
     capacity: u64,
 }
