@@ -1,6 +1,6 @@
 use logos::Logos;
 
-use crate::tokens::{Token, TokenType, IGNORE_NEWLINE};
+use crate::tokens::{Token, TokenType, IGNORE_NEWLINE, IGNORE_NEWLINE_BEFORE};
 
 #[derive(Clone)]
 pub struct Lexer<'a> {
@@ -44,9 +44,27 @@ impl<'source> Lexer<'source> {
         &self.peek_token
     }
 
+    fn logos_peek(&self) -> TokenType {
+        // tokens are lazy so the clone
+        // is actually really cheap
+        self.tokens
+            .clone()
+            .peekable()
+            .peek()
+            .cloned()
+            .unwrap_or(TokenType::Eof)
+    }
+
+    fn ignore_newline_before(&self, tok: TokenType) -> bool {
+        IGNORE_NEWLINE_BEFORE.contains(&std::mem::discriminant(&tok))
+    }
+
     fn bump(&mut self, insert_semicolon: bool) -> Token {
         use TokenType::*;
         let tok = self.tokens.next();
+        // we need to do it here as we need to look at the next token
+        let peek = self.logos_peek();
+        let insert_semicolon = insert_semicolon && !self.ignore_newline_before(peek);
         match tok {
             Some(NewLine) if insert_semicolon => Token {
                 typ: Semicolon,

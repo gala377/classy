@@ -148,4 +148,21 @@ lazy_static! {
         ];
         set
     };
+
+    pub static ref IGNORE_NEWLINE_BEFORE: HashSet<Discriminant<TokenType>> = {
+        use TokenType::*;
+        let mut set = HashSet::new();
+        macro_rules! add_tokens {
+            [$($name:expr),*$(,)?] => {
+                $(set.insert(discriminant(&$name)));*
+            };
+        }
+        add_tokens![
+            // No expression can start from these tokens so we can assume
+            // they are a continuation of the expression.
+            // When it comses to DASH, it can be a unary operator, but I assume in most cases it won't be
+            Comma, Dot, FatArrow, Arrow, Plus, Star, EqualSign, Slash, Dash
+        ];
+        set
+    };
 }

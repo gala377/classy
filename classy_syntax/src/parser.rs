@@ -2112,4 +2112,25 @@ mod tests {
                 foo (a) ())
         ))
     }
+
+    ptest! {
+        semicolon_insertion_allows_for_method_chains,
+        r#"foo {
+            foo
+              .a()
+              .b()
+              .c()
+        }"#,
+        sexpr!((
+            (fn {}
+                (type (fn () infere))
+                foo () {
+                    (method (
+                        method (
+                            method foo a () {})
+                        b () {})
+                    c () {})
+                })
+        ))
+    }
 }
