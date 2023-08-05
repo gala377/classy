@@ -1,4 +1,5 @@
-
+// DOES NOT COMPILE
+// we do not support let rec compilation
 
 @runtime @empty
 uninitialized: forall a => () -> a

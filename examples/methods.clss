@@ -1,3 +1,5 @@
+// WE DO NOT SUPPORT METHODS YET
+
 @empty @runtime
 print: (String) -> ()
 

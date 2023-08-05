@@ -1,3 +1,6 @@
+// DOES NOT TYPECHECK BECAUSE OF THE
+// TYPE OF THE ERROR FUNCTION
+
 
 @empty @runtime
 print: (String) -> ()

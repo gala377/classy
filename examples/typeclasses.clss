@@ -1,8 +1,10 @@
-
+// JUST AN IDEA ON HOW TO IMPLEMENT TYPECLASSES
+// USING TYPES, FUCTIONS, LAMBDAS AND CONST VARIABLES
 
 type Show(a) {
     show: (a) -> String
 }
+
 
 const ShowString: Show(String) = Show {
     show = (x) => x

@@ -1,3 +1,10 @@
+// LINKER FAILURE
+// Cannot link const variables because
+// of the problem of stable addresses
+// from the heap. The solution would be to allocate
+// them directly in the permament heap and use this address
+// or use inderection, a pointer to a pointer.
+
 
 @empty @runtime
 print: (String) -> ()
