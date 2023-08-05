@@ -256,7 +256,14 @@ impl<'sess> Inference<'sess> {
             Type::Function { args, ret } => (args, ret, vec![]),
             Type::Scheme { typ, prefex } => match *typ {
                 Type::Function { args, ret } => (args, ret, prefex),
-                _ => panic!("Expected function type"),
+                Type::Alias(for_type) => {
+                    let for_type = tctx.definitions.get(&for_type).unwrap().clone();
+                    match for_type {
+                        Type::Function { args, ret } => (args, ret, prefex),
+                        t => panic!("Expected function type got {t:?}"),
+                    }
+                }
+                t => panic!("Expected function type got {t:?}"),
             },
             Type::App { typ, args } => {
                 println!("INSTANTIATING {typ:?} with {args:?}");

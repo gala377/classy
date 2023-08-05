@@ -393,7 +393,7 @@ mod tests {
             r#"main: () -> (); main = foo();"#,
             sexpr!((
                 (fn {}
-                    (type (fn [] () (poly [] unit)))
+                    (type (poly [] (fn () (poly [] unit))))
                     main () {
                         call foo () {}
                     }
@@ -418,7 +418,7 @@ mod tests {
             })
 
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 main () {
                     struct Foo {
                         ["bar" 1] 
@@ -445,7 +445,7 @@ mod tests {
             })
 
             (fn {}
-                (type (fn [] () infere))
+                (type (fn () infere))
                 main () {
                     struct Foo {}
                 }

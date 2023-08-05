@@ -8,7 +8,6 @@ pub mod func_to_struct_literal;
 pub mod gather_runtime_functions;
 pub mod implicit_forall;
 pub mod move_const_init;
-pub mod order_functions;
 pub mod promote_local_types;
 pub mod resolve_names;
 pub mod verify_lvalues;

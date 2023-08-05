@@ -335,7 +335,7 @@ mod tests {
             ",
             sexpr!((
                 (fn {}
-                    (type (fn [] () infere))
+                    (type (fn () infere))
                     foo () (global 0 10)
                 )
             )),
@@ -352,7 +352,7 @@ mod tests {
             ",
             sexpr!((
                 (fn {}
-                    (type (fn [] () infere))
+                    (type (fn () infere))
                     foo () (global 1 10)
                 )
             )),
@@ -376,7 +376,7 @@ mod tests {
             sexpr!((
                 (namespace a::b)
                 (fn {}
-                    (type (fn [] () infere))
+                    (type (fn () infere))
                     foo () (global 0 11)
                 )
             )),
@@ -398,7 +398,7 @@ mod tests {
             sexpr!((
                 (namespace a::b)
                 (fn {}
-                    (type (fn [] () infere))
+                    (type (fn () infere))
                     foo () (global 0 11)
                 )
             )),
@@ -418,7 +418,7 @@ mod tests {
             ",
             sexpr!((
                 (fn {}
-                    (type (fn [] () infere))
+                    (type (fn () infere))
                     foo () (global 1 11)
                 )
             )),
@@ -443,7 +443,7 @@ mod tests {
             sexpr!((
                 (namespace a::b)
                 (fn {}
-                    (type (fn [] () infere))
+                    (type (fn () infere))
                     foo () (global 1 11)
                 )
             )),
@@ -476,7 +476,7 @@ mod tests {
             ",
             sexpr!((
                 (fn {}
-                    (type (fn [] (infere) infere))
+                    (type (fn (infere) infere))
                     foo (a) {
                         (call (global 0 1) () {})
                         (let x infere 10)
@@ -610,7 +610,7 @@ mod tests {
             sexpr!((
                 (namespace a::b)
                 (fn {}
-                    (type (fn [] ((poly [] (global 1 11))) (poly [] unit)))
+                    (type (poly [] (fn ((poly [] (global 1 11))) (poly [] unit))))
                     foo (x) ()
                 )
             )),
@@ -641,7 +641,7 @@ mod tests {
                     { None unit }
                 ))
                 (fn {}
-                    (type (fn ["a"] ((poly [] a)) (poly [] (global 0 11))))
+                    (type (poly ["a"] (fn ((poly [] a)) (poly [] (global 0 11)))))
                     foo () ()
                 )
             )),

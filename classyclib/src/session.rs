@@ -39,6 +39,10 @@ impl Session {
         }
     }
 
+    pub fn current_package(&self) -> &str {
+        &self.current_package
+    }
+
     pub fn id_provider(&self) -> SharedIdProvider {
         self.id_provider.clone()
     }
