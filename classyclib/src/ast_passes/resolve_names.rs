@@ -77,6 +77,21 @@ impl<'db> Folder for NameResolver<'db> {
         meths
     }
 
+    fn fold_function_type(
+        &mut self,
+        generics: Vec<String>,
+        args: Vec<ast::Typ>,
+        ret: ast::Typ,
+    ) -> ast::Typ {
+        self.type_scope.new_scope();
+        for var in generics.iter() {
+            self.type_scope.add(var.clone(), ());
+        }
+        let res = ast::fold::fold_function_type(self, generics, args, ret);
+        self.type_scope.pop_scope();
+        res
+    }
+
     fn fold_poly_type(&mut self, vars: Vec<String>, typ: ast::Typ) -> ast::Typ {
         self.type_scope.new_scope();
         for var in vars.iter() {
@@ -622,43 +637,30 @@ mod tests {
         );
     }
 
-    // #[test]
-    // fn resplves_local_names() {
-    //     run_test(
-    //         r"
-    //             foo a {
-    //                 foo()
-    //                 let x = 10
-    //                 x
-    //                 a
-    //                 if (true) {
-    //                     let c = 1
-    //                     c
-    //                 } else {
-    //                     a
-    //                 }
-    //                 c
-    //             }
-    //         ",
-    //         sexpr!((
-    //             (fn {}
-    //                 (type (fn [] (infere) infere))
-    //                 foo (a) {
-    //                     (call (global 0 1) () {})
-    //                     (let x infere 10)
-    //                     x
-    //                     a
-    //                     (if true {
-    //                         (let c infere 1)
-    //                         c
-    //                     }
-    //                     { a })
-    //                     (global 0 10)
-    //                 }
-    //             )
-    //         )),
-    //         map! {"c" -> 10, "foo" -> 1},
-    //         map! {},
-    //     );
-    // }
+    #[test]
+    fn resplves_local_names_in_types() {
+        run_test(
+            r"
+                type Option(a) {
+                    Some(a)
+                    None
+                }
+
+                foo: forall a => (a) -> X
+                foo = ()
+            ",
+            sexpr!((
+                (type Option [a] (adt 
+                    { Some [tuple (poly [] a)] }
+                    { None unit }
+                ))
+                (fn {}
+                    (type (fn ["a"] ((poly [] a)) (poly [] (global 0 11))))
+                    foo () ()
+                )
+            )),
+            map! {"X" -> 11},
+            map! {},
+        );
+    }
 }
