@@ -77,20 +77,6 @@ impl<'db> Folder for NameResolver<'db> {
         meths
     }
 
-    fn fold_function_type(
-        &mut self,
-        generics: Vec<String>,
-        args: Vec<ast::Typ>,
-        ret: ast::Typ,
-    ) -> ast::Typ {
-        self.type_scope.new_scope();
-        for var in generics.iter() {
-            self.type_scope.add(var.clone(), ());
-        }
-        let res = ast::fold::fold_function_type(self, generics, args, ret);
-        self.type_scope.pop_scope();
-        res
-    }
 
     fn fold_poly_type(&mut self, vars: Vec<String>, typ: ast::Typ) -> ast::Typ {
         self.type_scope.new_scope();

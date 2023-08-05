@@ -1583,7 +1583,7 @@ mod tests {
          foo = 10;",
          sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 foo ()
                     10)
          ))
@@ -1597,10 +1597,10 @@ mod tests {
         sexpr!((
             (fn {}
                 (type
-                    (fn [] (
+                    (poly [] (fn (
                         (poly [] b)
                         (poly [] d))
-                            (poly [] unit)))
+                            (poly [] unit))))
                 foo (a c)
                     10)
         ))
@@ -1613,7 +1613,7 @@ mod tests {
         "#,
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     call a (10 20 30) {}
                 })
@@ -1625,7 +1625,7 @@ mod tests {
         r#"a: () -> (); a() = (1, 2, (a.b));"#,
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     tuple 1 2 (access a b)
                 })
@@ -1637,7 +1637,7 @@ mod tests {
         "a:()->();a=();",
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {})
         ))
     }
@@ -1647,7 +1647,7 @@ mod tests {
         "a:()->();a=a.b.c.d;",
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     access (
                         access (
@@ -1663,7 +1663,7 @@ mod tests {
         "a:()->();a={1; 2};",
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     1
                     2
@@ -1676,7 +1676,7 @@ mod tests {
         "a:()->();a{1; 2};",
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     1
                     2
@@ -1689,7 +1689,7 @@ mod tests {
         "a:()->();a=a.b=c.d;",
         sexpr!{(
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     assign
                         (access a b)
@@ -1703,7 +1703,7 @@ mod tests {
         "a:()->();a=a{1};",
         sexpr!{(
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     call a ((
                         lambda () { 1 }
@@ -1717,7 +1717,7 @@ mod tests {
         "a:()->();a=a a.b;",
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     access (call a (a) {}) b
                 })
@@ -1729,7 +1729,7 @@ mod tests {
         "a:()->();a=a.b c => 1;",
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     method a b (
                         (lambda ((c infere)) 1)
@@ -1743,7 +1743,7 @@ mod tests {
         "a:()->();a=a.b () => 1;",
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     method a b (
                         (lambda [] 1)
@@ -1757,7 +1757,7 @@ mod tests {
         "a:()->();a=a(a, b, c) => 1;",
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     call a (
                         (lambda (
@@ -1774,7 +1774,7 @@ mod tests {
         "a:()->();a=a(a, b, c) { 1 };",
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     call a (
                         a b c (lambda () { 1 })) {}
@@ -1787,7 +1787,7 @@ mod tests {
         "a:()->();a=a(a, b, c) (d, e) => { 1 };",
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     call a (
                         a b c
@@ -1802,7 +1802,7 @@ mod tests {
         "a:()->();a=a(b:c,d:e)=>1;",
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     call a (
                         (lambda (
@@ -1818,7 +1818,7 @@ mod tests {
         "a:()->();a=a.b c : d;",
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     typed
                         (method a b (c) {})
@@ -1832,7 +1832,7 @@ mod tests {
         "a:()->();a=a=>b=>1;",
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     lambda ([a infere])
                         (lambda ([b infere])
@@ -1846,7 +1846,7 @@ mod tests {
         "a:()->();a=(a, b)=>1;",
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     lambda ([a infere] [b infere])
                         1
@@ -1859,7 +1859,7 @@ mod tests {
         "a:()->();a=(a: b, c: d)=>1;",
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     lambda (
                         [a (poly [] b)]
@@ -1874,7 +1874,7 @@ mod tests {
         "a:()->();a=a b c => 1;",
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     call a (b (lambda ([c infere]) 1)) {}
                 })
@@ -1886,7 +1886,7 @@ mod tests {
         "a:()->();a=while(a { b }) { c };",
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     while
                         (call a ((lambda () { b })) {})
@@ -1900,7 +1900,7 @@ mod tests {
         "a:()->();a { if(b) { c }; d }",
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     (if b { c })
                     d
@@ -1913,7 +1913,7 @@ mod tests {
         "a:()->();a=if(b){c}else if (d){e} else {f}",
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     if b { c } (if d { e } { f })
                 })
@@ -1925,7 +1925,7 @@ mod tests {
         "a:()->();a=return a b",
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     return (call a (b) {})
                 })
@@ -1937,7 +1937,7 @@ mod tests {
         "a:()->();a=let var = { a }",
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     let var infere { a }
                 })
@@ -1949,7 +1949,7 @@ mod tests {
         "a:()->();a=a(b=c, d=e, a)",
         sexpr!((
             (fn {}
-                (type (fn [] () (poly [] unit)))
+                (type (poly [] (fn () (poly [] unit))))
                 a () {
                     call a (a) {
                         ["b" c]
@@ -1964,7 +1964,7 @@ mod tests {
         "foo (a, b, c) = 10",
         sexpr!((
             (fn {}
-                (type (fn [] (infere infere infere) infere))
+                (type (fn (infere infere infere) infere))
                 foo (a b c) 10)
         ))
     }
@@ -1974,7 +1974,7 @@ mod tests {
         "foo { 10 }",
         sexpr!((
             (fn {}
-                (type (fn [] () infere))
+                (type (fn () infere))
                 foo () {
                     10
             })
@@ -1985,7 +1985,7 @@ mod tests {
         "foo = foo.a { 1 }.b 1",
         sexpr!((
             (fn {}
-                (type (fn [] () infere))
+                (type  (fn () infere))
                 foo () {
                     method (
                         method foo a ((lambda () { 1 })) {}
@@ -2001,7 +2001,7 @@ mod tests {
         }.b 1",
         sexpr!((
             (fn {}
-                (type (fn [] () infere))
+                (type (fn () infere))
                 foo () {
                     method (
                         method foo a (
@@ -2017,7 +2017,7 @@ mod tests {
         r"foo = foo b match {}",
         sexpr!((
             (fn {}
-                (type (fn [] () infere))
+                (type (fn () infere))
                 foo () {
                     match (call foo (b) {}) {}
                 })
@@ -2029,7 +2029,7 @@ mod tests {
         r"foo = foo b {} match {}",
         sexpr!((
             (fn {}
-                (type (fn [] () infere))
+                (type (fn () infere))
                 foo () {
                     match (call foo (b (lambda () {})) {}) {}
                 })
@@ -2044,7 +2044,7 @@ mod tests {
         ",
         sexpr!((
             (fn {}
-                (type (fn [] () infere))
+                (type (fn () infere))
                 foo () {
                     match (match a {}) {}
                 })
@@ -2069,7 +2069,7 @@ mod tests {
         }"#,
         sexpr!((
             (fn {}
-                (type (fn [] () infere))
+                (type (fn () infere))
                 foo () {
                     match a {
                         ([struct Foo ()] 1)
@@ -2094,7 +2094,7 @@ mod tests {
         r#"foo { a::b::c }"#,
         sexpr!((
             (fn {}
-                (type (fn [] () infere))
+                (type (fn () infere))
                 foo () {
                     a::b::c
                 })
@@ -2108,7 +2108,7 @@ mod tests {
         sexpr!((
             (namespace foo::bar)
             (fn {}
-                (type (fn [] (infere) infere))
+                (type (fn (infere) infere))
                 foo (a) ())
         ))
     }

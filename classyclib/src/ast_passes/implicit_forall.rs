@@ -43,23 +43,7 @@ impl ast::Folder for ImplicitForall {
         self.prefex.clear();
         let new_t = self.fold_typ(typ);
         let new_t = if !self.prefex.is_empty() {
-            match new_t {
-                ast::Typ::Function {
-                    generics,
-                    args,
-                    ret,
-                } => {
-                    if !generics.is_empty() {
-                        panic!("not all generics mentioned in the forall section")
-                    }
-                    ast::Typ::Function {
-                        generics: self.prefex.to_vec(),
-                        args,
-                        ret,
-                    }
-                }
-                t => ast::Typ::Poly(self.prefex.to_vec(), Box::new(t)),
-            }
+            ast::Typ::Poly(self.prefex.to_vec(), Box::new(new_t))
         } else {
             new_t
         };
@@ -91,21 +75,6 @@ impl ast::Folder for ImplicitForall {
         })
     }
 
-    fn fold_function_type(
-        &mut self,
-        generics: Vec<String>,
-        args: Vec<ast::Typ>,
-        ret: ast::Typ,
-    ) -> ast::Typ {
-        self.ignore_names.new_scope();
-        for name in &generics {
-            self.ignore_names.add(name.clone(), ());
-        }
-        let res = ast::fold::fold_function_type(self, generics, args, ret);
-        self.ignore_names.pop_scope();
-        res
-    }
-
     fn fold_poly_type(&mut self, vars: Vec<String>, typ: ast::Typ) -> ast::Typ {
         self.ignore_names.new_scope();
         for name in &vars {
@@ -120,7 +89,6 @@ impl ast::Folder for ImplicitForall {
         let typ = self.fold_methods_type(meths.typ);
         let generics = match &typ {
             ast::Typ::Poly(generics, _) => generics.clone(),
-            ast::Typ::Function { generics, .. } => generics.clone(),
             _ => vec![],
         };
         self.ignore_names.new_scope();
