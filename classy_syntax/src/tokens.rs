@@ -116,6 +116,8 @@ pub enum TokenType {
     Whitespace,
     #[regex(r"(\r)?\n")]
     NewLine,
+    #[regex(r"//.*", logos::skip)]
+    Comment,
 
     #[error]
     Error,

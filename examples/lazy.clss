@@ -33,7 +33,16 @@ test_lazy {
 }
 
 main {
+    // the ideal version of this would be something like
+    // lazy { "hello world" }
+    // but for that we neek lambdas implemented
     let a = lazy test_lazy
+    // Also here we would like
+    // lazy.get() <- this requires methods
+    // or 
+    // lazy.get <- this requires properties 
+    // or 
+    // !lazy <- this requires custom prefix operators 
     print (lazy_get a)
     print (lazy_get a)
 }
