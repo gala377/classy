@@ -471,7 +471,7 @@ mod tests {
     }
 
     #[test]
-    fn resplves_local_names() {
+    fn resolves_local_names() {
         run_test(
             r"
                 foo a {
@@ -638,7 +638,7 @@ mod tests {
     }
 
     #[test]
-    fn resplves_local_names_in_types() {
+    fn resolves_local_names_in_types() {
         run_test(
             r"
                 type Option(a) {
