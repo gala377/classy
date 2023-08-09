@@ -588,8 +588,8 @@ impl classy_sexpr::ToSExpr for TopLevelItemKind {
         match self {
             TopLevelItemKind::TypeDefinition(def) => sexpr!($def),
             TopLevelItemKind::FunctionDefinition(def) => sexpr!($def),
-            TopLevelItemKind::MethodsBlock(_) => todo!(),
-            TopLevelItemKind::ClassDefinition(_) => todo!(),
+            TopLevelItemKind::MethodsBlock(def) => sexpr!($def),
+            TopLevelItemKind::ClassDefinition(def) => sexpr!($def),
             TopLevelItemKind::ConstDefinition(def) => sexpr!($def),
         }
     }
@@ -852,5 +852,42 @@ impl ToSExpr for Name {
             } => sexpr!((global $package $definition)),
             Name::Local(name) => sexpr!(#name),
         }
+    }
+}
+
+impl<T: std::fmt::Debug + Clone + ToSExpr> ToSExpr for MethodsBlock<T> {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        let MethodsBlock { name, typ, methods } = self;
+        let name = name.map(|n| sexpr!(#n));
+        sexpr!((methods @name $typ $methods))
+    }
+}
+
+impl ToSExpr for ClassDefinition {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        let ClassDefinition {
+            name,
+            bounds,
+            args,
+            body,
+        } = self;
+        let args = args.into_iter().map(|s| sexpr!(#s)).collect::<Vec<_>>();
+        sexpr!((class #name @args $bounds $body))
+    }
+}
+
+impl ToSExpr for ClassDefinitionItem {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        match self {
+            ClassDefinitionItem::MethodBlock(b) => sexpr!($b),
+            ClassDefinitionItem::Function(f) => sexpr!($f),
+        }
+    }
+}
+
+impl ToSExpr for FuncDecl {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        let FuncDecl { name, typ } = self;
+        sexpr!((fn #name $typ))
     }
 }

@@ -134,18 +134,19 @@ impl<'source> Parser<'source> {
     ) -> ParseRes<ast::MethodsBlock<T>> {
         let beg = self.curr_pos();
         self.match_token(TokenType::Methods)?;
+        let name = self.parse_identifier().unwrap_or_default();
+        let _ = self.expect_token(TokenType::For);
         let typ = self.parse_type().error(self, beg, "Expected a type")?;
         let _ = self.expect_token(TokenType::LBrace);
         let mut methods = Vec::new();
         while self.lexer.current().typ != TokenType::RBrace {
             let method = with(self)?;
-            //let method = self.parse_function_definition(true)?;
             methods.push(method);
         }
         let _ = self.expect_token(TokenType::RBrace);
         let _ = self.expect_token(TokenType::Semicolon);
         Ok(ast::MethodsBlock {
-            name: None,
+            name: if name.is_empty() { None } else { Some(name) },
             typ,
             methods,
         })
@@ -215,12 +216,12 @@ impl<'source> Parser<'source> {
     }
 
     fn parse_class_body(&mut self) -> ParseRes<Vec<ast::ClassDefinitionItem>> {
-        let _ = self.expect_token(TokenType::RBrace);
+        let _ = self.expect_token(TokenType::LBrace);
         let mut items = Vec::new();
         while self.match_token(TokenType::RBrace).is_err() {
-            if let Ok(methods) = self.parse_methods_block(|p| p.parse_func_decl(true)) {
+            if let Ok(methods) = self.parse_methods_block(|p| p.parse_func_decl()) {
                 items.push(ast::ClassDefinitionItem::MethodBlock(methods));
-            } else if let Ok(method) = self.parse_func_decl(false) {
+            } else if let Ok(method) = self.parse_func_decl() {
                 items.push(ast::ClassDefinitionItem::Function(method));
             } else {
                 return Err(self.error(
@@ -228,19 +229,15 @@ impl<'source> Parser<'source> {
                     "Expected a function or a methods block",
                 ));
             }
-            let _ = self.expect_token(TokenType::Semicolon);
         }
         Ok(items)
     }
 
-    fn parse_func_decl(&mut self, eat_semicolon: bool) -> ParseRes<ast::FuncDecl> {
-        let beg = self.curr_pos();
+    fn parse_func_decl(&mut self) -> ParseRes<ast::FuncDecl> {
         let name = self.parse_identifier()?;
         let _ = self.expect_token(TokenType::Colon);
         let typ = self.parse_type()?;
-        if eat_semicolon {
-            let _ = self.expect_token(TokenType::Semicolon);
-        }
+        let _ = self.expect_token(TokenType::Semicolon);
         Ok(ast::FuncDecl { name, typ })
     }
 
@@ -461,7 +458,7 @@ impl<'source> Parser<'source> {
     }
 
     fn parse_type_bounds(&mut self) -> Vec<ast::TypeBound> {
-        if self.match_token(TokenType::LBracket).is_err() {
+        if self.match_token(TokenType::LBrace).is_err() {
             return Vec::new();
         }
         fn parse_type_bound(parser: &mut Parser) -> ParseRes<ast::TypeBound> {
@@ -471,8 +468,8 @@ impl<'source> Parser<'source> {
             let _ = parser.expect_token(TokenType::RParen);
             Ok(ast::TypeBound { head: name, args })
         }
-        let res = self.parse_delimited(parse_type_bound, TokenType::LBracket);
-        let _ = self.expect_token(TokenType::RBracket);
+        let res = self.parse_delimited(parse_type_bound, TokenType::Comma);
+        let _ = self.expect_token(TokenType::RBrace);
         let _ = self.expect_token(TokenType::FatArrow);
         res
     }
@@ -1559,11 +1556,11 @@ mod tests {
         sexpr!{(
             (type Foo []
                 (record
-                    (x (poly [] typ1))
-                    (y (poly [] typ2))))
+                    (x (poly [] {} typ1))
+                    (y (poly [] {} typ2))))
             (type Bar []
                 (record
-                    (foo (poly [] typ_1))))
+                    (foo (poly [] {} typ_1))))
         )}
     }
 
@@ -1573,7 +1570,7 @@ mod tests {
         sexpr!{(
             (type Foo []
                 (record
-                    (x (poly [] a))))
+                    (x (poly [] {} a))))
         )}
     }
 
@@ -1583,7 +1580,7 @@ mod tests {
         sexpr!{(
             (type Foo [a]
                 (record
-                    (x (poly [] a))))
+                    (x (poly [] {} a))))
         )}
 
     }
@@ -1594,7 +1591,7 @@ mod tests {
         sexpr!{(
             (type Foo [a b c]
                 (record
-                    (x (poly [] a))))
+                    (x (poly [] {} a))))
         )}
     }
 
@@ -1629,15 +1626,15 @@ mod tests {
             (type A []
                 (adt
                     (A (tuple
-                        (poly [] T1)
-                        (poly [] T2)))
+                        (poly [] {} T1)
+                        (poly [] {} T2)))
                     (B unit)
                     (C (tuple
-                        (poly [] T3)))
+                        (poly [] {} T3)))
                     (D (tuple
-                        (poly [] T4)
-                        (poly [] T5)
-                        (poly [] T6)))
+                        (poly [] {} T4)
+                        (poly [] {} T5)
+                        (poly [] {} T6)))
                     (E unit))
             )
         ))
@@ -1650,9 +1647,9 @@ mod tests {
             (type Res [a b]
                 (adt
                     (Ok (tuple
-                        (poly [] a)))
+                        (poly [] {} a)))
                     (Err (tuple
-                        (poly [] b))))
+                        (poly [] {} b))))
             )
         ))
     }
@@ -1663,7 +1660,7 @@ mod tests {
          foo = 10;",
          sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 foo ()
                     10)
          ))
@@ -1677,10 +1674,10 @@ mod tests {
         sexpr!((
             (fn {}
                 (type
-                    (poly [] (fn (
-                        (poly [] b)
-                        (poly [] d))
-                            (poly [] unit))))
+                    (poly [] {} (fn (
+                        (poly [] {} b)
+                        (poly [] {} d))
+                            (poly [] {} unit))))
                 foo (a c)
                     10)
         ))
@@ -1693,7 +1690,7 @@ mod tests {
         "#,
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     call a (10 20 30) {}
                 })
@@ -1705,7 +1702,7 @@ mod tests {
         r#"a: () -> (); a() = (1, 2, (a.b));"#,
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     tuple 1 2 (access a b)
                 })
@@ -1717,7 +1714,7 @@ mod tests {
         "a:()->();a=();",
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {})
         ))
     }
@@ -1727,7 +1724,7 @@ mod tests {
         "a:()->();a=a.b.c.d;",
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     access (
                         access (
@@ -1743,7 +1740,7 @@ mod tests {
         "a:()->();a={1; 2};",
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     1
                     2
@@ -1756,7 +1753,7 @@ mod tests {
         "a:()->();a{1; 2};",
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     1
                     2
@@ -1769,7 +1766,7 @@ mod tests {
         "a:()->();a=a.b=c.d;",
         sexpr!{(
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     assign
                         (access a b)
@@ -1783,7 +1780,7 @@ mod tests {
         "a:()->();a=a{1};",
         sexpr!{(
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     call a ((
                         lambda () { 1 }
@@ -1797,7 +1794,7 @@ mod tests {
         "a:()->();a=a a.b;",
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     access (call a (a) {}) b
                 })
@@ -1809,7 +1806,7 @@ mod tests {
         "a:()->();a=a.b c => 1;",
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     method a b (
                         (lambda ((c infere)) 1)
@@ -1823,7 +1820,7 @@ mod tests {
         "a:()->();a=a.b () => 1;",
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     method a b (
                         (lambda [] 1)
@@ -1837,7 +1834,7 @@ mod tests {
         "a:()->();a=a(a, b, c) => 1;",
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     call a (
                         (lambda (
@@ -1854,7 +1851,7 @@ mod tests {
         "a:()->();a=a(a, b, c) { 1 };",
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     call a (
                         a b c (lambda () { 1 })) {}
@@ -1867,7 +1864,7 @@ mod tests {
         "a:()->();a=a(a, b, c) (d, e) => { 1 };",
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     call a (
                         a b c
@@ -1882,12 +1879,12 @@ mod tests {
         "a:()->();a=a(b:c,d:e)=>1;",
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     call a (
                         (lambda (
-                            [b (poly [] c)]
-                            [d (poly [] e)])
+                            [b (poly [] {} c)]
+                            [d (poly [] {} e)])
                                 1)) {}
                 })
         ))
@@ -1898,11 +1895,11 @@ mod tests {
         "a:()->();a=a.b c : d;",
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     typed
                         (method a b (c) {})
-                        (poly [] d)
+                        (poly [] {} d)
                 })
         ))
     }
@@ -1912,7 +1909,7 @@ mod tests {
         "a:()->();a=a=>b=>1;",
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     lambda ([a infere])
                         (lambda ([b infere])
@@ -1926,7 +1923,7 @@ mod tests {
         "a:()->();a=(a, b)=>1;",
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     lambda ([a infere] [b infere])
                         1
@@ -1939,11 +1936,11 @@ mod tests {
         "a:()->();a=(a: b, c: d)=>1;",
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     lambda (
-                        [a (poly [] b)]
-                        [c (poly [] d)])
+                        [a (poly [] {} b)]
+                        [c (poly [] {} d)])
                             1
                 })
         ))
@@ -1954,7 +1951,7 @@ mod tests {
         "a:()->();a=a b c => 1;",
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     call a (b (lambda ([c infere]) 1)) {}
                 })
@@ -1966,7 +1963,7 @@ mod tests {
         "a:()->();a=while(a { b }) { c };",
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     while
                         (call a ((lambda () { b })) {})
@@ -1980,7 +1977,7 @@ mod tests {
         "a:()->();a { if(b) { c }; d }",
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     (if b { c })
                     d
@@ -1993,7 +1990,7 @@ mod tests {
         "a:()->();a=if(b){c}else if (d){e} else {f}",
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     if b { c } (if d { e } { f })
                 })
@@ -2005,7 +2002,7 @@ mod tests {
         "a:()->();a=return a b",
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     return (call a (b) {})
                 })
@@ -2017,7 +2014,7 @@ mod tests {
         "a:()->();a=let var = { a }",
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     let var infere { a }
                 })
@@ -2029,7 +2026,7 @@ mod tests {
         "a:()->();a=a(b=c, d=e, a)",
         sexpr!((
             (fn {}
-                (type (poly [] (fn () (poly [] unit))))
+                (type (poly [] {} (fn () (poly [] {} unit))))
                 a () {
                     call a (a) {
                         ["b" c]
@@ -2211,6 +2208,122 @@ mod tests {
                         b () {})
                     c () {})
                 })
+        ))
+    }
+
+    ptest! {
+        parse_simple_methods,
+        r#"
+            methods for foo {
+                a() {}
+                b() {}
+                c() {}
+            }
+        "#,
+        sexpr!((
+            (methods (poly [] {} foo) {
+                (fn {} (type (fn () infere)) a () {})
+                (fn {} (type (fn () infere)) b () {})
+                (fn {} (type (fn () infere)) c () {})
+            })
+        ))
+    }
+
+    ptest! {
+        parse_named_methods,
+        r#"
+            methods fooExt for foo {
+                a() {}
+                b() {}
+                c() {}
+            }
+        "#,
+        sexpr!((
+            (methods fooExt (poly [] {} foo) {
+                (fn {} (type (fn () infere)) a () {})
+                (fn {} (type (fn () infere)) b () {})
+                (fn {} (type (fn () infere)) c () {})
+            })
+        ))
+    }
+
+    ptest! {
+        parse_class_definition,
+        r#"
+            class Foo(a, b, c) {}
+        "#,
+        sexpr!((
+            (class Foo a b c [] {})
+        ))
+    }
+
+    ptest! {
+        parse_class_definition_with_bounds,
+        r#"
+            class { Num(a, b), Show(b) } => Foo(a, b, c) {}
+        "#,
+        sexpr!((
+            (class Foo a b c [
+                (Num (poly [] {} a) (poly [] {} b))
+                (Show (poly [] {} b))]
+                {})
+        ))
+    }
+
+    ptest! {
+        parse_functions_in_class_definition,
+        r#"
+            class Foo(a, b, c) {
+                foo: () -> ()
+                bar: () -> ()
+                baz: () -> ()
+            }
+        "#,
+        sexpr!((
+            (class Foo a b c [] {
+                (fn foo (poly [] {} (fn () (poly [] {} unit))))
+                (fn bar (poly [] {} (fn () (poly [] {} unit))))
+                (fn baz (poly [] {} (fn () (poly [] {} unit))))
+            })
+        ))
+    }
+
+    ptest! {
+        parse_method_blocks_in_class_definition,
+        r#"
+            class Foo(a, b, c) {
+                methods for a {
+                    foo: () -> ()
+                }
+                methods for b {}
+            }
+        "#,
+        sexpr!((
+            (class Foo a b c [] {
+                (methods (poly [] {} a) {
+                    (fn foo (poly [] {} (fn () (poly [] {} unit))))
+                })
+                (methods (poly [] {} b) {})
+            })
+        ))
+    }
+
+    ptest! {
+        parse_bounds_for_functions,
+        r#"
+            foo: { Num(a, b), Show(b) } => () -> ()
+            foo = ()
+        "#,
+        sexpr!((
+            (fn  {}
+                (type
+                    (poly []
+                        {
+                            (Num (poly [] {} a) (poly [] {} b))
+                            (Show (poly [] {} b))
+                        }
+                        (fn () (poly [] {} unit))))
+                foo () ())
         ))
     }
 }

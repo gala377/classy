@@ -54,6 +54,8 @@ pub enum TokenType {
     Rec,
     #[token("namespace")]
     Namespace,
+    #[token("for")]
+    For,
 
     // Literals
     #[regex(r"[_a-zA-Z][_a-zA-Z0-9]*", |lex| lex.slice().to_owned())]
