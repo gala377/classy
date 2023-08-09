@@ -5,7 +5,7 @@ use crate::ast::{
     PatternKind, SourceFile, TopLevelItemKind, Typ, TypeDefinition, TypeVariable, TypedIdentifier,
 };
 
-use super::{Alias, ConstDefinition, MethodsBlock, Record, TopLevelItem, ADT};
+use super::{Alias, ConstDefinition, MethodsBlock, Record, TopLevelItem, TypeBound, ADT};
 
 pub trait Folder: Sized {
     fn fold_program(&mut self, program: SourceFile) -> SourceFile {
@@ -32,7 +32,10 @@ pub trait Folder: Sized {
         fold_const_definition(self, def)
     }
 
-    fn fold_methods_block(&mut self, meths: MethodsBlock) -> MethodsBlock {
+    fn fold_methods_block(
+        &mut self,
+        meths: MethodsBlock<FunctionDefinition>,
+    ) -> MethodsBlock<FunctionDefinition> {
         fold_methods_block(self, meths)
     }
 
@@ -294,8 +297,12 @@ pub trait Folder: Sized {
         Typ::ToInfere
     }
 
-    fn fold_poly_type(&mut self, vars: Vec<String>, typ: Typ) -> Typ {
-        fold_poly_type(self, vars, typ)
+    fn fold_poly_type(&mut self, vars: Vec<String>, bounds: Vec<TypeBound>, typ: Typ) -> Typ {
+        fold_poly_type(self, vars, bounds, typ)
+    }
+
+    fn fold_type_bound(&mut self, head: Name, bounds: Vec<Typ>) -> TypeBound {
+        fold_type_bound(self, head, bounds)
     }
 
     fn fold_application_type(&mut self, callee: Typ, args: Vec<Typ>) -> Typ {
@@ -355,6 +362,7 @@ pub fn fold_top_level_item_kind<F: Folder>(
         TopLevelItemKind::ConstDefinition(def) => {
             TopLevelItemKind::ConstDefinition(folder.fold_const_definition(def))
         }
+        t => todo!("{t:?}"),
     }
 }
 
@@ -742,7 +750,11 @@ pub fn fold_type(folder: &mut impl Folder, typ: Typ) -> Typ {
         Typ::Tuple(fields) => folder.fold_tuple_type(fields),
         Typ::Array(inner) => folder.fold_array_type(*inner),
         Typ::ToInfere => folder.fold_to_infere_type(),
-        Typ::Poly(vars, t) => folder.fold_poly_type(vars, *t),
+        Typ::Poly {
+            free_variables,
+            bounds,
+            typ,
+        } => folder.fold_poly_type(free_variables, bounds, *typ),
         Typ::Application { callee, args } => folder.fold_application_type(*callee, args),
     }
 }
@@ -758,8 +770,20 @@ pub fn fold_function_type(folder: &mut impl Folder, args: Vec<Typ>, ret: Typ) ->
     }
 }
 
-pub fn fold_poly_type(folder: &mut impl Folder, vars: Vec<String>, typ: Typ) -> Typ {
-    Typ::Poly(vars, Box::new(folder.fold_typ(typ)))
+pub fn fold_poly_type(
+    folder: &mut impl Folder,
+    vars: Vec<String>,
+    bounds: Vec<TypeBound>,
+    typ: Typ,
+) -> Typ {
+    Typ::Poly {
+        free_variables: vars,
+        bounds: bounds
+            .into_iter()
+            .map(|TypeBound { head, args }| folder.fold_type_bound(head, args))
+            .collect(),
+        typ: Box::new(folder.fold_typ(typ)),
+    }
 }
 
 pub fn fold_application_type(folder: &mut impl Folder, callee: Typ, args: Vec<Typ>) -> Typ {
@@ -780,7 +804,10 @@ pub fn fold_pattern(folder: &mut impl Folder, pat: Pattern) -> Pattern {
     }
 }
 
-pub fn fold_methods_block(folder: &mut impl Folder, meths: MethodsBlock) -> MethodsBlock {
+pub fn fold_methods_block(
+    folder: &mut impl Folder,
+    meths: MethodsBlock<FunctionDefinition>,
+) -> MethodsBlock<FunctionDefinition> {
     MethodsBlock {
         name: meths.name,
         typ: folder.fold_typ(meths.typ),
@@ -905,5 +932,12 @@ fn fold_discriminant_kind(folder: &mut impl Folder, kind: DiscriminantKind) -> D
                 .collect(),
         ),
         DiscriminantKind::Empty => DiscriminantKind::Empty,
+    }
+}
+
+fn fold_type_bound(folder: &mut impl Folder, head: Name, bounds: Vec<Typ>) -> TypeBound {
+    TypeBound {
+        head: folder.fold_name(head),
+        args: bounds.into_iter().map(|typ| folder.fold_typ(typ)).collect(),
     }
 }

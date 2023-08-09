@@ -29,7 +29,7 @@ pub trait Visitor<'ast>: Sized {
         walk_local_function_def(self, def)
     }
 
-    fn visit_methods_block(&mut self, meth: &'ast ast::MethodsBlock) {
+    fn visit_methods_block(&mut self, meth: &'ast ast::MethodsBlock<ast::FunctionDefinition>) {
         walk_methods_block(self, meth)
     }
 
@@ -231,6 +231,7 @@ pub fn walk_top_level_item_kind<'ast, V: Visitor<'ast>>(
         ast::TopLevelItemKind::TypeDefinition(t_def) => v.visit_type_def(t_def),
         ast::TopLevelItemKind::MethodsBlock(meth) => v.visit_methods_block(meth),
         ast::TopLevelItemKind::ConstDefinition(def) => v.visit_const_definition(def),
+        t => todo!("{t:?}"),
     }
 }
 
@@ -592,7 +593,10 @@ pub fn walk_pattern<'ast, V: Visitor<'ast>>(v: &mut V, pattern: &'ast ast::Patte
     v.visit_pattern_kind(&pattern.kind)
 }
 
-fn walk_methods_block<'ast, V: Visitor<'ast>>(v: &mut V, meth: &'ast ast::MethodsBlock) {
+fn walk_methods_block<'ast, V: Visitor<'ast>>(
+    v: &mut V,
+    meth: &'ast ast::MethodsBlock<ast::FunctionDefinition>,
+) {
     v.visit_typ(&meth.typ);
     for method in &meth.methods {
         v.visit_method(method);

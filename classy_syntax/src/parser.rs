@@ -84,7 +84,9 @@ impl<'source> Parser<'source> {
                     id: DUMMY_AST_ID,
                     kind: ast::TopLevelItemKind::FunctionDefinition(fun_def),
                 });
-            } else if let Ok(meth_block) = self.parse_methods_block() {
+            } else if let Ok(meth_block) =
+                self.parse_methods_block(|parser| parser.parse_function_definition(true))
+            {
                 items.push(ast::TopLevelItem {
                     id: DUMMY_AST_ID,
                     kind: ast::TopLevelItemKind::MethodsBlock(meth_block),
@@ -93,6 +95,11 @@ impl<'source> Parser<'source> {
                 items.push(ast::TopLevelItem {
                     id: DUMMY_AST_ID,
                     kind: ast::TopLevelItemKind::ConstDefinition(const_def),
+                })
+            } else if let Ok(class_def) = self.parse_class_definition() {
+                items.push(ast::TopLevelItem {
+                    id: DUMMY_AST_ID,
+                    kind: ast::TopLevelItemKind::ClassDefinition(class_def),
                 })
             } else if let Ok(_) = self.match_token(TokenType::Semicolon) {
                 // just do nothing, eat hanging semicolons
@@ -121,14 +128,18 @@ impl<'source> Parser<'source> {
         Ok(ast::ConstDefinition { name, typ, init })
     }
 
-    fn parse_methods_block(&mut self) -> ParseRes<ast::MethodsBlock> {
+    fn parse_methods_block<T: std::fmt::Debug + Clone>(
+        &mut self,
+        with: impl Fn(&mut Parser) -> ParseRes<T>,
+    ) -> ParseRes<ast::MethodsBlock<T>> {
         let beg = self.curr_pos();
         self.match_token(TokenType::Methods)?;
         let typ = self.parse_type().error(self, beg, "Expected a type")?;
         let _ = self.expect_token(TokenType::LBrace);
         let mut methods = Vec::new();
         while self.lexer.current().typ != TokenType::RBrace {
-            let method = self.parse_function_definition(true)?;
+            let method = with(self)?;
+            //let method = self.parse_function_definition(true)?;
             methods.push(method);
         }
         let _ = self.expect_token(TokenType::RBrace);
@@ -185,6 +196,52 @@ impl<'source> Parser<'source> {
                 "Expected an alias or a type definition",
             ))
         }
+    }
+
+    fn parse_class_definition(&mut self) -> ParseRes<ast::ClassDefinition> {
+        self.match_token(TokenType::Class)?;
+        let bounds = self.parse_type_bounds();
+        let name = self.parse_identifier()?;
+        let _ = self.expect_token(TokenType::LParen);
+        let args = self.parse_delimited(Self::parse_identifier, TokenType::Comma);
+        let _ = self.expect_token(TokenType::RParen);
+        let body = self.parse_class_body()?;
+        Ok(ast::ClassDefinition {
+            bounds,
+            name,
+            args,
+            body,
+        })
+    }
+
+    fn parse_class_body(&mut self) -> ParseRes<Vec<ast::ClassDefinitionItem>> {
+        let _ = self.expect_token(TokenType::RBrace);
+        let mut items = Vec::new();
+        while self.match_token(TokenType::RBrace).is_err() {
+            if let Ok(methods) = self.parse_methods_block(|p| p.parse_func_decl(true)) {
+                items.push(ast::ClassDefinitionItem::MethodBlock(methods));
+            } else if let Ok(method) = self.parse_func_decl(false) {
+                items.push(ast::ClassDefinitionItem::Function(method));
+            } else {
+                return Err(self.error(
+                    self.lexer.current().span.clone(),
+                    "Expected a function or a methods block",
+                ));
+            }
+            let _ = self.expect_token(TokenType::Semicolon);
+        }
+        Ok(items)
+    }
+
+    fn parse_func_decl(&mut self, eat_semicolon: bool) -> ParseRes<ast::FuncDecl> {
+        let beg = self.curr_pos();
+        let name = self.parse_identifier()?;
+        let _ = self.expect_token(TokenType::Colon);
+        let typ = self.parse_type()?;
+        if eat_semicolon {
+            let _ = self.expect_token(TokenType::Semicolon);
+        }
+        Ok(ast::FuncDecl { name, typ })
     }
 
     fn parse_variants_definition(&mut self) -> ParseRes<ast::DefinedType> {
@@ -381,20 +438,43 @@ impl<'source> Parser<'source> {
             }
             _ => Vec::new(),
         };
+        let bounds = self.parse_type_bounds();
         let typ = self.parse_atomic_type()?;
         if self.match_token(TokenType::LParen).is_err() {
-            return Ok(ast::Typ::Poly(generics, Box::new(typ)));
+            return Ok(ast::Typ::Poly {
+                free_variables: generics,
+                bounds,
+                typ: Box::new(typ),
+            });
         }
         // type aplication
         let args = self.parse_delimited(Self::parse_type, TokenType::Comma);
         let _ = self.expect_token(TokenType::RParen);
-        Ok(ast::Typ::Poly(
-            generics,
-            Box::new(ast::Typ::Application {
+        Ok(ast::Typ::Poly {
+            free_variables: generics,
+            bounds,
+            typ: Box::new(ast::Typ::Application {
                 callee: Box::new(typ),
                 args,
             }),
-        ))
+        })
+    }
+
+    fn parse_type_bounds(&mut self) -> Vec<ast::TypeBound> {
+        if self.match_token(TokenType::LBracket).is_err() {
+            return Vec::new();
+        }
+        fn parse_type_bound(parser: &mut Parser) -> ParseRes<ast::TypeBound> {
+            let name = parser.parse_name()?;
+            let _ = parser.expect_token(TokenType::LParen);
+            let args = parser.parse_delimited(Parser::parse_type, TokenType::Comma);
+            let _ = parser.expect_token(TokenType::RParen);
+            Ok(ast::TypeBound { head: name, args })
+        }
+        let res = self.parse_delimited(parse_type_bound, TokenType::LBracket);
+        let _ = self.expect_token(TokenType::RBracket);
+        let _ = self.expect_token(TokenType::FatArrow);
+        res
     }
 
     fn parse_atomic_type(&mut self) -> ParseRes<ast::Typ> {

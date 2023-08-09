@@ -52,8 +52,31 @@ pub struct TopLevelItem {
 pub enum TopLevelItemKind {
     TypeDefinition(TypeDefinition),
     FunctionDefinition(FunctionDefinition),
-    MethodsBlock(MethodsBlock),
+    MethodsBlock(MethodsBlock<FunctionDefinition>),
     ConstDefinition(ConstDefinition),
+    ClassDefinition(ClassDefinition),
+}
+
+/// class $bounds? => $name($args) { $body }
+#[derive(Clone, Debug)]
+pub struct ClassDefinition {
+    pub name: String,
+    pub bounds: Vec<TypeBound>,
+    /// Always generic types
+    pub args: Vec<String>,
+    pub body: Vec<ClassDefinitionItem>,
+}
+
+#[derive(Clone, Debug)]
+pub enum ClassDefinitionItem {
+    MethodBlock(MethodsBlock<FuncDecl>),
+    Function(FuncDecl),
+}
+
+#[derive(Clone, Debug)]
+pub struct FuncDecl {
+    pub name: String,
+    pub typ: Typ,
 }
 
 #[derive(Debug, Clone)]
@@ -150,21 +173,31 @@ pub struct FunctionDefinition {
 }
 
 #[derive(Debug, Clone)]
-pub struct MethodsBlock {
+pub struct MethodsBlock<T: std::fmt::Debug + Clone> {
     pub name: Option<String>,
     pub typ: Typ,
-    pub methods: Vec<FunctionDefinition>,
+    pub methods: Vec<T>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Typ {
     Unit,
     Name(Name),
-    Application { callee: Box<Typ>, args: Vec<Typ> },
+    Application {
+        callee: Box<Typ>,
+        args: Vec<Typ>,
+    },
     Array(Box<Typ>),
-    Function { args: Vec<Typ>, ret: Box<Typ> },
+    Function {
+        args: Vec<Typ>,
+        ret: Box<Typ>,
+    },
     Tuple(Vec<Typ>),
-    Poly(Vec<String>, Box<Typ>),
+    Poly {
+        free_variables: Vec<String>,
+        bounds: Vec<TypeBound>,
+        typ: Box<Typ>,
+    },
     ToInfere,
 }
 
@@ -309,6 +342,12 @@ pub enum PatternKind {
     /// used when one wants to explicitly specify the type
     /// to look for cases in
     TypeSpecifier(Name, Box<Pattern>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypeBound {
+    pub head: Name,
+    pub args: Vec<Typ>,
 }
 
 impl Expr {
@@ -550,6 +589,7 @@ impl classy_sexpr::ToSExpr for TopLevelItemKind {
             TopLevelItemKind::TypeDefinition(def) => sexpr!($def),
             TopLevelItemKind::FunctionDefinition(def) => sexpr!($def),
             TopLevelItemKind::MethodsBlock(_) => todo!(),
+            TopLevelItemKind::ClassDefinition(_) => todo!(),
             TopLevelItemKind::ConstDefinition(def) => sexpr!($def),
         }
     }
@@ -683,7 +723,11 @@ impl classy_sexpr::ToSExpr for Typ {
             Typ::Array(inner) => sexpr!((array $inner)),
             Typ::Function { args, ret } => sexpr!((fn $args $ret)),
             Typ::Tuple(inner) => sexpr!((tuple @ inner)),
-            Typ::Poly(args, t) => sexpr!((poly $args $t)),
+            Typ::Poly {
+                free_variables,
+                bounds,
+                typ,
+            } => sexpr!((poly $free_variables $bounds $typ)),
             Typ::ToInfere => sexpr!(infere),
         }
     }
@@ -692,6 +736,12 @@ impl classy_sexpr::ToSExpr for Typ {
 impl classy_sexpr::ToSExpr for Expr {
     fn to_sexpr(self) -> classy_sexpr::SExpr {
         sexpr!(${self.kind})
+    }
+}
+
+impl classy_sexpr::ToSExpr for TypeBound {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        sexpr!((${self.head} @{self.args}))
     }
 }
 
