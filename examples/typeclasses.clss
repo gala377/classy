@@ -37,3 +37,70 @@ main {
     print(ShowInt, 1)
     print(ShowOption(ShowInt), Option.None)
 }
+
+class Show(a) {
+    methods a {
+        show: () -> String
+    }
+}
+
+class Convert(a, b) {
+    cast: (a) -> b
+    case x = x.into()
+}
+
+methods Into [Convert(a, b)] => a {
+    into = cast(self)
+}
+
+print: [Show(a)] => (a) -> ()
+print x = Show.show(x)
+
+static methods From [Convert(a, b)] => b {
+    from x = cast(x)
+}
+
+methods [Convert(a, b)] => Convert(Option(a), Option(b)) {
+    methods Option(a) {
+        into = self.map x => x.into()
+    }
+
+    convert opt_1 = opt_1.into()
+}
+
+methods for typ {
+
+}
+
+methods asdsad for [adsad] => sadsadas {
+
+}
+
+methods optionShow for Option(a) if Show(a) {
+
+}
+
+class A 
+
+// before typechecking transform
+methods class Convert(a, b) for a {
+    into: (a) -> b
+}
+
+static methods From for b if 
+    Convert(a, b), Show(a), 
+{
+    from: (a) -> b 
+    from x = x.into()
+}
+
+
+
+// transform into
+class Convert(a, b) {
+    methods a {
+        into: (a) -> b
+    }
+}
+
+// Ideas - method classes, they are basically interfaces
