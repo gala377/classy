@@ -39,4 +39,22 @@ impl Folder for AssignAstIds {
         item.id = self.id_provider.as_ref().unwrap().next();
         item
     }
+
+    fn fold_method_definition(
+        &mut self,
+        def: ast::Method<ast::FunctionDefinition>,
+    ) -> ast::Method<ast::FunctionDefinition> {
+        let mut def = ast::fold::fold_method_definition(self, def);
+        def.id = self.id_provider.as_ref().unwrap().next();
+        def
+    }
+
+    fn fold_class_methods_block_method(
+        &mut self,
+        method: ast::Method<ast::FuncDecl>,
+    ) -> ast::Method<ast::FuncDecl> {
+        let mut method = ast::fold::fold_class_methods_block_method(self, method);
+        method.id = self.id_provider.as_ref().unwrap().next();
+        method
+    }
 }

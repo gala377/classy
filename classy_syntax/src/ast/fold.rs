@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
 use crate::ast::{
-    DefinedType, Discriminant, DiscriminantKind, Expr, ExprKind, FunctionDefinition, Name, Pattern,
-    PatternKind, SourceFile, TopLevelItemKind, Typ, TypeDefinition, TypeVariable, TypedIdentifier,
+    DefinedType, Discriminant, DiscriminantKind, Expr, ExprKind, FunctionDefinition, Method, Name,
+    Pattern, PatternKind, SourceFile, TopLevelItemKind, Typ, TypeDefinition, TypeVariable,
+    TypedIdentifier,
 };
 
 use super::{
@@ -27,7 +28,10 @@ pub trait Folder: Sized {
         fold_function_definition(self, def)
     }
 
-    fn fold_method_definition(&mut self, def: FunctionDefinition) -> FunctionDefinition {
+    fn fold_method_definition(
+        &mut self,
+        def: Method<FunctionDefinition>,
+    ) -> Method<FunctionDefinition> {
         fold_method_definition(self, def)
     }
 
@@ -387,7 +391,7 @@ pub trait Folder: Sized {
         fold_class_methods_block(self, block)
     }
 
-    fn fold_class_methods_block_method(&mut self, method: FuncDecl) -> FuncDecl {
+    fn fold_class_methods_block_method(&mut self, method: Method<FuncDecl>) -> Method<FuncDecl> {
         fold_class_methods_block_method(self, method)
     }
 }
@@ -444,14 +448,17 @@ pub fn fold_function_definition<F: Folder>(
 
 pub fn fold_method_definition<F: Folder>(
     folder: &mut F,
-    def: FunctionDefinition,
-) -> FunctionDefinition {
-    FunctionDefinition {
-        name: def.name,
-        parameters: folder.fold_function_params(def.parameters),
-        body: folder.fold_expr(def.body),
-        typ: folder.fold_typ(def.typ),
-        attributes: folder.fold_attributes(def.attributes),
+    def: Method<FunctionDefinition>,
+) -> Method<FunctionDefinition> {
+    Method {
+        id: def.id,
+        item: FunctionDefinition {
+            name: def.item.name,
+            parameters: folder.fold_function_params(def.item.parameters),
+            body: folder.fold_expr(def.item.body),
+            typ: folder.fold_typ(def.item.typ),
+            attributes: folder.fold_attributes(def.item.attributes),
+        },
     }
 }
 
@@ -983,7 +990,10 @@ pub fn fold_defined_type_alias(folder: &mut impl Folder, alias: Alias) -> Define
     })
 }
 
-fn fold_discriminant_kind(folder: &mut impl Folder, kind: DiscriminantKind) -> DiscriminantKind {
+pub fn fold_discriminant_kind(
+    folder: &mut impl Folder,
+    kind: DiscriminantKind,
+) -> DiscriminantKind {
     match kind {
         DiscriminantKind::Tuple(fields) => {
             DiscriminantKind::Tuple(fields.into_iter().map(|typ| folder.fold_typ(typ)).collect())
@@ -998,14 +1008,14 @@ fn fold_discriminant_kind(folder: &mut impl Folder, kind: DiscriminantKind) -> D
     }
 }
 
-fn fold_type_bound(folder: &mut impl Folder, head: Name, bounds: Vec<Typ>) -> TypeBound {
+pub fn fold_type_bound(folder: &mut impl Folder, head: Name, bounds: Vec<Typ>) -> TypeBound {
     TypeBound {
         head: folder.fold_name(head),
         args: bounds.into_iter().map(|typ| folder.fold_typ(typ)).collect(),
     }
 }
 
-fn fold_instance_definition(
+pub fn fold_instance_definition(
     folder: &mut impl Folder,
     name: Option<String>,
     free_variables: Vec<String>,
@@ -1031,7 +1041,7 @@ fn fold_instance_definition(
     }
 }
 
-fn fold_instance_definition_item(
+pub fn fold_instance_definition_item(
     folder: &mut impl Folder,
     item: InstanceDefinitionItem,
 ) -> InstanceDefinitionItem {
@@ -1045,7 +1055,7 @@ fn fold_instance_definition_item(
     }
 }
 
-fn fold_class_definition(
+pub fn fold_class_definition(
     folder: &mut impl Folder,
     name: String,
     args: Vec<String>,
@@ -1066,7 +1076,7 @@ fn fold_class_definition(
     }
 }
 
-fn fold_class_definition_item(
+pub fn fold_class_definition_item(
     folder: &mut impl Folder,
     item: ClassDefinitionItem,
 ) -> ClassDefinitionItem {
@@ -1080,7 +1090,7 @@ fn fold_class_definition_item(
     }
 }
 
-fn fold_class_function_decl(
+pub fn fold_class_function_decl(
     folder: &mut impl Folder,
     FuncDecl { name, typ }: FuncDecl,
 ) -> FuncDecl {
@@ -1090,7 +1100,7 @@ fn fold_class_function_decl(
     }
 }
 
-fn fold_class_methods_block(
+pub fn fold_class_methods_block(
     folder: &mut impl Folder,
     MethodsBlock { name, typ, methods }: MethodsBlock<FuncDecl>,
 ) -> MethodsBlock<FuncDecl> {
@@ -1104,12 +1114,18 @@ fn fold_class_methods_block(
     }
 }
 
-fn fold_class_methods_block_method(
+pub fn fold_class_methods_block_method(
     folder: &mut impl Folder,
-    FuncDecl { name, typ }: FuncDecl,
-) -> FuncDecl {
-    FuncDecl {
-        name: folder.fold_identifier(name),
-        typ: folder.fold_typ(typ),
+    Method {
+        id,
+        item: FuncDecl { name, typ },
+    }: Method<FuncDecl>,
+) -> Method<FuncDecl> {
+    Method {
+        id,
+        item: FuncDecl {
+            name: folder.fold_identifier(name),
+            typ: folder.fold_typ(typ),
+        },
     }
 }

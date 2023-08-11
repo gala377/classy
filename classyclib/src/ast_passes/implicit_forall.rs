@@ -110,7 +110,7 @@ impl ast::Folder for ImplicitForall {
         let methods = meths
             .methods
             .into_iter()
-            .map(|def| ast::fold::fold_function_definition(self, def))
+            .map(|def| ast::fold::fold_method_definition(self, def))
             .collect();
         self.ignore_names.pop_scope();
 

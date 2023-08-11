@@ -211,7 +211,7 @@ pub trait Visitor<'ast>: Sized {
     fn visit_float_const(&mut self, _node: f64) {}
     fn visit_unit(&mut self) {}
 
-    fn visit_method(&mut self, node: &'ast ast::FunctionDefinition) {
+    fn visit_method(&mut self, node: &'ast ast::Method<ast::FunctionDefinition>) {
         walk_method(self, node)
     }
 
@@ -263,7 +263,7 @@ pub trait Visitor<'ast>: Sized {
         walk_class_methods_block(self, block)
     }
 
-    fn visit_class_methods_block_method(&mut self, method: &'ast ast::FuncDecl) {
+    fn visit_class_methods_block_method(&mut self, method: &'ast ast::Method<ast::FuncDecl>) {
         walk_class_methods_block_method(self, method)
     }
 
@@ -489,9 +489,12 @@ pub fn walk_function_def<'ast, V: Visitor<'ast>>(v: &mut V, def: &'ast ast::Func
     v.visit_expr(&def.body);
 }
 
-pub fn walk_method<'ast, V: Visitor<'ast>>(v: &mut V, def: &'ast ast::FunctionDefinition) {
-    v.visit_typ(&def.typ);
-    v.visit_expr(&def.body);
+pub fn walk_method<'ast, V: Visitor<'ast>>(
+    v: &mut V,
+    def: &'ast ast::Method<ast::FunctionDefinition>,
+) {
+    v.visit_typ(&def.item.typ);
+    v.visit_expr(&def.item.body);
 }
 
 pub fn walk_anon_type<'ast, V: Visitor<'ast>>(v: &mut V, fields: &'ast [(String, ast::Expr)]) {
@@ -707,7 +710,7 @@ pub fn walk_top_level_item<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::T
     v.visit_top_level_item_kind(&node.kind)
 }
 
-fn walk_instance_definition<'ast, V: Visitor<'ast>>(
+pub fn walk_instance_definition<'ast, V: Visitor<'ast>>(
     visitor: &mut V,
     name: Option<&'ast String>,
     _free_variables: &'ast [String],
@@ -728,7 +731,7 @@ fn walk_instance_definition<'ast, V: Visitor<'ast>>(
     }
 }
 
-fn walk_instance_definition_item<'ast, V: Visitor<'ast>>(
+pub fn walk_instance_definition_item<'ast, V: Visitor<'ast>>(
     visitor: &mut V,
     item: &'ast ast::InstanceDefinitionItem,
 ) {
@@ -738,7 +741,7 @@ fn walk_instance_definition_item<'ast, V: Visitor<'ast>>(
     }
 }
 
-fn walk_class_definition<'ast, V: Visitor<'ast>>(
+pub fn walk_class_definition<'ast, V: Visitor<'ast>>(
     visitor: &mut V,
     name: &'ast str,
     _args: &'ast [String],
@@ -754,7 +757,7 @@ fn walk_class_definition<'ast, V: Visitor<'ast>>(
     }
 }
 
-fn walk_class_definition_item<'ast, V: Visitor<'ast>>(
+pub fn walk_class_definition_item<'ast, V: Visitor<'ast>>(
     visitor: &mut V,
     item: &'ast ast::ClassDefinitionItem,
 ) {
@@ -766,7 +769,7 @@ fn walk_class_definition_item<'ast, V: Visitor<'ast>>(
     }
 }
 
-fn walk_class_function_decl<'ast, V: Visitor<'ast>>(
+pub fn walk_class_function_decl<'ast, V: Visitor<'ast>>(
     visitor: &mut V,
     ast::FuncDecl { name, typ }: &'ast ast::FuncDecl,
 ) {
@@ -774,7 +777,7 @@ fn walk_class_function_decl<'ast, V: Visitor<'ast>>(
     visitor.visit_typ(typ);
 }
 
-fn walk_class_methods_block<'ast, V: Visitor<'ast>>(
+pub fn walk_class_methods_block<'ast, V: Visitor<'ast>>(
     visitor: &mut V,
     ast::MethodsBlock { name, typ, methods }: &'ast ast::MethodsBlock<ast::FuncDecl>,
 ) {
@@ -787,15 +790,18 @@ fn walk_class_methods_block<'ast, V: Visitor<'ast>>(
     }
 }
 
-fn walk_class_methods_block_method<'ast, V: Visitor<'ast>>(
+pub fn walk_class_methods_block_method<'ast, V: Visitor<'ast>>(
     visitor: &mut V,
-    ast::FuncDecl { name, typ }: &'ast ast::FuncDecl,
+    ast::Method {
+        item: ast::FuncDecl { name, typ },
+        ..
+    }: &'ast ast::Method<ast::FuncDecl>,
 ) {
     visitor.visit_identifier(name);
     visitor.visit_typ(typ);
 }
 
-fn walk_type_bound<'ast, V: Visitor<'ast>>(
+pub fn walk_type_bound<'ast, V: Visitor<'ast>>(
     visitor: &mut V,
     head: &'ast ast::Name,
     args: &'ast [ast::Typ],

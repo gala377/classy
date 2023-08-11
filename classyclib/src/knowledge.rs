@@ -5,6 +5,7 @@ use thiserror::Error;
 
 use classy_syntax::ast;
 
+use crate::ast_passes::expand_namespace;
 use crate::id_provider::UniqueId;
 use crate::typecheck::instance::{union, UnificationError};
 use crate::typecheck::types::Type;
@@ -23,6 +24,8 @@ pub const CURRENT_PACKAGE_ID: PackageId = PackageId(0);
 pub struct PackageInfo {
     pub name: String,
     pub globals: HashMap<String, DefinitionId>,
+    pub definition_types: HashMap<DefinitionId, TypeId>,
+    pub type_aliases: HashMap<TypeId, Type>,
 }
 
 impl PackageInfo {
@@ -180,6 +183,45 @@ impl Database {
 
     pub fn get_global(&self, name: &str) -> Option<DefinitionId> {
         self.globals.get(name).cloned()
+    }
+
+    pub fn get_type(&self, package: PackageId, id: DefinitionId) -> Option<&Type> {
+        if package == CURRENT_PACKAGE_ID {
+            let tid = self.definition_types.get(&id)?;
+            self.type_aliases.get(tid)
+        } else {
+            let package_info = self.get_package(package);
+            let tid = package_info.definition_types.get(&id)?;
+            package_info.type_aliases.get(tid)
+        }
+    }
+
+    pub fn get_type_by_unresolved_name(
+        &self,
+        current_namespace: &[String],
+        path: &[String],
+        name: &str,
+    ) -> Option<&Type> {
+        if let Some(potential_package) = path.first() {
+            if let Some(package_id) = self.package_id(potential_package) {
+                let package_info = self.get_package(package_id.clone());
+                let mut expanded_name = path[1..].to_vec();
+                expanded_name.push(name.to_string());
+                let expanded_name = expanded_name.join("::");
+                if let Some(definition_id) = package_info.globals.get(&expanded_name) {
+                    return self.get_type(package_id, definition_id.clone());
+                }
+                return None;
+            }
+        }
+        let mut expanded_name = current_namespace.to_vec();
+        expanded_name.extend(path.iter().cloned());
+        expanded_name.push(name.to_string());
+        let expand_name = expanded_name.join("::");
+        let Some(definition_id) = self.globals.get(&expand_name) else {
+            return None;
+        };
+        self.get_type(CURRENT_PACKAGE_ID, definition_id.clone())
     }
 
     // Type aliasing

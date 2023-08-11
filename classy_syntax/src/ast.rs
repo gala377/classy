@@ -122,6 +122,17 @@ impl Namespace {
             _ => panic!("cannot join namespace with non-unresolved name"),
         }
     }
+
+    pub fn as_segments(&self) -> Vec<String> {
+        match &self.name {
+            Name::Unresolved { path, identifier } => {
+                let mut path = path.clone();
+                path.push(identifier.clone());
+                path
+            }
+            _ => panic!("namespace name should stay unresolved"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -193,7 +204,13 @@ pub struct FunctionDefinition {
 pub struct MethodsBlock<T: std::fmt::Debug + Clone> {
     pub name: Option<String>,
     pub typ: Typ,
-    pub methods: Vec<T>,
+    pub methods: Vec<Method<T>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Method<T: Clone + std::fmt::Debug> {
+    pub id: usize,
+    pub item: T,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -901,6 +918,12 @@ impl<T: std::fmt::Debug + Clone + ToSExpr> ToSExpr for MethodsBlock<T> {
         let MethodsBlock { name, typ, methods } = self;
         let name = name.map(|n| sexpr!(#n));
         sexpr!((methods @name $typ $methods))
+    }
+}
+
+impl<T: std::fmt::Debug + Clone + ToSExpr> ToSExpr for Method<T> {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        sexpr!(${self.item})
     }
 }
 

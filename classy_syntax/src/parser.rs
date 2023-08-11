@@ -196,7 +196,10 @@ impl<'source> Parser<'source> {
         let mut methods = Vec::new();
         while self.match_token(TokenType::RBrace).is_err() {
             let method = with(self)?;
-            methods.push(method);
+            methods.push(ast::Method {
+                id: DUMMY_AST_ID,
+                item: method,
+            });
         }
         let _ = self.expect_token(TokenType::Semicolon);
         Ok(ast::MethodsBlock {
@@ -2261,6 +2264,20 @@ mod tests {
                             method foo a () {})
                         b () {})
                     c () {})
+                })
+        ))
+    }
+
+    ptest! {
+        trailing_lambda_on_method,
+        r#"foo {
+            foo.a{}
+        }"#,
+        sexpr!((
+            (fn {}
+                (type (fn () infere))
+                foo () {
+                    (method foo a ((lambda () {})) {})
                 })
         ))
     }

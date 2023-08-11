@@ -77,12 +77,39 @@ impl<'db> Folder for NameResolver<'db> {
         meths
     }
 
+    fn fold_class_definition(
+            &mut self,
+            ast::ClassDefinition {
+                name,
+                bounds,
+                args,
+                body,
+            }: ast::ClassDefinition,
+        ) -> ast::ClassDefinition {
+        self.type_scope.new_scope();
+        for var in args.iter() {
+            self.type_scope.add(var.clone(), ());
+        }
+        let bounds = bounds.into_iter().map(|ast::TypeBound { head, args }| {
+            self.fold_type_bound(head, args)
+        }).collect();
+        // no functions in class definitions have bodies
+        // so we don't need to care about an implicit scope from this
+        // and can just fold away, all of the name resultion should work as expected.
+        let res = ast::fold::fold_class_definition(self, name, args, bounds, body);
+        self.type_scope.pop_scope();
+        res
+    }
+
 
     fn fold_poly_type(&mut self, vars: Vec<String>, bounds: Vec<ast::TypeBound>, typ: ast::Typ) -> ast::Typ {
         self.type_scope.new_scope();
         for var in vars.iter() {
             self.type_scope.add(var.clone(), ());
         }
+        let bounds = bounds.into_iter().map(|ast::TypeBound { head, args }| {
+            self.fold_type_bound(head, args)
+        }).collect();
         let typ = ast::fold::fold_poly_type(self, vars, bounds, typ);
         self.type_scope.pop_scope();
         typ
@@ -287,6 +314,8 @@ mod tests {
                     .into_iter()
                     .map(|(name, id)| (name, DefinitionId(id)))
                     .collect(),
+                definition_types: HashMap::new(),
+                type_aliases: HashMap::new(),
             };
             db.add_package(package);
         }

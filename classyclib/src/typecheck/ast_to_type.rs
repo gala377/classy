@@ -145,7 +145,7 @@ pub fn resolve_top_level_type(
 pub fn resolve_methods_block(
     for_t: &ast::Typ,
     ctx: &mut TypCtx,
-    methods: &[ast::FunctionDefinition],
+    methods: &[ast::Method<ast::FunctionDefinition>],
 ) {
     let mut resolver = TypeResolver::new(ctx);
     let mut scope = PrefexScope::new();
@@ -160,7 +160,11 @@ pub fn resolve_methods_block(
     scope.new_scope();
 
     let mut resolved_meths = HashMap::new();
-    for ast::FunctionDefinition { name, typ, .. } in methods {
+    for ast::Method {
+        item: ast::FunctionDefinition { name, typ, .. },
+        ..
+    } in methods
+    {
         let Type::Alias(typ) = resolver.resolve_type(&mut scope, typ) else {
             panic!("Alias resolver should only return aliases")
         };

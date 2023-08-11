@@ -5,6 +5,7 @@ use crate::{knowledge::Database, session::Session, typecheck::type_context::TypC
 pub mod assign_ast_ids;
 pub mod expand_namespace;
 pub mod func_to_struct_literal;
+pub mod func_to_struct_literal_db;
 pub mod gather_runtime_functions;
 pub mod implicit_forall;
 pub mod move_const_init;
@@ -32,6 +33,17 @@ pub fn run_after_parsing_passes(ast: ast::SourceFile, session: &Session) -> ast:
     // TODO: Expand imports
     let ast = assign_ast_ids::AssignAstIds::new().run(ast, session);
     let ast = expand_namespace::ExpandNamespace::new().run(ast, session);
+    ast
+}
+
+pub fn run_after_db_creation_passes(
+    ast: ast::SourceFile,
+    db: &Database,
+    session: &Session,
+) -> ast::SourceFile {
+    let ast =
+        func_to_struct_literal_db::PromoteCallToStructLiteral::new(db, session).run(ast, session);
+    let ast = resolve_names::NameResolver::new(db).run(ast, session);
     ast
 }
 

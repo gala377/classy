@@ -18,6 +18,14 @@ use crate::{
 pub enum CompilationError {
     #[error("Syntax error: {0:?}")]
     SyntaxError(HashMap<PathBuf, Vec<SyntaxError>>),
+    #[error("Semantic error: {0:?}")]
+    SemanticError(String),
+}
+
+impl CompilationError {
+    pub fn semantic_error(msg: impl Into<String>) -> Self {
+        Self::SemanticError(msg.into())
+    }
 }
 
 pub struct Compiler {
