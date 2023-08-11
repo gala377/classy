@@ -1044,13 +1044,17 @@ impl<'sess> Inference<'sess> {
                     .collect::<Vec<_>>();
                 Type::App { typ: callee, args }
             }
-            ast::Typ::Poly(generics, t) => {
-                if generics.is_empty() {
-                    return self.ast_type_to_type(scope, prefex_scope, t);
+            ast::Typ::Poly {
+                free_variables,
+                bounds,
+                typ,
+            } => {
+                if free_variables.is_empty() {
+                    return self.ast_type_to_type(scope, prefex_scope, &typ);
                 }
                 prefex_scope.with_scope(|prefex_scope| {
-                    prefex_scope.add_type_vars(generics);
-                    self.ast_type_to_type(scope, prefex_scope, t)
+                    prefex_scope.add_type_vars(&free_variables);
+                    self.ast_type_to_type(scope, prefex_scope, &typ)
                 })
             }
             ast::Typ::Array(t) => {

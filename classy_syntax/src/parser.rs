@@ -101,6 +101,11 @@ impl<'source> Parser<'source> {
                     id: DUMMY_AST_ID,
                     kind: ast::TopLevelItemKind::ClassDefinition(class_def),
                 })
+            } else if let Ok(instance_def) = self.parse_instance_definition() {
+                items.push(ast::TopLevelItem {
+                    id: DUMMY_AST_ID,
+                    kind: ast::TopLevelItemKind::InstanceDefinition(instance_def),
+                });
             } else if let Ok(_) = self.match_token(TokenType::Semicolon) {
                 // just do nothing, eat hanging semicolons
             } else {
@@ -115,6 +120,10 @@ impl<'source> Parser<'source> {
                 return Err(self.errors.clone());
             }
         }
+    }
+
+    fn parse_instance_definition(&mut self) -> ParseRes<ast::InstanceDefinition> {
+        todo!()
     }
 
     fn parse_const_definition(&mut self) -> ParseRes<ast::ConstDefinition> {

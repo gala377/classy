@@ -5,7 +5,10 @@ use crate::ast::{
     PatternKind, SourceFile, TopLevelItemKind, Typ, TypeDefinition, TypeVariable, TypedIdentifier,
 };
 
-use super::{Alias, ConstDefinition, MethodsBlock, Record, TopLevelItem, TypeBound, ADT};
+use super::{
+    Alias, ClassDefinition, ClassDefinitionItem, ConstDefinition, FuncDecl, InstanceDefinition,
+    InstanceDefinitionItem, MethodsBlock, Record, TopLevelItem, TypeBound, ADT,
+};
 
 pub trait Folder: Sized {
     fn fold_program(&mut self, program: SourceFile) -> SourceFile {
@@ -85,6 +88,10 @@ pub trait Folder: Sized {
 
     fn fold_sequence(&mut self, seq: Vec<Expr>) -> Vec<Expr> {
         fold_sequence(self, seq)
+    }
+
+    fn fold_identifier(&mut self, id: String) -> String {
+        id
     }
 
     fn fold_unit(&mut self) {}
@@ -332,6 +339,57 @@ pub trait Folder: Sized {
     fn fold_discriminant_kind(&mut self, kind: DiscriminantKind) -> DiscriminantKind {
         fold_discriminant_kind(self, kind)
     }
+
+    fn fold_instance_definition(
+        &mut self,
+        InstanceDefinition {
+            name,
+            free_variables,
+            bounds,
+            instanced_class,
+            body,
+        }: InstanceDefinition,
+    ) -> InstanceDefinition {
+        fold_instance_definition(self, name, free_variables, bounds, instanced_class, body)
+    }
+
+    fn fold_instance_definition_item(
+        &mut self,
+        item: InstanceDefinitionItem,
+    ) -> InstanceDefinitionItem {
+        fold_instance_definition_item(self, item)
+    }
+
+    fn fold_class_definition(
+        &mut self,
+        ClassDefinition {
+            name,
+            bounds,
+            args,
+            body,
+        }: ClassDefinition,
+    ) -> ClassDefinition {
+        fold_class_definition(self, name, args, bounds, body)
+    }
+
+    fn fold_class_definition_item(&mut self, item: ClassDefinitionItem) -> ClassDefinitionItem {
+        fold_class_definition_item(self, item)
+    }
+
+    fn fold_class_function_decl(&mut self, decl: FuncDecl) -> FuncDecl {
+        fold_class_function_decl(self, decl)
+    }
+
+    fn fold_class_methods_block(
+        &mut self,
+        block: MethodsBlock<FuncDecl>,
+    ) -> MethodsBlock<FuncDecl> {
+        fold_class_methods_block(self, block)
+    }
+
+    fn fold_class_methods_block_method(&mut self, method: FuncDecl) -> FuncDecl {
+        fold_class_methods_block_method(self, method)
+    }
 }
 
 pub fn fold_program<F: Folder>(folder: &mut F, program: SourceFile) -> SourceFile {
@@ -362,7 +420,12 @@ pub fn fold_top_level_item_kind<F: Folder>(
         TopLevelItemKind::ConstDefinition(def) => {
             TopLevelItemKind::ConstDefinition(folder.fold_const_definition(def))
         }
-        t => todo!("{t:?}"),
+        TopLevelItemKind::InstanceDefinition(def) => {
+            TopLevelItemKind::InstanceDefinition(folder.fold_instance_definition(def))
+        }
+        TopLevelItemKind::ClassDefinition(def) => {
+            TopLevelItemKind::ClassDefinition(folder.fold_class_definition(def))
+        }
     }
 }
 
@@ -939,5 +1002,114 @@ fn fold_type_bound(folder: &mut impl Folder, head: Name, bounds: Vec<Typ>) -> Ty
     TypeBound {
         head: folder.fold_name(head),
         args: bounds.into_iter().map(|typ| folder.fold_typ(typ)).collect(),
+    }
+}
+
+fn fold_instance_definition(
+    folder: &mut impl Folder,
+    name: Option<String>,
+    free_variables: Vec<String>,
+    bounds: Vec<TypeBound>,
+    TypeBound {
+        head: def_name,
+        args: def_args,
+    }: TypeBound,
+    body: Vec<InstanceDefinitionItem>,
+) -> InstanceDefinition {
+    InstanceDefinition {
+        name: name.map(|n| folder.fold_identifier(n)),
+        free_variables,
+        bounds: bounds
+            .into_iter()
+            .map(|TypeBound { head, args }| folder.fold_type_bound(head, args))
+            .collect(),
+        instanced_class: folder.fold_type_bound(def_name, def_args),
+        body: body
+            .into_iter()
+            .map(|item| folder.fold_instance_definition_item(item))
+            .collect(),
+    }
+}
+
+fn fold_instance_definition_item(
+    folder: &mut impl Folder,
+    item: InstanceDefinitionItem,
+) -> InstanceDefinitionItem {
+    match item {
+        InstanceDefinitionItem::FunctionDefinition(def) => {
+            InstanceDefinitionItem::FunctionDefinition(folder.fold_function_definition(def))
+        }
+        InstanceDefinitionItem::MethodsBlock(methods) => {
+            InstanceDefinitionItem::MethodsBlock(folder.fold_methods_block(methods))
+        }
+    }
+}
+
+fn fold_class_definition(
+    folder: &mut impl Folder,
+    name: String,
+    args: Vec<String>,
+    bounds: Vec<TypeBound>,
+    body: Vec<ClassDefinitionItem>,
+) -> ClassDefinition {
+    ClassDefinition {
+        name: folder.fold_identifier(name),
+        args,
+        bounds: bounds
+            .into_iter()
+            .map(|TypeBound { head, args }| folder.fold_type_bound(head, args))
+            .collect(),
+        body: body
+            .into_iter()
+            .map(|item| folder.fold_class_definition_item(item))
+            .collect(),
+    }
+}
+
+fn fold_class_definition_item(
+    folder: &mut impl Folder,
+    item: ClassDefinitionItem,
+) -> ClassDefinitionItem {
+    match item {
+        ClassDefinitionItem::Function(def) => {
+            ClassDefinitionItem::Function(folder.fold_class_function_decl(def))
+        }
+        ClassDefinitionItem::MethodBlock(methods) => {
+            ClassDefinitionItem::MethodBlock(folder.fold_class_methods_block(methods))
+        }
+    }
+}
+
+fn fold_class_function_decl(
+    folder: &mut impl Folder,
+    FuncDecl { name, typ }: FuncDecl,
+) -> FuncDecl {
+    FuncDecl {
+        name: folder.fold_identifier(name),
+        typ: folder.fold_typ(typ),
+    }
+}
+
+fn fold_class_methods_block(
+    folder: &mut impl Folder,
+    MethodsBlock { name, typ, methods }: MethodsBlock<FuncDecl>,
+) -> MethodsBlock<FuncDecl> {
+    MethodsBlock {
+        name: name.map(|n| folder.fold_identifier(n)),
+        typ: folder.fold_typ(typ),
+        methods: methods
+            .into_iter()
+            .map(|method| folder.fold_class_methods_block_method(method))
+            .collect(),
+    }
+}
+
+fn fold_class_methods_block_method(
+    folder: &mut impl Folder,
+    FuncDecl { name, typ }: FuncDecl,
+) -> FuncDecl {
+    FuncDecl {
+        name: folder.fold_identifier(name),
+        typ: folder.fold_typ(typ),
     }
 }

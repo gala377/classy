@@ -43,7 +43,11 @@ impl ast::Folder for ImplicitForall {
         self.prefex.clear();
         let new_t = self.fold_typ(typ);
         let new_t = if !self.prefex.is_empty() {
-            ast::Typ::Poly(self.prefex.to_vec(), Box::new(new_t))
+            ast::Typ::Poly {
+                free_variables: self.prefex.to_vec(),
+                bounds: Vec::new(),
+                typ: Box::new(new_t),
+            }
         } else {
             new_t
         };
@@ -75,20 +79,28 @@ impl ast::Folder for ImplicitForall {
         })
     }
 
-    fn fold_poly_type(&mut self, vars: Vec<String>, typ: ast::Typ) -> ast::Typ {
+    fn fold_poly_type(
+        &mut self,
+        vars: Vec<String>,
+        bounds: Vec<ast::TypeBound>,
+        typ: ast::Typ,
+    ) -> ast::Typ {
         self.ignore_names.new_scope();
         for name in &vars {
             self.ignore_names.add(name.clone(), ());
         }
-        let res = ast::fold::fold_poly_type(self, vars, typ);
+        let res = ast::fold::fold_poly_type(self, vars, bounds, typ);
         self.ignore_names.pop_scope();
         res
     }
 
-    fn fold_methods_block(&mut self, meths: ast::MethodsBlock) -> ast::MethodsBlock {
+    fn fold_methods_block(
+        &mut self,
+        meths: ast::MethodsBlock<ast::FunctionDefinition>,
+    ) -> ast::MethodsBlock<ast::FunctionDefinition> {
         let typ = self.fold_methods_type(meths.typ);
         let generics = match &typ {
-            ast::Typ::Poly(generics, _) => generics.clone(),
+            ast::Typ::Poly { free_variables, .. } => free_variables.clone(),
             _ => vec![],
         };
         self.ignore_names.new_scope();
@@ -115,7 +127,11 @@ impl ImplicitForall {
         self.prefex.clear();
         let new_t = self.fold_typ(typ);
         if !self.prefex.is_empty() {
-            ast::Typ::Poly(self.prefex.to_vec(), Box::new(new_t))
+            ast::Typ::Poly {
+                free_variables: self.prefex.to_vec(),
+                bounds: Vec::new(),
+                typ: Box::new(new_t),
+            }
         } else {
             new_t
         }

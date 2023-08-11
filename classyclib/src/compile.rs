@@ -106,6 +106,7 @@ impl Compiler {
                         // want to assign names to method blocks and import them into the scope.
                         continue;
                     }
+                    t => unimplemented!("{t:?}"),
                 }
             }
         }

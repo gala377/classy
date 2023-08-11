@@ -104,3 +104,7 @@ class Convert(a, b) {
 }
 
 // Ideas - method classes, they are basically interfaces
+
+instance for Num(Option(Int)) {
+    methods {}
+}

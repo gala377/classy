@@ -214,6 +214,62 @@ pub trait Visitor<'ast>: Sized {
     fn visit_method(&mut self, node: &'ast ast::FunctionDefinition) {
         walk_method(self, node)
     }
+
+    fn visit_instance_definition(
+        &mut self,
+        ast::InstanceDefinition {
+            name,
+            free_variables,
+            bounds,
+            instanced_class,
+            body,
+        }: &'ast ast::InstanceDefinition,
+    ) {
+        walk_instance_definition(
+            self,
+            name.as_ref(),
+            free_variables,
+            bounds,
+            instanced_class,
+            body,
+        )
+    }
+
+    fn visit_instance_definition_item(&mut self, item: &'ast ast::InstanceDefinitionItem) {
+        walk_instance_definition_item(self, item)
+    }
+
+    fn visit_class_definition(
+        &mut self,
+        ast::ClassDefinition {
+            name,
+            bounds,
+            args,
+            body,
+        }: &'ast ast::ClassDefinition,
+    ) {
+        walk_class_definition(self, name, args, bounds, body)
+    }
+
+    fn visit_class_definition_item(&mut self, item: &'ast ast::ClassDefinitionItem) {
+        walk_class_definition_item(self, item)
+    }
+
+    fn visit_class_function_decl(&mut self, decl: &'ast ast::FuncDecl) {
+        walk_class_function_decl(self, decl)
+    }
+
+    fn visit_class_methods_block(&mut self, block: &'ast ast::MethodsBlock<ast::FuncDecl>) {
+        walk_class_methods_block(self, block)
+    }
+
+    fn visit_class_methods_block_method(&mut self, method: &'ast ast::FuncDecl) {
+        walk_class_methods_block_method(self, method)
+    }
+
+    fn visit_type_bound(&mut self, head: &'ast ast::Name, args: &'ast [ast::Typ]) {
+        walk_type_bound(self, head, args)
+    }
 }
 
 pub fn walk_program<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::SourceFile) {
@@ -649,4 +705,103 @@ pub fn walk_let_rec<'ast, V: Visitor<'ast>>(
 
 pub fn walk_top_level_item<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::TopLevelItem) {
     v.visit_top_level_item_kind(&node.kind)
+}
+
+fn walk_instance_definition<'ast, V: Visitor<'ast>>(
+    visitor: &mut V,
+    name: Option<&'ast String>,
+    _free_variables: &'ast [String],
+    bounds: &'ast [ast::TypeBound],
+    ast::TypeBound {
+        head: def_name,
+        args: def_args,
+    }: &'ast ast::TypeBound,
+    body: &'ast [ast::InstanceDefinitionItem],
+) {
+    name.map(|n| visitor.visit_identifier(n));
+    for ast::TypeBound { head, args } in bounds {
+        visitor.visit_type_bound(head, args);
+    }
+    visitor.visit_type_bound(def_name, def_args);
+    for item in body {
+        visitor.visit_instance_definition_item(item);
+    }
+}
+
+fn walk_instance_definition_item<'ast, V: Visitor<'ast>>(
+    visitor: &mut V,
+    item: &'ast ast::InstanceDefinitionItem,
+) {
+    match item {
+        ast::InstanceDefinitionItem::FunctionDefinition(def) => visitor.visit_fn_def(def),
+        ast::InstanceDefinitionItem::MethodsBlock(methods) => visitor.visit_methods_block(methods),
+    }
+}
+
+fn walk_class_definition<'ast, V: Visitor<'ast>>(
+    visitor: &mut V,
+    name: &'ast str,
+    _args: &'ast [String],
+    bounds: &'ast [ast::TypeBound],
+    body: &'ast [ast::ClassDefinitionItem],
+) {
+    visitor.visit_identifier(name);
+    for ast::TypeBound { head, args } in bounds {
+        visitor.visit_type_bound(head, args);
+    }
+    for item in body {
+        visitor.visit_class_definition_item(item);
+    }
+}
+
+fn walk_class_definition_item<'ast, V: Visitor<'ast>>(
+    visitor: &mut V,
+    item: &'ast ast::ClassDefinitionItem,
+) {
+    match item {
+        ast::ClassDefinitionItem::Function(def) => visitor.visit_class_function_decl(def),
+        ast::ClassDefinitionItem::MethodBlock(methods) => {
+            visitor.visit_class_methods_block(methods)
+        }
+    }
+}
+
+fn walk_class_function_decl<'ast, V: Visitor<'ast>>(
+    visitor: &mut V,
+    ast::FuncDecl { name, typ }: &'ast ast::FuncDecl,
+) {
+    visitor.visit_identifier(name);
+    visitor.visit_typ(typ);
+}
+
+fn walk_class_methods_block<'ast, V: Visitor<'ast>>(
+    visitor: &mut V,
+    ast::MethodsBlock { name, typ, methods }: &'ast ast::MethodsBlock<ast::FuncDecl>,
+) {
+    for name in name {
+        visitor.visit_identifier(name);
+    }
+    visitor.visit_typ(typ);
+    for meth in methods {
+        visitor.visit_class_methods_block_method(meth);
+    }
+}
+
+fn walk_class_methods_block_method<'ast, V: Visitor<'ast>>(
+    visitor: &mut V,
+    ast::FuncDecl { name, typ }: &'ast ast::FuncDecl,
+) {
+    visitor.visit_identifier(name);
+    visitor.visit_typ(typ);
+}
+
+fn walk_type_bound<'ast, V: Visitor<'ast>>(
+    visitor: &mut V,
+    head: &'ast ast::Name,
+    args: &'ast [ast::Typ],
+) {
+    visitor.visit_name(head);
+    for arg in args {
+        visitor.visit_typ(arg);
+    }
 }

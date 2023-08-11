@@ -206,7 +206,10 @@ impl TypCtx {
         id
     }
 
-    pub fn add_methods_block_node(&mut self, node: &ast::MethodsBlock) -> DefId {
+    pub fn add_methods_block_node(
+        &mut self,
+        node: &ast::MethodsBlock<ast::FunctionDefinition>,
+    ) -> DefId {
         let id = self.next_id();
         self.nodes
             .insert(id, ast::TopLevelItemKind::MethodsBlock(node.clone()));

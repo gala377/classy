@@ -153,7 +153,7 @@ pub fn resolve_methods_block(
         panic!("Alias resolver should only return aliases")
     };
     let generics = match for_t {
-        ast::Typ::Poly(generics, _) => generics.clone(),
+        ast::Typ::Poly { free_variables, .. } => free_variables.clone(),
         _ => vec![],
     };
     scope.add_type_vars(&generics);
@@ -265,16 +265,20 @@ impl<'ctx> TypeResolver<'ctx> {
                 };
                 self.add_definition(t)
             }
-            ast::Typ::Poly(generics, t) => {
-                if generics.is_empty() {
-                    return self.resolve_type(prefex, t);
+            ast::Typ::Poly {
+                free_variables,
+                bounds,
+                typ,
+            } => {
+                if free_variables.is_empty() {
+                    return self.resolve_type(prefex, typ);
                 }
                 let t = prefex.with_scope(|scope| {
-                    scope.add_type_vars(generics);
-                    self.resolve_type(scope, t)
+                    scope.add_type_vars(&free_variables);
+                    self.resolve_type(scope, &typ)
                 });
                 self.add_definition(Type::Scheme {
-                    prefex: generics.clone(),
+                    prefex: free_variables.clone(),
                     typ: Box::new(t),
                 })
             }

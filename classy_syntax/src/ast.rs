@@ -55,6 +55,23 @@ pub enum TopLevelItemKind {
     MethodsBlock(MethodsBlock<FunctionDefinition>),
     ConstDefinition(ConstDefinition),
     ClassDefinition(ClassDefinition),
+    InstanceDefinition(InstanceDefinition),
+}
+
+/// instance $name? for $type_boound { $body }
+#[derive(Debug, Clone)]
+pub struct InstanceDefinition {
+    pub name: Option<String>,
+    pub free_variables: Vec<String>,
+    pub bounds: Vec<TypeBound>,
+    pub instanced_class: TypeBound,
+    pub body: Vec<InstanceDefinitionItem>,
+}
+
+#[derive(Debug, Clone)]
+pub enum InstanceDefinitionItem {
+    FunctionDefinition(FunctionDefinition),
+    MethodsBlock(MethodsBlock<FunctionDefinition>),
 }
 
 /// class $bounds? => $name($args) { $body }
@@ -591,6 +608,30 @@ impl classy_sexpr::ToSExpr for TopLevelItemKind {
             TopLevelItemKind::MethodsBlock(def) => sexpr!($def),
             TopLevelItemKind::ClassDefinition(def) => sexpr!($def),
             TopLevelItemKind::ConstDefinition(def) => sexpr!($def),
+            TopLevelItemKind::InstanceDefinition(def) => sexpr!($def),
+        }
+    }
+}
+
+impl ToSExpr for InstanceDefinition {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        let InstanceDefinition {
+            name,
+            free_variables,
+            bounds,
+            instanced_class,
+            body,
+        } = self;
+        let name = name.map(|x| sexpr!(#x));
+        sexpr!((instance @name for $free_variables $bounds $instanced_class $body))
+    }
+}
+
+impl ToSExpr for InstanceDefinitionItem {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        match self {
+            InstanceDefinitionItem::FunctionDefinition(f) => sexpr!($f),
+            InstanceDefinitionItem::MethodsBlock(m) => sexpr!($m),
         }
     }
 }

@@ -65,7 +65,7 @@ impl<'db> Folder for NameResolver<'db> {
         res
     }
 
-    fn fold_methods_block(&mut self, mut meths: ast::MethodsBlock) -> ast::MethodsBlock {
+    fn fold_methods_block(&mut self, mut meths: ast::MethodsBlock<ast::FunctionDefinition>) -> ast::MethodsBlock<ast::FunctionDefinition> {
         // this expansion needs to be delayed until we resolve type aliases.
         // This is required as we have implicit `this` and as such need to
         // look into the type to know what fields are within scope.
@@ -78,12 +78,12 @@ impl<'db> Folder for NameResolver<'db> {
     }
 
 
-    fn fold_poly_type(&mut self, vars: Vec<String>, typ: ast::Typ) -> ast::Typ {
+    fn fold_poly_type(&mut self, vars: Vec<String>, bounds: Vec<ast::TypeBound>, typ: ast::Typ) -> ast::Typ {
         self.type_scope.new_scope();
         for var in vars.iter() {
             self.type_scope.add(var.clone(), ());
         }
-        let typ = ast::fold::fold_poly_type(self, vars, typ);
+        let typ = ast::fold::fold_poly_type(self, vars, bounds, typ);
         self.type_scope.pop_scope();
         typ
     }
