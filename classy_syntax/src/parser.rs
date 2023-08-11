@@ -137,6 +137,7 @@ impl<'source> Parser<'source> {
         let bounds = self.parse_type_bounds();
         let instanced_class = parse_type_bound(self)?;
         let body = self.parse_instance_impl_body()?;
+        let _ = self.expect_token(TokenType::Semicolon);
         Ok(ast::InstanceDefinition {
             name: if name.is_empty() { None } else { Some(name) },
             bounds,
@@ -147,20 +148,22 @@ impl<'source> Parser<'source> {
     }
 
     fn parse_instance_impl_body(&mut self) -> ParseRes<Vec<ast::InstanceDefinitionItem>> {
-        let mut res = Vec::new();
         let _ = self.expect_token(TokenType::LBrace);
+        let mut res = Vec::new();
         while self.match_token(TokenType::RBrace).is_err() {
-            if let Ok(item) = self.parse_function_definition(true) {
+            if let Ok(item) = self.parse_function_definition(false) {
                 res.push(ast::InstanceDefinitionItem::FunctionDefinition(item));
             } else if let Ok(item) =
-                self.parse_methods_block(|parser| parser.parse_function_definition(false))
+                self.parse_methods_block(|parser| parser.parse_function_definition(true))
             {
                 res.push(ast::InstanceDefinitionItem::MethodsBlock(item));
+            } else if self.match_token(TokenType::Semicolon).is_ok() {
+                // eat semicolons
             } else {
                 return Err(self.error(
                     self.lexer.current().span.clone(),
                     format!(
-                        "Expected function or methods block definition got {:?}",
+                        "Expected function or methods block definition in instance got {:?}",
                         &self.lexer.current()
                     ),
                 ));
@@ -191,11 +194,10 @@ impl<'source> Parser<'source> {
         let typ = self.parse_type().error(self, beg, "Expected a type")?;
         let _ = self.expect_token(TokenType::LBrace);
         let mut methods = Vec::new();
-        while self.lexer.current().typ != TokenType::RBrace {
+        while self.match_token(TokenType::RBrace).is_err() {
             let method = with(self)?;
             methods.push(method);
         }
-        let _ = self.expect_token(TokenType::RBrace);
         let _ = self.expect_token(TokenType::Semicolon);
         Ok(ast::MethodsBlock {
             name: if name.is_empty() { None } else { Some(name) },
@@ -2329,6 +2331,9 @@ mod tests {
                 foo: () -> ()
                 bar: () -> ()
                 baz: () -> ()
+                methods for a {
+                    zaz: () -> ()
+                }
             }
         "#,
         sexpr!((
@@ -2336,6 +2341,9 @@ mod tests {
                 (fn foo (poly [] {} (fn () (poly [] {} unit))))
                 (fn bar (poly [] {} (fn () (poly [] {} unit))))
                 (fn baz (poly [] {} (fn () (poly [] {} unit))))
+                (methods (poly [] {} a) {
+                    (fn zaz (poly [] {} (fn () (poly [] {} unit))))
+                })
             })
         ))
     }
@@ -2376,6 +2384,54 @@ mod tests {
                         }
                         (fn () (poly [] {} unit))))
                 foo () ())
+        ))
+    }
+
+    ptest! {
+        parse_instance_definition_without_bounds,
+        r#"
+            instance for Foo(Bar(a)) {
+                foo(a) = ()
+
+                methods for a {
+                    bar() = ()
+                }
+            }
+
+        "#,
+        sexpr!((
+            (instance for [] {}
+                (Foo (poly {} [] (Bar ((poly {} [] a)))))
+            {
+                (fn {} (type (fn (infere) infere)) foo (a) ())
+                (methods (poly [] {} a) {
+                    (fn {} (type (fn () infere)) bar () ())
+                })
+            })
+        ))
+    }
+
+    ptest! {
+        parse_named_instance_definition_with_bounds,
+        r#"
+            instance my_instance for { Show(a) } => Foo(Bar(a)) {
+                foo(a) = ()
+
+                methods for a {
+                    bar() = ()
+                }
+            }
+
+        "#,
+        sexpr!((
+            (instance my_instance for [] { (Show (poly {} [] a)) }
+                (Foo (poly {} [] (Bar ((poly {} [] a)))))
+            {
+                (fn {} (type (fn (infere) infere)) foo (a) ())
+                (methods (poly [] {} a) {
+                    (fn {} (type (fn () infere)) bar () ())
+                })
+            })
         ))
     }
 }
