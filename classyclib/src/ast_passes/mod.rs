@@ -41,8 +41,7 @@ pub fn run_after_db_creation_passes(
     db: &Database,
     session: &Session,
 ) -> ast::SourceFile {
-    let ast =
-        func_to_struct_literal_db::PromoteCallToStructLiteral::new(db, session).run(ast, session);
+    let ast = func_to_struct_literal_db::PromoteCallToStructLiteral::new(db).run(ast, session);
     let ast = resolve_names::NameResolver::new(db).run(ast, session);
     ast
 }

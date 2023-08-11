@@ -10,7 +10,6 @@ use super::AstPass;
 /// in case someone uses variables with the same name as the types
 pub struct PromoteCallToStructLiteral<'ctx> {
     db: &'ctx Database,
-    session: &'ctx Session,
     namespace: Vec<String>,
     errors: Vec<CompilationError>,
 }
@@ -22,10 +21,9 @@ impl AstPass for PromoteCallToStructLiteral<'_> {
 }
 
 impl<'db> PromoteCallToStructLiteral<'db> {
-    pub fn new(db: &'db Database, session: &'db Session) -> Self {
+    pub fn new(db: &'db Database) -> Self {
         Self {
             db,
-            session,
             namespace: Default::default(),
             errors: Default::default(),
         }

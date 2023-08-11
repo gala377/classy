@@ -5,7 +5,6 @@ use thiserror::Error;
 
 use classy_syntax::ast;
 
-use crate::ast_passes::expand_namespace;
 use crate::id_provider::UniqueId;
 use crate::typecheck::instance::{union, UnificationError};
 use crate::typecheck::types::Type;
