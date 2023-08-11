@@ -1046,7 +1046,7 @@ impl<'sess> Inference<'sess> {
             }
             ast::Typ::Poly {
                 free_variables,
-                bounds,
+                bounds: _bounds,
                 typ,
             } => {
                 if free_variables.is_empty() {
