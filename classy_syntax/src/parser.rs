@@ -123,7 +123,50 @@ impl<'source> Parser<'source> {
     }
 
     fn parse_instance_definition(&mut self) -> ParseRes<ast::InstanceDefinition> {
-        todo!()
+        fn parse_type_bound(parser: &mut Parser) -> ParseRes<ast::TypeBound> {
+            let name = parser.parse_name()?;
+            let _ = parser.expect_token(TokenType::LParen);
+            let args = parser.parse_delimited(Parser::parse_type, TokenType::Comma);
+            let _ = parser.expect_token(TokenType::RParen);
+            Ok(ast::TypeBound { head: name, args })
+        }
+
+        self.match_token(TokenType::Instance)?;
+        let name = self.parse_identifier().unwrap_or_default();
+        let _ = self.expect_token(TokenType::For);
+        let bounds = self.parse_type_bounds();
+        let instanced_class = parse_type_bound(self)?;
+        let body = self.parse_instance_impl_body()?;
+        Ok(ast::InstanceDefinition {
+            name: if name.is_empty() { None } else { Some(name) },
+            bounds,
+            free_variables: Vec::new(),
+            instanced_class,
+            body,
+        })
+    }
+
+    fn parse_instance_impl_body(&mut self) -> ParseRes<Vec<ast::InstanceDefinitionItem>> {
+        let mut res = Vec::new();
+        let _ = self.expect_token(TokenType::LBrace);
+        while self.match_token(TokenType::RBrace).is_err() {
+            if let Ok(item) = self.parse_function_definition(true) {
+                res.push(ast::InstanceDefinitionItem::FunctionDefinition(item));
+            } else if let Ok(item) =
+                self.parse_methods_block(|parser| parser.parse_function_definition(false))
+            {
+                res.push(ast::InstanceDefinitionItem::MethodsBlock(item));
+            } else {
+                return Err(self.error(
+                    self.lexer.current().span.clone(),
+                    format!(
+                        "Expected function or methods block definition got {:?}",
+                        &self.lexer.current()
+                    ),
+                ));
+            }
+        }
+        Ok(res)
     }
 
     fn parse_const_definition(&mut self) -> ParseRes<ast::ConstDefinition> {
