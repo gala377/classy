@@ -1,8 +1,6 @@
 use classy_syntax::ast::{self, Folder, Namespace};
 
-use crate::{
-    compile::CompilationError, knowledge::Database, session::Session, typecheck::types::Type,
-};
+use crate::{compile::CompilationError, knowledge::Database, typecheck::types::Type};
 
 use super::AstPass;
 
