@@ -290,10 +290,7 @@ pub trait Folder: Sized {
     }
 
     fn fold_adt_unit_constructor(&mut self, name: Name, case: String) -> ExprKind {
-        ExprKind::AdtUnitConstructor {
-            typ: name,
-            constructor: case,
-        }
+        fold_adt_unit_constructor(self, name, case)
     }
 
     fn fold_unit_type(&mut self) -> Typ {
@@ -393,6 +390,13 @@ pub trait Folder: Sized {
 
     fn fold_class_methods_block_method(&mut self, method: Method<FuncDecl>) -> Method<FuncDecl> {
         fold_class_methods_block_method(self, method)
+    }
+}
+
+fn fold_adt_unit_constructor(folder: &mut impl Folder, name: Name, case: String) -> ExprKind {
+    ExprKind::AdtUnitConstructor {
+        typ: folder.fold_name(name),
+        constructor: case,
     }
 }
 
@@ -632,7 +636,7 @@ pub fn fold_struct_literal(
     values: HashMap<String, Expr>,
 ) -> ExprKind {
     ExprKind::StructLiteral {
-        strct,
+        strct: folder.fold_name(strct),
         values: values
             .into_iter()
             .map(|(k, v)| (k, folder.fold_expr(v)))
@@ -719,7 +723,7 @@ pub fn fold_struct_pattern(
         new_fields.push((name, folder.fold_pattern(field)));
     }
     PatternKind::Struct {
-        strct,
+        strct: folder.fold_name(strct),
         fields: new_fields.into_iter().collect(),
     }
 }
@@ -734,7 +738,7 @@ pub fn fold_tuple_struct_pattern(
         new_fields.push(folder.fold_pattern(field));
     }
     PatternKind::TupleStruct {
-        strct,
+        strct: folder.fold_name(strct),
         fields: new_fields,
     }
 }
@@ -764,7 +768,10 @@ pub fn fold_type_specified_pattern(
     name: Name,
     pattern: Pattern,
 ) -> PatternKind {
-    PatternKind::TypeSpecifier(name, Box::new(folder.fold_pattern(pattern)))
+    PatternKind::TypeSpecifier(
+        folder.fold_name(name),
+        Box::new(folder.fold_pattern(pattern)),
+    )
 }
 
 pub fn fold_adt_struct_constructor(
@@ -778,7 +785,7 @@ pub fn fold_adt_struct_constructor(
         new_fields.push((name, folder.fold_expr(val)));
     }
     ExprKind::AdtStructConstructor {
-        typ: name,
+        typ: folder.fold_name(name),
         constructor: case,
         fields: new_fields,
     }
@@ -795,7 +802,7 @@ pub fn fold_adt_tuple_constructor(
         new_fields.push(folder.fold_expr(val));
     }
     ExprKind::AdtTupleConstructor {
-        typ: name,
+        typ: folder.fold_name(name),
         constructor: case,
         args: new_fields,
     }

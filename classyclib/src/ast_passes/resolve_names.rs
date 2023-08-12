@@ -291,15 +291,16 @@ mod tests {
     use classy_syntax::ast;
 
     use crate::{
-        ast_passes::AstPass,
-        knowledge::{Database, DefinitionId, TypeHashMap},
+        ast_passes::{func_to_struct_literal_db::PromoteCallToStructLiteral, AstPass},
+        knowledge::{Database, DefinitionId, TypeHashMap, TypeId},
         session::Session,
+        typecheck::types::Type,
     };
     use std::collections::HashMap;
 
     fn test_db(
         packages: HashMap<String, HashMap<String, usize>>,
-        definitions: HashMap<String, usize>,
+        definitions: HashMap<String, (usize, Type)>,
     ) -> Database {
         let mut db = Database {
             packages: Vec::new(),
@@ -313,8 +314,10 @@ mod tests {
             reverse_type_aliases: TypeHashMap::new(100),
             method_blocks: HashMap::new(),
         };
-        for (name, id) in definitions {
+        for (name, (id, typ)) in definitions {
             db.globals.insert(name, DefinitionId(id));
+            db.type_aliases.insert(TypeId(id), typ);
+            db.definition_types.insert(DefinitionId(id), TypeId(id));
         }
         for (name, globals) in packages {
             let package = crate::knowledge::PackageInfo {
@@ -340,13 +343,14 @@ mod tests {
     fn run_test(
         source: &str,
         expected: classy_sexpr::SExpr,
-        definitions: HashMap<String, usize>,
+        definitions: HashMap<String, (usize, Type)>,
         packages: HashMap<String, HashMap<String, usize>>,
     ) {
         let ast = parse_source(source);
         let db = test_db(packages, definitions);
         let mut pass = super::NameResolver::new(&db);
         let sess = Session::new("test");
+        let ast = PromoteCallToStructLiteral::new(&db).run(ast, &sess);
         let ast = pass.run(ast, &sess);
         let actual = ast.to_sexpr();
         similar_asserts::assert_eq!(actual, expected);
@@ -377,7 +381,7 @@ mod tests {
                     foo () (global 0 10)
                 )
             )),
-            map! { "x" -> 10 },
+            map! { "x" -> (10, Type::Unit) },
             map! {},
         );
     }
@@ -419,7 +423,7 @@ mod tests {
                 )
             )),
             map! {
-                "a::b::x" -> 11
+                "a::b::x" -> (11, Type::Unit)
             },
             map! {},
         );
@@ -441,7 +445,7 @@ mod tests {
                 )
             )),
             map! {
-                "a::b::c::d::x" -> 11
+                "a::b::c::d::x" -> (11, Type::Unit)
             },
             map! {},
         );
@@ -529,7 +533,10 @@ mod tests {
                     }
                 )
             )),
-            map! {"c" -> 10, "foo" -> 1},
+            map! {
+                "c" -> (10, Type::Unit),
+                "foo" -> (1, Type::Unit)
+            },
             map! {},
         );
     }
@@ -541,9 +548,9 @@ mod tests {
                 type Foo = X
             ",
             sexpr!((
-                    (type Foo [] (alias (poly [] (global 0 10))))
+                    (type Foo [] (alias (poly [] {} (global 0 10))))
             )),
-            map! { "X" -> 10 },
+            map! { "X" -> (10, Type::Unit) },
             map! {},
         );
     }
@@ -558,7 +565,7 @@ mod tests {
             ",
             sexpr!((
                 (type Foo [] (record {
-                    foo (poly [] (global 1 10))
+                    foo (poly [] {} (global 1 10))
                 }))
             )),
             map! {},
@@ -583,11 +590,11 @@ mod tests {
             sexpr!((
                 (namespace a::b)
                 (type Foo [] (adt {
-                    Mk [tuple (poly [] (global 0 11))]
+                    Mk [tuple (poly [] {} (global 0 11))]
                 }))
             )),
             map! {
-                "a::b::X" -> 11
+                "a::b::X" -> (11, Type::Unit)
             },
             map! {},
         );
@@ -604,11 +611,11 @@ mod tests {
             sexpr!((
                 (namespace a::b)
                 (type Foo [] (alias {
-                    poly [] (global 0 11)
+                    poly [] {} (global 0 11)
                 }))
             )),
             map! {
-                "a::b::c::d::x" -> 11
+                "a::b::c::d::x" -> (11, Type::Unit)
             },
             map! {},
         );
@@ -623,7 +630,7 @@ mod tests {
             ",
             sexpr!((
                 (type Foo [] (alias {
-                    poly [] (global 1 11)
+                    poly [] {} (global 1 11)
                 }))
             )),
             map! {},
@@ -648,7 +655,7 @@ mod tests {
             sexpr!((
                 (namespace a::b)
                 (fn {}
-                    (type (poly [] (fn ((poly [] (global 1 11))) (poly [] unit))))
+                    (type (poly [] {} (fn ((poly [] {} (global 1 11))) (poly [] {} unit))))
                     foo (x) ()
                 )
             )),
@@ -675,16 +682,43 @@ mod tests {
             ",
             sexpr!((
                 (type Option [a] (adt
-                    { Some [tuple (poly [] a)] }
+                    { Some [tuple (poly [] {} a)] }
                     { None unit }
                 ))
                 (fn {}
-                    (type (poly ["a"] (fn ((poly [] a)) (poly [] (global 0 11)))))
+                    (type (poly ["a"] {} (fn ((poly [] {} a)) (poly [] {} (global 0 11)))))
                     foo () ()
                 )
             )),
-            map! {"X" -> 11},
+            map! {"X" -> (11, Type::Unit)},
             map! {},
         );
+    }
+
+    #[test]
+    fn resolve_name_in_struct_creation() {
+        run_test(
+            r#"
+            foo x = Foo { x = x }
+            "#,
+            sexpr!((
+                (fn {}
+                    (type (fn (infere) infere))
+                    foo (x) (struct (global 0 10) {
+                        ["x" x]
+                    })
+                )
+            )),
+            map! {
+                "Foo" -> (
+                    10,
+                    Type::Struct{
+                        def: 0,
+                        fields: vec![]
+                    }
+                )
+            },
+            map! {},
+        )
     }
 }
