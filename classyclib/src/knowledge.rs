@@ -28,6 +28,17 @@ pub struct PackageInfo {
 }
 
 impl PackageInfo {
+    pub fn empty(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            globals: HashMap::new(),
+            definition_types: HashMap::new(),
+            type_aliases: HashMap::new(),
+        }
+    }
+}
+
+impl PackageInfo {
     pub fn get_definition(&self, name: &str) -> Option<DefinitionId> {
         self.globals.get(name).cloned()
     }

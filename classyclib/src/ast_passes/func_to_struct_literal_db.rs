@@ -40,20 +40,32 @@ impl<'db> PromoteCallToStructLiteral<'db> {
         ast::fold::fold_program(self, program)
     }
 
-    fn type_from_name<'a, 'e>(&'a self, lval: &'e ast::Expr) -> Option<(&'e ast::Name, &'a Type)> {
+    fn type_from_name<'a, 'e>(&'a self, lval: &'e ast::Expr) -> Option<(ast::Name, &'a Type)> {
         let ast::Expr {
-            kind: ast::ExprKind::Name(name @ ast::Name::Unresolved { path, identifier }),
+            kind: ast::ExprKind::Name(ast::Name::Unresolved { path, identifier }),
             ..
         } = lval
         else {
             return None;
         };
-        self.db
-            .get_type_by_unresolved_name(&self.namespace, path, identifier)
-            .map(|typ| (name, typ))
+        let typ = self
+            .db
+            .get_type_by_unresolved_name(&self.namespace, path, identifier)?;
+        let new_path = if path.is_empty() {
+            self.namespace.clone()
+        } else {
+            path.clone()
+        };
+        Some((
+            ast::Name::Unresolved {
+                path: new_path,
+                identifier: identifier.clone(),
+            },
+            typ,
+        ))
     }
 
-    fn is_struct<'e, 'a>(&'a self, lval: &'e ast::Expr) -> Option<(&'e ast::Name, &'a Type)> {
+    fn is_struct<'e, 'a>(&'a self, lval: &'e ast::Expr) -> Option<(ast::Name, &'a Type)> {
         match self.type_from_name(lval)? {
             (n, s @ Type::Struct { .. }) => Some((n, s)),
             _ => None,
@@ -64,7 +76,7 @@ impl<'db> PromoteCallToStructLiteral<'db> {
         &'a self,
         lval: &'e ast::Expr,
         case: &'e str,
-    ) -> Option<(&'e ast::Name, &'a (String, Type))> {
+    ) -> Option<(ast::Name, &'a (String, Type))> {
         let typ = self.type_from_name(lval)?;
         match typ {
             (n, Type::ADT { constructors, .. }) => constructors
@@ -196,5 +208,312 @@ impl Folder for PromoteCallToStructLiteral<'_> {
             }
         }
         ast::fold::fold_method_call(self, receiver, method, args, kwargs)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use classy_sexpr::{SExpr, ToSExpr};
+    use classy_sexpr_proc_macro::sexpr;
+    use classy_syntax::{lexer::Lexer, parser::Parser};
+
+    use crate::{
+        ast_passes::AstPass,
+        knowledge::{Database, DefinitionId, PackageId, PackageInfo, TypeId},
+        session::Session,
+        typecheck::types::Type,
+    };
+
+    use super::PromoteCallToStructLiteral;
+
+    struct TestDb {
+        types: Vec<(PackageId, DefinitionId, String, Type)>,
+        packages: Vec<String>,
+    }
+
+    fn run(input: &str, expected: SExpr, db_info: TestDb) {
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let ast = parser.parse().unwrap();
+        let mut db = Database::new();
+        let sess = Session::new("test");
+
+        for name in db_info.packages {
+            let info = PackageInfo::empty(&name);
+            db.add_package(info);
+        }
+        for (pid, did, name, typ) in db_info.types {
+            if pid == PackageId(0) {
+                db.globals.insert(name.clone(), did.clone());
+                db.type_aliases.insert(TypeId(did.0), typ);
+                db.definition_types.insert(did.clone(), TypeId(did.0));
+            } else {
+                let package = db.packages.get_mut(pid.0 - 1).unwrap();
+                package.globals.insert(name.clone(), did.clone());
+                package.type_aliases.insert(TypeId(did.0), typ);
+                package.definition_types.insert(did.clone(), TypeId(did.0));
+            }
+        }
+
+        let res = PromoteCallToStructLiteral::new(&db).run(ast, &sess);
+        let res = res.to_sexpr();
+        similar_asserts::assert_eq!(res, expected);
+    }
+
+    #[test]
+    fn test_function_calls_do_not_get_replaced() {
+        run(
+            r#"
+            type Foo = Int
+            foo {
+                foo(x, y)
+                let x = int
+            }
+            "#,
+            sexpr!((
+                (type Foo [] (alias (poly [] {} Int)))
+                (fn {} 
+                    (type (fn () infere))
+                    foo () {
+                        (call foo (x y) {})
+                        (let x infere int)
+                    }
+                )
+            )),
+            TestDb {
+                types: vec![],
+                packages: vec![],
+            },
+        )
+    }
+
+    fn pid(id: usize) -> PackageId {
+        PackageId(id)
+    }
+
+    fn did(id: usize) -> DefinitionId {
+        DefinitionId(id)
+    }
+
+    #[test]
+    fn test_struct_types_defined_in_the_same_package_get_replaced() {
+        run(
+            r#"
+            
+            foo {
+                Foo { x = 1; y = 2 }
+            }
+            "#,
+            sexpr!((
+                (fn {} 
+                    (type (fn () infere))
+                    foo () {
+                        (struct Foo { ["x" 1] ["y" 2] })
+                    }
+                )
+            )),
+            TestDb {
+                types: vec![
+                    (pid(0), did(1), "Foo".into(), Type::Struct { def: 0, fields: vec![] })
+                ],
+                packages: vec![],
+            },
+        )
+    }
+
+    #[test]
+    fn test_adt_struct_constructors_defined_in_the_same_package_get_replaced() {
+        run(
+            r#"
+            
+            foo {
+                Foo.A { x = 1; y = 2 }
+            }
+            "#,
+            sexpr!((
+                (fn {} 
+                    (type (fn () infere))
+                    foo () {
+                        (adt Foo A { ["x" 1] ["y" 2] })
+                    }
+                )
+            )),
+            TestDb {
+                types: vec![
+                    (
+                        pid(0),
+                        did(1),
+                        "Foo".into(),
+                        Type::ADT {
+                            def: 0,
+                            constructors: vec![
+                                (
+                                    "A".into(),
+                                    Type::Struct { def: 0, fields: vec![] }
+                                )
+                            ]
+                        }
+                    )
+                ],
+                packages: vec![],
+            },
+        )
+    }
+
+    #[test]
+    fn test_adt_tuple_constructors_defined_in_the_same_package_get_replaced() {
+        run(
+            r#"
+            foo {
+                Foo.A(1, 2)
+            }
+            "#,
+            sexpr!((
+                (fn {} 
+                    (type (fn () infere))
+                    foo () {
+                        (adt Foo A ( 1 2 ))
+                    }
+                )
+            )),
+            TestDb {
+                types: vec![
+                    (
+                        pid(0),
+                        did(1),
+                        "Foo".into(),
+                        Type::ADT {
+                            def: 0,
+                            constructors: vec![
+                                (
+                                    "A".into(),
+                                    Type::Tuple(vec![])
+                                )
+                            ]
+                        }
+                    )
+                ],
+                packages: vec![],
+            },
+        )
+    }
+
+    #[test]
+    fn test_adt_unit_constructors_defined_in_the_same_package_get_replaced() {
+        run(
+            r#"
+            foo {
+                Foo.A
+            }
+            "#,
+            sexpr!((
+                (fn {} 
+                    (type (fn () infere))
+                    foo () {
+                        (adt Foo "A")
+                    }
+                )
+            )),
+            TestDb {
+                types: vec![
+                    (
+                        pid(0),
+                        did(1),
+                        "Foo".into(),
+                        Type::ADT {
+                            def: 0,
+                            constructors: vec![
+                                (
+                                    "A".into(),
+                                    Type::Unit
+                                )
+                            ]
+                        }
+                    )
+                ],
+                packages: vec![],
+            },
+        )
+    }
+
+    #[test]
+    fn test_struct_types_defined_in_the_same_package_in_a_namespace_gets_replaced() {
+        run(
+            r#"
+            namespace inner::foo
+
+            foo {
+                Foo { x = 1; y = 2 }
+            }
+            "#,
+            sexpr!((
+                (namespace inner::foo)
+                (fn {} 
+                    (type (fn () infere))
+                    foo () {
+                        (struct inner::foo::Foo { ["x" 1] ["y" 2] })
+                    }
+                )
+            )),
+            TestDb {
+                types: vec![
+                    (pid(0), did(1), "inner::foo::Foo".into(), Type::Struct { def: 0, fields: vec![] })
+                ],
+                packages: vec![],
+            },
+        )
+    }
+
+    #[test]
+    fn test_struct_types_defined_in_a_different_package() {
+        run(
+            r#"
+
+            foo {
+                foo::Foo { x = 1; y = 2 }
+            }
+            "#,
+            sexpr!((
+                (fn {} 
+                    (type (fn () infere))
+                    foo () {
+                        (struct foo::Foo { ["x" 1] ["y" 2] })
+                    }
+                )
+            )),
+            TestDb {
+                types: vec![
+                    (pid(1), did(1), "Foo".into(), Type::Struct { def: 0, fields: vec![] })
+                ],
+                packages: vec!["foo".into()],
+            },
+        )
+    }
+
+    #[test]
+    fn test_struct_types_defined_in_a_different_package_in_namespace() {
+        run(
+            r#"
+            namespace inner
+            foo {
+                foo::inner::Foo { x = 1; y = 2 }
+            }
+            "#,
+            sexpr!((
+                (namespace inner)
+                (fn {} 
+                    (type (fn () infere))
+                    foo () {
+                        (struct foo::inner::Foo { ["x" 1] ["y" 2] })
+                    }
+                )
+            )),
+            TestDb {
+                types: vec![
+                    (pid(1), did(1), "inner::Foo".into(), Type::Struct { def: 0, fields: vec![] })
+                ],
+                packages: vec!["foo".into()],
+            },
+        )
     }
 }

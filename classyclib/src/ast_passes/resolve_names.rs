@@ -65,7 +65,10 @@ impl<'db> Folder for NameResolver<'db> {
         res
     }
 
-    fn fold_methods_block(&mut self, mut meths: ast::MethodsBlock<ast::FunctionDefinition>) -> ast::MethodsBlock<ast::FunctionDefinition> {
+    fn fold_methods_block(
+        &mut self,
+        mut meths: ast::MethodsBlock<ast::FunctionDefinition>,
+    ) -> ast::MethodsBlock<ast::FunctionDefinition> {
         // this expansion needs to be delayed until we resolve type aliases.
         // This is required as we have implicit `this` and as such need to
         // look into the type to know what fields are within scope.
@@ -78,21 +81,22 @@ impl<'db> Folder for NameResolver<'db> {
     }
 
     fn fold_class_definition(
-            &mut self,
-            ast::ClassDefinition {
-                name,
-                bounds,
-                args,
-                body,
-            }: ast::ClassDefinition,
-        ) -> ast::ClassDefinition {
+        &mut self,
+        ast::ClassDefinition {
+            name,
+            bounds,
+            args,
+            body,
+        }: ast::ClassDefinition,
+    ) -> ast::ClassDefinition {
         self.type_scope.new_scope();
         for var in args.iter() {
             self.type_scope.add(var.clone(), ());
         }
-        let bounds = bounds.into_iter().map(|ast::TypeBound { head, args }| {
-            self.fold_type_bound(head, args)
-        }).collect();
+        let bounds = bounds
+            .into_iter()
+            .map(|ast::TypeBound { head, args }| self.fold_type_bound(head, args))
+            .collect();
         // no functions in class definitions have bodies
         // so we don't need to care about an implicit scope from this
         // and can just fold away, all of the name resultion should work as expected.
@@ -101,15 +105,20 @@ impl<'db> Folder for NameResolver<'db> {
         res
     }
 
-
-    fn fold_poly_type(&mut self, vars: Vec<String>, bounds: Vec<ast::TypeBound>, typ: ast::Typ) -> ast::Typ {
+    fn fold_poly_type(
+        &mut self,
+        vars: Vec<String>,
+        bounds: Vec<ast::TypeBound>,
+        typ: ast::Typ,
+    ) -> ast::Typ {
         self.type_scope.new_scope();
         for var in vars.iter() {
             self.type_scope.add(var.clone(), ());
         }
-        let bounds = bounds.into_iter().map(|ast::TypeBound { head, args }| {
-            self.fold_type_bound(head, args)
-        }).collect();
+        let bounds = bounds
+            .into_iter()
+            .map(|ast::TypeBound { head, args }| self.fold_type_bound(head, args))
+            .collect();
         let typ = ast::fold::fold_poly_type(self, vars, bounds, typ);
         self.type_scope.pop_scope();
         typ
