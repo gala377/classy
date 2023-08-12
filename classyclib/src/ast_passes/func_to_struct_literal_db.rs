@@ -454,6 +454,34 @@ mod tests {
     }
 
     #[test]
+    fn test_struct_types_defined_in_the_same_package_in_a_nested_namespace() {
+        run(
+            r#"
+            namespace inner::foo
+
+            foo {
+                bar::Foo { x = 1; y = 2 }
+            }
+            "#,
+            sexpr!((
+                (namespace inner::foo)
+                (fn {}
+                    (type (fn () infere))
+                    foo () {
+                        (struct bar::Foo { ["x" 1] ["y" 2] })
+                    }
+                )
+            )),
+            TestDb {
+                types: vec![
+                    (pid(0), did(1), "inner::foo::bar::Foo".into(), Type::Struct { def: 0, fields: vec![] })
+                ],
+                packages: vec![],
+            },
+        )
+    }
+
+    #[test]
     fn test_struct_types_defined_in_a_different_package() {
         run(
             r#"
