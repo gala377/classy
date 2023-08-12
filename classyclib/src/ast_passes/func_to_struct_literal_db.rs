@@ -272,7 +272,7 @@ mod tests {
             "#,
             sexpr!((
                 (type Foo [] (alias (poly [] {} Int)))
-                (fn {} 
+                (fn {}
                     (type (fn () infere))
                     foo () {
                         (call foo (x y) {})
@@ -305,7 +305,7 @@ mod tests {
             }
             "#,
             sexpr!((
-                (fn {} 
+                (fn {}
                     (type (fn () infere))
                     foo () {
                         (struct Foo { ["x" 1] ["y" 2] })
@@ -331,7 +331,7 @@ mod tests {
             }
             "#,
             sexpr!((
-                (fn {} 
+                (fn {}
                     (type (fn () infere))
                     foo () {
                         (adt Foo A { ["x" 1] ["y" 2] })
@@ -369,7 +369,7 @@ mod tests {
             }
             "#,
             sexpr!((
-                (fn {} 
+                (fn {}
                     (type (fn () infere))
                     foo () {
                         (adt Foo A ( 1 2 ))
@@ -407,7 +407,7 @@ mod tests {
             }
             "#,
             sexpr!((
-                (fn {} 
+                (fn {}
                     (type (fn () infere))
                     foo () {
                         (adt Foo "A")
@@ -448,7 +448,7 @@ mod tests {
             "#,
             sexpr!((
                 (namespace inner::foo)
-                (fn {} 
+                (fn {}
                     (type (fn () infere))
                     foo () {
                         (struct inner::foo::Foo { ["x" 1] ["y" 2] })
@@ -474,7 +474,7 @@ mod tests {
             }
             "#,
             sexpr!((
-                (fn {} 
+                (fn {}
                     (type (fn () infere))
                     foo () {
                         (struct foo::Foo { ["x" 1] ["y" 2] })
@@ -501,7 +501,7 @@ mod tests {
             "#,
             sexpr!((
                 (namespace inner)
-                (fn {} 
+                (fn {}
                     (type (fn () infere))
                     foo () {
                         (struct foo::inner::Foo { ["x" 1] ["y" 2] })

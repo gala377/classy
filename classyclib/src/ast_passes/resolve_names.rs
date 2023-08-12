@@ -674,7 +674,7 @@ mod tests {
                 foo = ()
             ",
             sexpr!((
-                (type Option [a] (adt 
+                (type Option [a] (adt
                     { Some [tuple (poly [] a)] }
                     { None unit }
                 ))
