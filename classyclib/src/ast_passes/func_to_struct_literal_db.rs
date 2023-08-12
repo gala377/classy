@@ -40,9 +40,9 @@ impl<'db> PromoteCallToStructLiteral<'db> {
         ast::fold::fold_program(self, program)
     }
 
-    fn type_from_name<'a, 'e>(&'a self, lval: &'e ast::Expr) -> Option<(ast::Name, &'a Type)> {
+    fn type_from_name<'a, 'e>(&'a self, lval: &'e ast::Expr) -> Option<(&'e ast::Name, &'a Type)> {
         let ast::Expr {
-            kind: ast::ExprKind::Name(ast::Name::Unresolved { path, identifier }),
+            kind: ast::ExprKind::Name(name @ ast::Name::Unresolved { path, identifier }),
             ..
         } = lval
         else {
@@ -51,21 +51,10 @@ impl<'db> PromoteCallToStructLiteral<'db> {
         let typ = self
             .db
             .get_type_by_unresolved_name(&self.namespace, path, identifier)?;
-        let new_path = if path.is_empty() {
-            self.namespace.clone()
-        } else {
-            path.clone()
-        };
-        Some((
-            ast::Name::Unresolved {
-                path: new_path,
-                identifier: identifier.clone(),
-            },
-            typ,
-        ))
+        Some((name, typ))
     }
 
-    fn is_struct<'e, 'a>(&'a self, lval: &'e ast::Expr) -> Option<(ast::Name, &'a Type)> {
+    fn is_struct<'e, 'a>(&'a self, lval: &'e ast::Expr) -> Option<(&'e ast::Name, &'a Type)> {
         match self.type_from_name(lval)? {
             (n, s @ Type::Struct { .. }) => Some((n, s)),
             _ => None,
@@ -76,7 +65,7 @@ impl<'db> PromoteCallToStructLiteral<'db> {
         &'a self,
         lval: &'e ast::Expr,
         case: &'e str,
-    ) -> Option<(ast::Name, &'a (String, Type))> {
+    ) -> Option<(&'e ast::Name, &'a (String, Type))> {
         let typ = self.type_from_name(lval)?;
         match typ {
             (n, Type::ADT { constructors, .. }) => constructors
@@ -451,7 +440,7 @@ mod tests {
                 (fn {}
                     (type (fn () infere))
                     foo () {
-                        (struct inner::foo::Foo { ["x" 1] ["y" 2] })
+                        (struct Foo { ["x" 1] ["y" 2] })
                     }
                 )
             )),
