@@ -735,7 +735,7 @@ mod tests {
     }
 
     #[test]
-    fn resolution_for_qualified_patterns() {
+    fn no_resolution_for_qualified_patterns() {
         run_test(
             r#"
             foo =
@@ -749,7 +749,7 @@ mod tests {
                     (type (fn () infere))
                     foo () {
                         match () {
-                            [((global 1 10) A) ()]
+                            [(foo::Foo A) ()]
                         }
                     })
             )),
@@ -763,7 +763,7 @@ mod tests {
     }
 
     #[test]
-    fn resolution_for_qualified_patterns_within_namespace() {
+    fn no_resolution_for_qualified_patterns_within_namespace() {
         run_test(
             r#"
             namespace foo
@@ -779,7 +779,7 @@ mod tests {
                     (type (fn () infere))
                     foo () {
                         match () {
-                            [(struct (global 0 10) {} ) ()]
+                            [(struct foo::Foo {} ) ()]
                         }
                     })
             )),
@@ -803,13 +803,13 @@ mod tests {
             
             "#,
             sexpr!((
-                (namespace foo)
                 (fn {}
                     (type (fn () infere))
                     foo () {
                         match () {
                             [A ()]
-                            [B]
+                            [(struct B (a)) ()]
+                            [(struct C ()) ()]
                         }
                     })
             )),
