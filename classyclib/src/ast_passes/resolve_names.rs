@@ -12,6 +12,10 @@ pub struct NameResolver<'db> {
     current_namespace_prefix: String,
     variable_scope: Scope<String, ()>,
     type_scope: Scope<String, ()>,
+    /// This fields is important for patterns resolutions.
+    /// As pattern resolution depends on the type of the matcher
+    /// We need to delay this resolution to the constraint solving phase
+    dont_resolve_names: bool,
 }
 
 impl<'db> NameResolver<'db> {
@@ -21,6 +25,7 @@ impl<'db> NameResolver<'db> {
             current_namespace_prefix: String::new(),
             variable_scope: Scope::new(),
             type_scope: Scope::new(),
+            dont_resolve_names: false,
         }
     }
 }
@@ -160,7 +165,11 @@ impl<'db> Folder for NameResolver<'db> {
             .into_iter()
             .map(|(pat, body, guard)| {
                 self.variable_scope.new_scope();
+                // Do not resolve names in patterns as patterns are
+                // type sensitive. We need to delay the check until constraint solving.
+                self.dont_resolve_names = true;
                 let pat = ast::fold::fold_pattern(self, pat);
+                self.dont_resolve_names = false;
                 let guard = guard.map(|g| ast::fold::fold_expr(self, *g)).map(Box::new);
                 let body = ast::fold::fold_expr(self, body);
                 self.variable_scope.pop_scope();
@@ -208,6 +217,9 @@ impl<'db> Folder for NameResolver<'db> {
     }
 
     fn fold_name(&mut self, name: ast::Name) -> ast::Name {
+        if self.dont_resolve_names {
+            return name;
+        }
         resolve_name(
             self.database,
             &self.variable_scope,
@@ -717,6 +729,92 @@ mod tests {
                         fields: vec![]
                     }
                 )
+            },
+            map! {},
+        )
+    }
+
+    #[test]
+    fn resolution_for_qualified_patterns() {
+        run_test(
+            r#"
+            foo =
+                () match {
+                    foo::Foo.A => ()
+                }
+            
+            "#,
+            sexpr!((
+                (fn {}
+                    (type (fn () infere))
+                    foo () {
+                        match () {
+                            [((global 1 10) A) ()]
+                        }
+                    })
+            )),
+            map! {},
+            map! {
+                "foo" -> map!{
+                    "Foo" -> 10
+                }
+            },
+        )
+    }
+
+    #[test]
+    fn resolution_for_qualified_patterns_within_namespace() {
+        run_test(
+            r#"
+            namespace foo
+            foo =
+                () match {
+                    Foo {} => ()
+                }
+            
+            "#,
+            sexpr!((
+                (namespace foo)
+                (fn {}
+                    (type (fn () infere))
+                    foo () {
+                        match () {
+                            [(struct (global 0 10) {} ) ()]
+                        }
+                    })
+            )),
+            map! {
+                "foo::Foo" -> (10, Type::Struct { def: 0, fields: vec![] })
+            },
+            map! {},
+        )
+    }
+
+    #[test]
+    fn resolution_for_omitted_type_in_case() {
+        run_test(
+            r#"
+            foo =
+                () match {
+                    A  => ()
+                    B(a) => ()
+                    C {} => ()
+                }
+            
+            "#,
+            sexpr!((
+                (namespace foo)
+                (fn {}
+                    (type (fn () infere))
+                    foo () {
+                        match () {
+                            [A ()]
+                            [B]
+                        }
+                    })
+            )),
+            map! {
+                "A" -> (10, Type::Struct { def: 0, fields: vec![] })
             },
             map! {},
         )

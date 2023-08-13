@@ -144,7 +144,7 @@ lazy_static! {
             // Special
             NewLine, Eof,
             // Operators
-            Semicolon, Comma, Dot,
+            Semicolon, Comma, Dot, EqualSign,
             // Grouping
             LBrace, LBracket, LParen,
             // Keywords
