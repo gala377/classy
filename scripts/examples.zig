@@ -9,18 +9,10 @@ pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-
-    // parse args
     const args = try parse_args(allocator);
-    // get file path
     const file_path = try expand_file_path(allocator, args[1]);
-
-    // fmt --file flag
     const expanded_file = try file_flag(allocator, file_path);
-
-    // create full rust command
     const full_command = try create_full_command(allocator, args, expanded_file);
-
     try start_compiler(allocator, full_command);
 }
 
