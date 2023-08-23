@@ -1,6 +1,6 @@
 //usr/bin/env zig run "$0" -- "$@"; exit
-
 const std = @import("std");
+
 const str = []const u8;
 
 const command = [_]str{ "cargo", "run", "-p=classyc", "--" };
