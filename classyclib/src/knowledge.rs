@@ -44,6 +44,27 @@ impl PackageInfo {
     }
 }
 
+pub enum ImplVisibility {
+    /// Imported alongside the type. As well as visible withing the same
+    /// namespace as the type. This visibility is assigned to anonymous
+    /// implementations within the same file as the type.
+    ///
+    /// TODO: We could add a "default" keyword and have something like
+    /// `default methods` and `default instance` and then the restriction
+    /// can be be made for definition to only be within the same namespace.
+    Default,
+    /// By default visible within given namespace but can be imported by name.
+    /// This is for anonymous implementations in different files then the type
+    /// definition is in, can be a different package.
+    InNamespace,
+}
+
+pub struct Visibility {
+    pub package: PackageId,
+    pub namespace: ast::Namespace,
+    pub visibility: ImplVisibility,
+}
+
 /// A complete representation of a program that allows for easy quering.
 pub struct Database {
     /// Mapping for package id to its package info.

@@ -10,7 +10,7 @@ use thiserror::Error;
 
 use crate::{
     ast_passes,
-    knowledge::{Database, DefinitionId, PackageInfo},
+    knowledge::{Database, DefinitionId, PackageId, PackageInfo},
     session::Session,
 };
 
@@ -114,6 +114,13 @@ impl Compiler {
                         // want to assign names to method blocks and import them into the scope.
                         continue;
                     }
+                    // TODO: We also need to add instance and methods imports here as
+                    // visible but also resolved so that they don't need to be typechecked
+                    // Also anonymous instances and anonymous methods need to have visibility
+                    // figured out. In general, instance or methods that are defined within the
+                    // same file as the type are visible everywhere where the type is imported.
+                    // Named instances and named method blocks are visible within the namespace
+                    // they were defined in but not outside of it unless imported.
                     t => unimplemented!("{t:?}"),
                 }
             }
@@ -121,6 +128,10 @@ impl Compiler {
     }
 
     pub fn fully_expand_names(&mut self) {
+        // TODO
+        // the pass is wrong as it cannot resolve method names.
+        // What we need to do, before we even typecheck is for each file, resolve its
+        // imports,
         for ast in &mut self.package_ast {
             *ast = ast_passes::fully_expand_names(ast.clone(), &self.session, &self.database);
         }
