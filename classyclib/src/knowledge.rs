@@ -46,16 +46,27 @@ impl PackageInfo {
 
 pub enum ImplVisibility {
     /// Imported alongside the type. As well as visible withing the same
-    /// namespace as the type. This visibility is assigned to anonymous
-    /// implementations within the same file as the type.
+    /// namespace as the type.
     ///
-    /// TODO: We could add a "default" keyword and have something like
-    /// `default methods` and `default instance` and then the restriction
-    /// can be be made for definition to only be within the same namespace.
+    /// This visibility is assigned to exported anonymous implementations
+    /// defined within the same namespace as the type they refer to.
+    /// In particular during unification it only applies to cases where the most
+    /// outer type does not require any substitutions.
+    /// Example:
+    ///     export methods Option(a) // this is fine as Option does not require
+    ///                              // firther substitutions, it is a matcher
+    ///                             // already.     
+    ///     export methods a { id = this } // this is not fine as `a` is a
+    ///                                    // generic type and as such requires
+    ///                                    // immediate unification.    
+    ///     export methods Int // this is also fine but not possible as every
+    ///                        // package is in a different namespace than Int.
+    ///
+    /// The same applies to instances.      
     Default,
     /// By default visible within given namespace but can be imported by name.
-    /// This is for anonymous implementations in different files then the type
-    /// definition is in, can be a different package.
+    /// This is for unexported anonymous implementations as well as named
+    /// implementations.
     InNamespace,
 }
 
