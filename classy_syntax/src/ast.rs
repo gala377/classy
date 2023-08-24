@@ -45,6 +45,7 @@ pub struct SourceFile {
 #[derive(Debug, Clone)]
 pub struct TopLevelItem {
     pub id: usize,
+    pub export: bool,
     pub kind: TopLevelItemKind,
 }
 
@@ -616,7 +617,11 @@ impl classy_sexpr::ToSExpr for SourceFile {
 
 impl classy_sexpr::ToSExpr for TopLevelItem {
     fn to_sexpr(self) -> classy_sexpr::SExpr {
-        sexpr!(${self.kind})
+        if self.export {
+            sexpr!((export ${self.kind}))
+        } else {
+            sexpr!(${self.kind})
+        }
     }
 }
 

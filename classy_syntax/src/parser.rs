@@ -60,6 +60,7 @@ impl<'source> Parser<'source> {
                 }
                 return Ok(ast::SourceFile { items, namespace });
             }
+            let export = self.match_token(TokenType::Export).is_ok();
             if items.is_empty()
                 && namespace.is_none()
                 && self.match_token(TokenType::Namespace).is_ok()
@@ -77,11 +78,13 @@ impl<'source> Parser<'source> {
             } else if let Ok(str_def) = self.parse_type_definition() {
                 items.push(ast::TopLevelItem {
                     id: DUMMY_AST_ID,
+                    export,
                     kind: ast::TopLevelItemKind::TypeDefinition(str_def),
                 });
             } else if let Ok(fun_def) = self.parse_function_definition(true) {
                 items.push(ast::TopLevelItem {
                     id: DUMMY_AST_ID,
+                    export,
                     kind: ast::TopLevelItemKind::FunctionDefinition(fun_def),
                 });
             } else if let Ok(meth_block) =
@@ -89,26 +92,31 @@ impl<'source> Parser<'source> {
             {
                 items.push(ast::TopLevelItem {
                     id: DUMMY_AST_ID,
+                    export,
                     kind: ast::TopLevelItemKind::MethodsBlock(meth_block),
                 });
             } else if let Ok(const_def) = self.parse_const_definition() {
                 items.push(ast::TopLevelItem {
                     id: DUMMY_AST_ID,
+                    export,
                     kind: ast::TopLevelItemKind::ConstDefinition(const_def),
                 })
             } else if let Ok(class_def) = self.parse_class_definition() {
                 items.push(ast::TopLevelItem {
                     id: DUMMY_AST_ID,
+                    export,
                     kind: ast::TopLevelItemKind::ClassDefinition(class_def),
                 })
             } else if let Ok(instance_def) = self.parse_instance_definition() {
                 items.push(ast::TopLevelItem {
                     id: DUMMY_AST_ID,
+                    export,
                     kind: ast::TopLevelItemKind::InstanceDefinition(instance_def),
                 });
             } else if let Ok(import) = self.parse_import() {
                 items.push(ast::TopLevelItem {
                     id: DUMMY_AST_ID,
+                    export,
                     kind: import,
                 })
             } else if let Ok(_) = self.match_token(TokenType::Semicolon) {

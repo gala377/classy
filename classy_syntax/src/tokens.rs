@@ -60,6 +60,8 @@ pub enum TokenType {
     Instance,
     #[token("import")]
     Import,
+    #[token("export")]
+    Export,
 
     // Literals
     #[regex(r"[_a-zA-Z][_a-zA-Z0-9]*", |lex| lex.slice().to_owned())]

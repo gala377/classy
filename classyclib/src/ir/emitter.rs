@@ -47,6 +47,7 @@ impl SourceEmitter {
         for decl in program.items {
             if let ast::TopLevelItem {
                 id: _,
+                export: _,
                 kind: ast::TopLevelItemKind::FunctionDefinition(def),
             } = decl
             {

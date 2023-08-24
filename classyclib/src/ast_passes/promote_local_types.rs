@@ -40,6 +40,7 @@ impl Folder for PromoteAnonTypes {
         for (name, record) in self.types_to_promote.iter() {
             let typ = ast::TopLevelItem {
                 id: 0,
+                export: false,
                 kind: ast::TopLevelItemKind::TypeDefinition(ast::TypeDefinition {
                     name: name.clone(),
                     type_variables: Vec::new(),

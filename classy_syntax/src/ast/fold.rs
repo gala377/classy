@@ -968,8 +968,8 @@ pub fn fold_local_function_def(
 
 pub fn fold_top_level_item(folder: &mut impl Folder, item: TopLevelItem) -> TopLevelItem {
     TopLevelItem {
-        id: item.id,
         kind: folder.fold_top_level_item_kind(item.kind),
+        ..item
     }
 }
 

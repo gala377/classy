@@ -96,7 +96,12 @@ impl Compiler {
     /// Add all defintions from the parsed AST to the database.
     pub fn populate_db_definitions(&mut self) {
         for ast in &mut self.package_ast {
-            for ast::TopLevelItem { id, kind } in &mut ast.items {
+            for ast::TopLevelItem {
+                id,
+                kind,
+                export: _export,
+            } in &mut ast.items
+            {
                 use ast::TopLevelItemKind::*;
                 match kind {
                     TypeDefinition(type_def) => self
