@@ -63,7 +63,7 @@ pub enum ImplVisibility {
     ///                        // package is in a different namespace than Int.
     ///
     /// The same applies to instances.      
-    Default,
+    ImplicitExport,
     /// By default visible within given namespace but can be imported by name.
     /// This is for unexported anonymous implementations as well as named
     /// implementations.
