@@ -56,6 +56,9 @@ pub enum TopLevelItemKind {
     ConstDefinition(ConstDefinition),
     ClassDefinition(ClassDefinition),
     InstanceDefinition(InstanceDefinition),
+    NameImport(Name),
+    MethodsImport(Name),
+    InstanceImport(Name),
 }
 
 /// instance $name? for $type_boound { $body }
@@ -626,6 +629,9 @@ impl classy_sexpr::ToSExpr for TopLevelItemKind {
             TopLevelItemKind::ClassDefinition(def) => sexpr!($def),
             TopLevelItemKind::ConstDefinition(def) => sexpr!($def),
             TopLevelItemKind::InstanceDefinition(def) => sexpr!($def),
+            TopLevelItemKind::NameImport(name) => sexpr!((import $name)),
+            TopLevelItemKind::InstanceImport(name) => sexpr!((import instance $name)),
+            TopLevelItemKind::MethodsImport(name) => sexpr!((import methods $name)),
         }
     }
 }

@@ -106,6 +106,11 @@ impl<'source> Parser<'source> {
                     id: DUMMY_AST_ID,
                     kind: ast::TopLevelItemKind::InstanceDefinition(instance_def),
                 });
+            } else if let Ok(import) = self.parse_import() {
+                items.push(ast::TopLevelItem {
+                    id: DUMMY_AST_ID,
+                    kind: import,
+                })
             } else if let Ok(_) = self.match_token(TokenType::Semicolon) {
                 // just do nothing, eat hanging semicolons
             } else {
@@ -120,6 +125,23 @@ impl<'source> Parser<'source> {
                 return Err(self.errors.clone());
             }
         }
+    }
+
+    fn parse_import(&mut self) -> ParseRes<ast::TopLevelItemKind> {
+        self.match_token(TokenType::Import)?;
+        if self.match_token(TokenType::Methods).is_ok() {
+            let path = self.parse_name()?;
+            let _ = self.expect_token(TokenType::Semicolon);
+            return Ok(ast::TopLevelItemKind::MethodsImport(path));
+        }
+        if self.match_token(TokenType::Instance).is_ok() {
+            let path = self.parse_name()?;
+            let _ = self.expect_token(TokenType::Semicolon);
+            return Ok(ast::TopLevelItemKind::InstanceImport(path));
+        }
+        let path = self.parse_name()?;
+        let _ = self.expect_token(TokenType::Semicolon);
+        Ok(ast::TopLevelItemKind::NameImport(path))
     }
 
     fn parse_instance_definition(&mut self) -> ParseRes<ast::InstanceDefinition> {

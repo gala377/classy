@@ -391,6 +391,18 @@ pub trait Folder: Sized {
     fn fold_class_methods_block_method(&mut self, method: Method<FuncDecl>) -> Method<FuncDecl> {
         fold_class_methods_block_method(self, method)
     }
+
+    fn fold_name_import(&mut self, name: Name) -> Name {
+        name
+    }
+
+    fn fold_instance_import(&mut self, name: Name) -> Name {
+        name
+    }
+
+    fn fold_methods_import(&mut self, name: Name) -> Name {
+        name
+    }
 }
 
 fn fold_adt_unit_constructor(folder: &mut impl Folder, name: Name, case: String) -> ExprKind {
@@ -433,6 +445,15 @@ pub fn fold_top_level_item_kind<F: Folder>(
         }
         TopLevelItemKind::ClassDefinition(def) => {
             TopLevelItemKind::ClassDefinition(folder.fold_class_definition(def))
+        }
+        TopLevelItemKind::NameImport(name) => {
+            TopLevelItemKind::NameImport(folder.fold_name_import(name))
+        }
+        TopLevelItemKind::MethodsImport(name) => {
+            TopLevelItemKind::MethodsImport(folder.fold_methods_import(name))
+        }
+        TopLevelItemKind::InstanceImport(name) => {
+            TopLevelItemKind::InstanceImport(folder.fold_instance_import(name))
         }
     }
 }

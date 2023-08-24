@@ -270,6 +270,12 @@ pub trait Visitor<'ast>: Sized {
     fn visit_type_bound(&mut self, head: &'ast ast::Name, args: &'ast [ast::Typ]) {
         walk_type_bound(self, head, args)
     }
+
+    fn visit_name_import(&mut self, _node: &'ast ast::Name) {}
+
+    fn visit_instance_import(&mut self, _node: &'ast ast::Name) {}
+
+    fn visit_methods_import(&mut self, _node: &'ast ast::Name) {}
 }
 
 pub fn walk_program<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::SourceFile) {
@@ -287,6 +293,9 @@ pub fn walk_top_level_item_kind<'ast, V: Visitor<'ast>>(
         ast::TopLevelItemKind::TypeDefinition(t_def) => v.visit_type_def(t_def),
         ast::TopLevelItemKind::MethodsBlock(meth) => v.visit_methods_block(meth),
         ast::TopLevelItemKind::ConstDefinition(def) => v.visit_const_definition(def),
+        ast::TopLevelItemKind::NameImport(def) => v.visit_name_import(def),
+        ast::TopLevelItemKind::InstanceImport(def) => v.visit_instance_import(def),
+        ast::TopLevelItemKind::MethodsImport(def) => v.visit_methods_import(def),
         t => todo!("{t:?}"),
     }
 }
