@@ -2473,4 +2473,18 @@ mod tests {
             })
         ))
     }
+
+    ptest! {
+        top_level_imports,
+        r#"
+            import foo::bar
+            import methods foo::bar
+            import instance foo::bar
+        "#,
+        sexpr!((
+            (import foo::bar)
+            (import methods foo::bar)
+            (import instance foo::bar)
+        ))
+    }
 }
