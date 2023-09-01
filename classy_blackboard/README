@@ -50,3 +50,14 @@ Maybe if t1 implements Clone(t1) Does Option(t1) implement as_bool() Maybe if t1
 == bool
 
 For now in case of ambiguiteies we can just return error.
+
+
+Step 1.
+
+First what we want to write is:
+
+there is struct forall a . { Show(a) } => Foo(a)
+there is typeclass Show(a) { show: (a) -> String }
+there is instance Show(Int)
+
+does Foo(Int) typecheck? 
