@@ -81,7 +81,7 @@ impl Database {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Goal {
     pub head: TyRef,
     pub args: Vec<Ty>,
@@ -90,6 +90,19 @@ pub struct Goal {
 struct Solver<'db> {
     pub goals: Vec<Goal>,
     database: &'db Database,
+}
+
+struct Choice {
+    goals: Vec<Goal>,
+}
+
+impl Choice {
+    fn new() -> Self {
+        Choice { goals: Vec::new() }
+    }
+    fn push_goal(&mut self, goal: Goal) {
+        self.goals.push(goal);
+    }
 }
 
 use ControlFlow::*;
@@ -103,7 +116,7 @@ impl<'db> Solver<'db> {
     }
 
     pub fn solve(&mut self) -> bool {
-        println!("Runbning solver...");
+        println!("Running solver...");
         println!("Goals: {:#?}", self.goals);
         while let Some(goal) = self.goals.pop() {
             match self.solve_goal(goal) {
@@ -148,7 +161,6 @@ impl<'db> Solver<'db> {
 
     pub fn find_instance(&mut self, head: TyRef, args: Vec<Ty>) -> ControlFlow<bool> {
         println!("Type is a class");
-        let mut instance_found = false;
         let instances = self
             .database
             .instances
@@ -157,44 +169,62 @@ impl<'db> Solver<'db> {
             .cloned()
             .collect::<Vec<_>>();
         println!("Instances: {:#?}", instances);
-        'outer: for (
-            index,
-            Instance {
-                args: instance_args,
-                constraints,
-                ..
-            },
-        ) in instances.into_iter().enumerate()
+        let mut choices = Vec::new();
+        for Instance {
+            args: instance_args,
+            constraints,
+            ..
+        } in instances
         {
             assert_eq!(args.len(), instance_args.len());
-            let mut subst = HashMap::new();
-            for (instance_arg, arg) in instance_args.iter().zip(args.iter()) {
-                if !self.unify(instance_arg.clone(), arg.clone(), &mut subst) {
-                    continue 'outer;
-                }
+            self.unify_instance(&args, instance_args, constraints, &mut choices);
+        }
+        // see if any of the instantiations unify
+        // given their respective constraints
+        let current_goals = self.goals.clone();
+        for choice in choices {
+            let mut new_goals = current_goals.clone();
+            new_goals.extend(choice.goals);
+            self.goals = new_goals;
+            if self.solve() {
+                self.goals = current_goals;
+                return Continue(());
             }
-            let mut substituted = constraints.clone();
-            for (generic_index, ty) in &subst {
-                substituted = substituted
-                    .iter()
-                    .map(|c| c.substitute(*generic_index, ty))
-                    .collect();
+        }
+        // if none of the choices worked we have to return false
+        Break(false)
+    }
+
+    fn unify_instance(
+        &mut self,
+        args: &Vec<Ty>,
+        instance_args: Vec<Ty>,
+        constraints: Vec<Constraint>,
+        choices: &mut Vec<Choice>,
+    ) {
+        let mut subst = HashMap::new();
+        for (instance_arg, arg) in instance_args.iter().zip(args.iter()) {
+            if !self.unify(instance_arg.clone(), arg.clone(), &mut subst) {
+                return;
             }
-            println!("Instance {index} unified");
-            instance_found = true;
-            for c in substituted {
-                match c {
-                    Constraint::Eq(_, _) => unimplemented!(),
-                    Constraint::Class(head, args) => {
-                        self.goals.push(Goal { head, args });
-                    }
+        }
+        let mut substituted = constraints.clone();
+        for (generic_index, ty) in &subst {
+            substituted = substituted
+                .iter()
+                .map(|c| c.substitute(*generic_index, ty))
+                .collect();
+        }
+        let mut choice = Choice::new();
+        for c in substituted {
+            match c {
+                Constraint::Eq(_, _) => unimplemented!(),
+                Constraint::Class(head, args) => {
+                    choice.push_goal(Goal { head, args });
                 }
             }
         }
-        if !instance_found {
-            return Break(false);
-        }
-        Continue(())
+        choices.push(choice);
     }
 
     // unify needs to return substitutions for us
