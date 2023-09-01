@@ -1,0 +1,52 @@
+What do we want to achieve?
+
+By providing the solver with the database containing.
+
+1. Type Definitions
+2. Method definitions
+3. Type Class definitions
+4. Type Class instances.
+
+Answer following queries
+
+1. Does type T implement given Type Class?
+2. Does type T have given method?
+3. What methods are visible within the method or instance definition of type T.
+
+With answers in form.
+
+1. Yes - there is a definitive boolean answer to the query For example: Does Int
+   implement Number -> Yes
+2. No - when under no circumnstanes the query is true. For example: Does String
+   implement Number -> No
+3. Maybe - when the query could be true if some conditions would be met. For
+   exmaple: Does Vec(T) implement Clone -> Maybe if T implements Clone Does
+   Vec(T) have method clone -> Maybe if T implements Clone
+
+4. List if visible items - in case of answering the question 3.
+
+The types in the questies can be
+
+- fully applied type
+- scheme type
+- a generic variable
+- a type meta variable
+
+For fully applied types the questions are simple.
+
+For Scheme types one needs to check under what circumstances the inner types of
+the scheme meet the criteria. For example the inner type would need to implement
+a type class or maybe be equal to some type.
+
+For generic variables, they can only appear when fully specified so the the
+constraints are already specified on them so no constraints would need to be
+infered. The only question would be: Does Generic(a) where Show(a) implements
+Show // can be transitive Does Generic(a) where ToString(a) implemments Show(a)
+Does Generic(a) where Convert(a, b) implements Into(b) And so on
+
+A type meta variable is not yet known so not only type bounds will be inferred
+but also a concrente type can. For example: Does Vec(t1) implement clone()?
+Maybe if t1 implements Clone(t1) Does Option(t1) implement as_bool() Maybe if t1
+== bool
+
+For now in case of ambiguiteies we can just return error.
