@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::database::Goal;
 
 /// All type information necessary for inference
@@ -6,6 +8,7 @@ pub struct TypeImpl {
     pub name: String,
     pub type_params: Vec<String>,
     pub constraints: Vec<Constraint>,
+    pub members: HashMap<String, Ty>,
     pub is_class: bool,
 }
 

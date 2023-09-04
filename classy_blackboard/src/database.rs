@@ -27,12 +27,14 @@ impl Database {
         name: String,
         variables: Vec<String>,
         bounds: Vec<Constraint>,
+        members: HashMap<String, Ty>,
     ) -> TyRef {
         let type_impl = TypeImpl {
             name: name.to_string(),
             type_params: variables,
             constraints: bounds,
             is_class: false,
+            members,
         };
         self.add_type_impl(type_impl)
     }
@@ -42,12 +44,14 @@ impl Database {
         name: String,
         variables: Vec<String>,
         bounds: Vec<Constraint>,
+        members: HashMap<String, Ty>,
     ) -> TyRef {
         let type_impl = TypeImpl {
             name: name.to_string(),
             type_params: variables,
             constraints: bounds,
             is_class: true,
+            members,
         };
         self.add_type_impl(type_impl)
     }

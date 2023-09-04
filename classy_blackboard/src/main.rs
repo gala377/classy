@@ -1,3 +1,5 @@
+use std::{collections::HashMap, hash::Hash, mem};
+
 use classy_blackboard::{
     clauses::{Constraint, Ty},
     database::Database,
@@ -7,18 +9,29 @@ use classy_blackboard::{
 pub fn main() {
     let mut db = Database::new();
     // class Show(a)
-    let show = db.add_type_class("Show".to_string(), vec!["a".to_string()], vec![]);
+    let show = db.add_type_class(
+        "Show".to_string(),
+        vec!["a".to_string()],
+        vec![],
+        HashMap::new(),
+    );
     // class Debug(a)
-    let debug = db.add_type_class("Debug".into(), vec!["a".to_string()], vec![]);
+    let debug = db.add_type_class(
+        "Debug".into(),
+        vec!["a".to_string()],
+        vec![],
+        HashMap::new(),
+    );
     // type Int
-    let int = db.add_struct("Int".to_string(), vec![], vec![]);
+    let int = db.add_struct("Int".to_string(), vec![], vec![], HashMap::new());
     // type String
-    let string = db.add_struct("String".into(), vec![], vec![]);
+    let string = db.add_struct("String".into(), vec![], vec![], HashMap::new());
     // type Foo(a)
     let foo = db.add_struct(
         "Foo".to_owned(),
         vec!["a".to_owned()],
         vec![Constraint::Class(show, vec![Ty::Generic(0)])],
+        HashMap::new(),
     );
     // instance for Show(Int)
     db.add_instance_for(show, vec![], vec![], vec![Ty::Ref(int)]);
