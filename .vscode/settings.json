@@ -4,6 +4,7 @@
     },
     "python.formatting.provider": "none",
     "rust-analyzer.linkedProjects": [
+        "./classy_blackboard/Cargo.toml",
         "./classy_blackboard/Cargo.toml"
     ]
 }

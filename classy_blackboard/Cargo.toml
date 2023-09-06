@@ -7,3 +7,6 @@ edition = "2021"
 [[bin]]
 name = "blackboard"
 path = "src/main.rs"
+
+[lib]
+path = "src/lib.rs"
