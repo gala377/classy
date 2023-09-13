@@ -14,6 +14,10 @@ impl CanonilizedGoal {
         let res = mk.canonilize(typ);
         (res, mk.mapping)
     }
+
+    pub fn wrap_ty(typ: Ty) -> Self {
+        Self(typ)
+    }
 }
 
 struct MkCanonical {
@@ -82,7 +86,7 @@ impl Forest {
 type UnboundIndex = usize;
 type GenericIndex = usize;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Substitution {
     mapping: HashMap<usize, Ty>,
 }
@@ -274,6 +278,7 @@ impl<'db> SlgSolver<'db> {
                     continue;
                 }
             };
+            let uncanonilize_mapping = selected_subgoal.uncanonilize_mapping.clone();
             // move the subgoal to the next answer
             self.forest.tables[stack_entry.table_index].strands[strand_index]
                 .selected_subgoal
@@ -281,17 +286,35 @@ impl<'db> SlgSolver<'db> {
                     next_answer: selected_subgoal.next_answer + 1,
                     ..selected_subgoal
                 });
-            // now we have the mapping with answers for the canonicalized goal
-            // we need to
-            // 1. Create new strand that has this subgoal removed and other subgoals
-            //    substituted according to the answer, to do this we need to uncanonilize
-            //    the substitutions
-            // 2. Add the new strand to the table
-            // 3. Pop current stack entry and add a new stack entry for this table and the
-            //    new strand
-            // 4. continue as the new strand might be an answer in which case we will return
-            //    it
-            todo!()
+            // remap substitution to the generics
+            let mut generic_mapping = HashMap::new();
+            for (binder_index, ty) in subst.mapping {
+                let generic_index = uncanonilize_mapping[&binder_index];
+                generic_mapping.insert(generic_index, ty);
+            }
+            let new_ex_clause = prepare_exclause_from_an_answer(
+                &self.forest.tables[stack_entry.table_index].strands[strand_index].exclause,
+                &generic_mapping,
+                selected_subgoal.subgoal_index,
+            );
+            let new_subst = merge_subtitutions_with_generics_substitution(
+                &self.forest.tables[stack_entry.table_index].strands[strand_index].subst,
+                &generic_mapping,
+            );
+            let new_strand = Strand {
+                subst: new_subst,
+                exclause: new_ex_clause,
+                selected_subgoal: None,
+            };
+            self.forest.tables[stack_entry.table_index]
+                .strands
+                .push_back(new_strand);
+            let new_strand_index = self.forest.tables[stack_entry.table_index].strands.len() - 1;
+            self.stack.entries.pop();
+            self.stack.entries.push(StackEntry {
+                table_index: stack_entry.table_index,
+                active_strand_index: Some(new_strand_index),
+            });
         }
     }
 
@@ -360,4 +383,119 @@ enum SubgoalSelection {
     Answer(Substitution),
     Subgoal(usize),
     NoMoreSubgoals,
+}
+
+fn subsitute_generics(map: &HashMap<usize, Ty>, ty: Ty) -> Ty {
+    match ty {
+        Ty::Array(inner) => Ty::Array(Box::new(subsitute_generics(map, *inner))),
+        Ty::Tuple(inner) => Ty::Tuple(
+            inner
+                .into_iter()
+                .map(|t| subsitute_generics(map, t))
+                .collect(),
+        ),
+        Ty::Fn(args, ret) => Ty::Fn(
+            args.into_iter()
+                .map(|t| subsitute_generics(map, t))
+                .collect(),
+            Box::new(subsitute_generics(map, *ret)),
+        ),
+        Ty::Generic(index) if map.contains_key(&index) => map[&index].clone(),
+        Ty::App(head, args) => Ty::App(
+            head,
+            args.into_iter()
+                .map(|t| subsitute_generics(map, t))
+                .collect(),
+        ),
+        t => t,
+    }
+}
+
+fn prepare_exclause_from_an_answer(
+    exclause: &ExClause,
+    generic_mapping: &HashMap<usize, Ty>,
+    selected_subgoal: usize,
+) -> ExClause {
+    let mut new_exclause = exclause.clone();
+    new_exclause.constraints.remove(selected_subgoal);
+    for constraint in new_exclause.constraints.iter_mut() {
+        *constraint = subsitute_generics(&generic_mapping, constraint.clone());
+    }
+    new_exclause.head = subsitute_generics(&generic_mapping, new_exclause.head);
+    new_exclause
+}
+
+fn merge_subtitutions_with_generics_substitution(
+    subst: &Substitution,
+    generic_subst: &HashMap<usize, Ty>,
+) -> Substitution {
+    let mut mapping = HashMap::new();
+    for (index, ty) in subst.mapping.clone() {
+        mapping.insert(index, subsitute_generics(generic_subst, ty));
+    }
+    Substitution { mapping }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use super::*;
+    use crate::{
+        clauses::{Constraint, Ty, TyRef},
+        database::Database,
+        query,
+    };
+
+    fn basic_db_prepare() -> (Database, HashMap<String, TyRef>) {
+        let mut db = Database::new();
+        // class Show(a)
+        let show = db.add_type_class(
+            "Show".to_string(),
+            vec!["a".to_string()],
+            vec![],
+            HashMap::new(),
+        );
+        // class Debug(a)
+        let debug = db.add_type_class(
+            "Debug".into(),
+            vec!["a".to_string()],
+            vec![],
+            HashMap::new(),
+        );
+        // type Int
+        let int = db.add_struct("Int".to_string(), vec![], vec![], HashMap::new());
+        // type String
+        let string = db.add_struct("String".into(), vec![], vec![], HashMap::new());
+        // type Foo(a)
+        let foo = db.add_struct(
+            "Foo".to_owned(),
+            vec!["a".to_owned()],
+            vec![Constraint::Class(show, vec![Ty::Generic(0)])],
+            HashMap::new(),
+        );
+        // instance for Show(Int)
+        db.add_instance_for(show, vec![], vec![], vec![Ty::Ref(int)]);
+        // instance for { Show(a) } => Debug(a)
+        db.add_instance_for(
+            debug,
+            vec!["a".to_string()],
+            vec![Constraint::Class(show, vec![Ty::Generic(0)])],
+            vec![Ty::Generic(0)],
+        );
+        // instance for { Debug(a) } => Debug(Foo(a))
+        db.add_instance_for(
+            debug,
+            vec!["a".to_string()],
+            vec![Constraint::Class(debug, vec![Ty::Generic(0)])],
+            vec![Ty::App(foo, vec![Ty::Generic(0)])],
+        );
+        let mut names = HashMap::new();
+        names.insert("string".into(), string);
+        names.insert("show".into(), show);
+        names.insert("debug".into(), debug);
+        names.insert("int".into(), int);
+        names.insert("foo".into(), foo);
+        (db, names)
+    }
 }

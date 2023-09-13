@@ -90,6 +90,7 @@ impl Database {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ExClause {
     pub head: Ty,
     pub constraints: Vec<Ty>,
