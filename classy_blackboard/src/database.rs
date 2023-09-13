@@ -3,6 +3,7 @@ use std::ops::ControlFlow;
 
 use crate::clauses::{Constraint, Instance, Ty, TyRef, TypeImpl};
 use crate::query;
+use crate::slg::Substitution;
 
 pub struct Database {
     type_impls: Vec<TypeImpl>,
@@ -83,6 +84,15 @@ impl Database {
         solver.goals.append(&mut goals);
         solver.solve()
     }
+
+    pub fn find_matching(&self, _ty: &Ty) -> Vec<(ExClause, Substitution)> {
+        todo!()
+    }
+}
+
+pub struct ExClause {
+    pub head: Ty,
+    pub constraints: Vec<Ty>,
 }
 
 #[derive(Debug, Clone)]
@@ -130,6 +140,7 @@ impl<'db> Solver<'db> {
         }
         true
     }
+
     pub fn solve_goal(&mut self, goal: Goal) -> ControlFlow<bool> {
         println!("Solving goal: {:#?}", goal);
         let ty = &self.database.type_impls[goal.head.0];
@@ -234,6 +245,9 @@ impl<'db> Solver<'db> {
     // unify needs to return substitutions for us
     pub fn unify(&mut self, t1: Ty, t2: Ty, subst: &mut HashMap<usize, Ty>) -> bool {
         match (t1, t2) {
+            (Ty::UnBound(index1), Ty::UnBound(index2)) => false,
+            (Ty::UnBound(index), t2) => false,
+            (t1, Ty::UnBound(index)) => false,
             (t1, Ty::Generic(index)) => {
                 if let Some(previous) = subst.insert(index, t1.clone()) {
                     if previous != t1 {
@@ -295,5 +309,14 @@ impl<'db> Solver<'db> {
             }
             _ => false,
         }
+    }
+
+    pub fn solve_exisits(&mut self, query: query::Exists) {
+        let query::Exists(_, ty) = query;
+        let Ty::App(head, args) = ty else {
+            panic!("Expected type application");
+        };
+        self.goals.push(Goal { head, args });
+        self.solve();
     }
 }

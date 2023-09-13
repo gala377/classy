@@ -44,7 +44,7 @@ impl Constraint {
 
 /// Reference to the database
 /// that cointains type information
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Ty {
     Ref(TyRef),
     Array(Box<Ty>),
@@ -52,6 +52,7 @@ pub enum Ty {
     Fn(Vec<Ty>, Box<Ty>),
     Generic(usize),
     App(TyRef, Vec<Ty>),
+    UnBound(usize),
 }
 
 impl Ty {
@@ -78,6 +79,32 @@ impl Ty {
                     .map(|t| t.substitute(generic_index, with))
                     .collect(),
             ),
+            Ty::UnBound(_) => self.clone(),
+        }
+    }
+
+    pub fn unbound(&self) -> Vec<usize> {
+        let mut res = Vec::new();
+        self.unbound_impl(&mut res);
+        res
+    }
+
+    fn unbound_impl(&self, res: &mut Vec<usize>) {
+        match self {
+            Ty::Ref(_) => {}
+            Ty::Array(inner) => {
+                inner.unbound_impl(res);
+            }
+            Ty::Tuple(inner) => {
+                inner.iter().for_each(|t| t.unbound_impl(res));
+            }
+            Ty::Fn(args, ret) => {
+                args.iter().for_each(|t| t.unbound_impl(res));
+                ret.unbound_impl(res);
+            }
+            Ty::Generic(_) => {}
+            Ty::App(_, args) => args.iter().for_each(|t| t.unbound_impl(res)),
+            Ty::UnBound(usize) => res.push(*usize),
         }
     }
 }
@@ -105,6 +132,7 @@ impl Into<Vec<Goal>> for Ty {
                     args: tail.clone(),
                 }]
             }
+            Ty::UnBound(_) => vec![],
         }
     }
 }
