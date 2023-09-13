@@ -3,30 +3,58 @@ use std::collections::HashMap;
 use classy_blackboard::{
     clauses::{Constraint, Ty, TyRef},
     database::Database,
-    slg::{CanonilizedGoal, Forest, SlgSolver},
+    slg::{CanonilizedGoal, Forest, SlgSolver, Substitution},
 };
 
 pub fn main() {
     let (db, types) = basic_db_prepare();
     let forest = Forest::new();
     let mut solver = SlgSolver::new(&db, forest);
-    let query = Ty::App(types["debug"], vec![Ty::UnBound(0)]);
+    let query = Ty::App(types["int"], vec![]);
     let query = CanonilizedGoal::wrap_ty(query);
+    println!("New line for next solution, press q to quit");
     while let Some(result) = solver.solve(query.clone()) {
         let mut line = String::new();
         std::io::stdin().read_line(&mut line).unwrap();
         match line.as_str().trim() {
             "q" => {
-                println!("\nFinishing for now");
+                println!("Finishing for now");
                 return;
             }
             _ => {
-                println!("\nNext solution");
-                println!("Result: {:#?}", result);
+                println!("Next solution");
+                pretty_print(&db, &result);
             }
         }
     }
     println!("No more solutions");
+    /*
+        TODO:
+        - Check if the instance is well formed
+            for example type
+                type { Show(a) } => Foo(a) {}
+
+                Foo(String) is not well formed because !Show(String) but we accept
+
+                instance for Show(Foo(String))
+
+                which we shouldn't because we can't prove Show(String).
+                So we somehowe need to take this into account and prove types withing the instances
+                to be able to use them, but we would need to propagate bounds, for example
+
+                instance for { Show(a) } => Show(Foo(a))
+
+                is well formed because we can prove Show(a) from the context, but trying to solve just
+                Foo(?0) will give us an error because we don't know how to prove Show(?0)
+    */
+}
+
+fn pretty_print(db: &Database, subst: &Substitution) {
+    for (key, value) in subst.mapping.iter() {
+        let mut buff = String::new();
+        db.make_readable(value.clone(), &mut buff);
+        println!("?{} = {}", key, buff);
+    }
 }
 
 fn basic_db_prepare() -> (Database, HashMap<String, TyRef>) {
@@ -71,6 +99,12 @@ fn basic_db_prepare() -> (Database, HashMap<String, TyRef>) {
         vec!["a".to_string()],
         vec![Constraint::Class(debug, vec![Ty::Generic(0)])],
         vec![Ty::App(foo, vec![Ty::Generic(0)])],
+    );
+    db.add_instance_for(
+        show,
+        vec![],
+        vec![],
+        vec![Ty::App(foo, vec![Ty::Ref(string)])],
     );
     let mut names = HashMap::new();
     names.insert("string".into(), string);

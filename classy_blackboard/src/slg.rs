@@ -1,4 +1,7 @@
-use std::collections::{HashMap, VecDeque};
+use std::{
+    collections::{HashMap, VecDeque},
+    hash::Hash,
+};
 
 use crate::{
     clauses::Ty,
@@ -88,7 +91,13 @@ type GenericIndex = usize;
 
 #[derive(Clone, Debug)]
 pub struct Substitution {
-    mapping: HashMap<usize, Ty>,
+    pub mapping: HashMap<usize, Ty>,
+}
+
+impl From<HashMap<usize, Ty>> for Substitution {
+    fn from(mapping: HashMap<usize, Ty>) -> Self {
+        Self { mapping }
+    }
 }
 
 struct Stack {
