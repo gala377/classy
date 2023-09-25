@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use classy_blackboard::{
     clauses::{Constraint, Ty, TyRef},
     database::Database,
-    slg::{CanonilizedGoal, Forest, SlgSolver, Substitution},
+    slg::{Canonilized, Forest, SlgSolver, Substitution},
 };
 
 pub fn main() {
@@ -11,7 +11,7 @@ pub fn main() {
     let forest = Forest::new();
     let mut solver = SlgSolver::new(&db, forest);
     let query = Ty::App(types["int"], vec![]);
-    let query = CanonilizedGoal::wrap_ty(query);
+    let query = Canonilized::wrap_ty(query);
     println!("New line for next solution, press q to quit");
     while let Some(result) = solver.solve(query.clone()) {
         let mut line = String::new();

@@ -1,0 +1,12 @@
+
+
+@runtime
+@empty
+print: (String) -> ()
+
+test: (a) -> b
+test x = x
+
+main {
+  print "test"
+}

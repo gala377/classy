@@ -20,25 +20,20 @@ mod tests {
             "Show".to_string(),
             vec!["a".to_string()],
             vec![],
-            HashMap::new(),
+            Vec::new(),
         );
         // class Debug(a)
-        let debug = db.add_type_class(
-            "Debug".into(),
-            vec!["a".to_string()],
-            vec![],
-            HashMap::new(),
-        );
+        let debug = db.add_type_class("Debug".into(), vec!["a".to_string()], vec![], Vec::new());
         // type Int
-        let int = db.add_struct("Int".to_string(), vec![], vec![], HashMap::new());
+        let int = db.add_struct("Int".to_string(), vec![], vec![], Vec::new());
         // type String
-        let string = db.add_struct("String".into(), vec![], vec![], HashMap::new());
+        let string = db.add_struct("String".into(), vec![], vec![], Vec::new());
         // type Foo(a)
         let foo = db.add_struct(
             "Foo".to_owned(),
             vec!["a".to_owned()],
             vec![Constraint::Class(show, vec![Ty::Generic(0)])],
-            HashMap::new(),
+            Vec::new(),
         );
         // instance for Show(Int)
         db.add_instance_for(show, vec![], vec![], vec![Ty::Ref(int)]);

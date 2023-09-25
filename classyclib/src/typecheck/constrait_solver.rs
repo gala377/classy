@@ -150,6 +150,13 @@ impl<'ctx> ConstraintSolver<'ctx> {
                     typ: t2,
                 },
             ) if p1 == p2 && t1 == t2 => {}
+            Constraint::Eq(Type::Generic(depth_1, index_1), Type::Generic(depth_2, index_2))
+                if depth_1 != depth_2 || index_1 != index_2 =>
+            {
+                panic!("Cannot unify 2 different generic arguments together")
+            }
+            Constraint::Eq(Type::Generic(_, _), t) if t.is_ref().unwrap() => {}
+            Constraint::Eq(t, Type::Generic(_, _)) if t.is_ref().unwrap() => {}
             Constraint::HasField {
                 t: Type::Struct { fields, .. },
                 field,
@@ -324,8 +331,6 @@ impl<'ctx> ConstraintSolver<'ctx> {
                 }
                 panic!()
             }
-            Constraint::Eq(Type::Generic(_, _), t) if t.is_ref().unwrap() => {}
-            Constraint::Eq(t, Type::Generic(_, _)) if t.is_ref().unwrap() => {}
             c => panic!("Cannot unify constraint {c:?}"),
         }
     }

@@ -4,14 +4,27 @@ use std::{
 };
 
 use crate::{
-    clauses::Ty,
+    clauses::{Instance, Ty, TypeImpl},
     database::{Database, ExClause},
 };
 
-#[derive(Eq, PartialEq, Hash, Clone)]
-pub struct CanonilizedGoal(Ty);
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub enum Goal {
+    Domain(Domain, Box<Goal>),
+    Exists(Canonilized),
+    WellFormed(Ty),
+}
 
-impl CanonilizedGoal {
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub struct Domain {
+    pub type_impl: Vec<TypeImpl>,
+    pub instances: Vec<Instance>,
+}
+
+#[derive(Eq, PartialEq, Hash, Clone)]
+pub struct Canonilized(Ty);
+
+impl Canonilized {
     pub fn mk_canonical(typ: Ty) -> (Self, HashMap<GenericIndex, UnboundIndex>) {
         let mut mk = MkCanonical::new();
         let res = mk.canonilize(typ);
@@ -36,8 +49,8 @@ impl MkCanonical {
         }
     }
 
-    fn canonilize(&mut self, ty: Ty) -> CanonilizedGoal {
-        CanonilizedGoal(self.fold_ty(ty))
+    fn canonilize(&mut self, ty: Ty) -> Canonilized {
+        Canonilized(self.fold_ty(ty))
     }
 
     fn fold_ty(&mut self, ty: Ty) -> Ty {
@@ -66,7 +79,7 @@ impl MkCanonical {
 
 pub struct Forest {
     tables: Vec<Table>,
-    table_goals: HashMap<CanonilizedGoal, usize>,
+    table_goals: HashMap<Goal, usize>,
 }
 
 impl Forest {
@@ -77,8 +90,8 @@ impl Forest {
         }
     }
 
-    pub fn new_table(&mut self, goal: CanonilizedGoal) -> usize {
-        let table = Table::new();
+    pub fn new_table(&mut self, goal: Goal) -> usize {
+        let table = Table::new(goal.clone());
         let index = self.tables.len();
         self.tables.push(table);
         self.table_goals.insert(goal, index);
@@ -141,13 +154,15 @@ struct SelectedSubgoal {
 }
 
 struct Table {
+    goal: Goal,
     strands: VecDeque<Strand>,
     answers: Vec<Substitution>,
 }
 
 impl Table {
-    fn new() -> Self {
+    fn new(goal: Goal) -> Self {
         Self {
+            goal,
             strands: VecDeque::new(),
             answers: vec![],
         }
@@ -171,13 +186,13 @@ impl<'db> SlgSolver<'db> {
         }
     }
 
-    pub fn solve(&mut self, goal: CanonilizedGoal) -> Option<Substitution> {
+    pub fn solve(&mut self, goal: Goal) -> Option<Substitution> {
         let res = self.ensure_answer(self.next_answer, goal);
         self.next_answer += 1;
         res
     }
 
-    pub fn ensure_answer(&mut self, answer: usize, goal: CanonilizedGoal) -> Option<Substitution> {
+    pub fn ensure_answer(&mut self, answer: usize, goal: Goal) -> Option<Substitution> {
         let table_index = self.get_or_create_table_for_goal(goal);
         match self.ensure_answer_from_table(answer, table_index) {
             AnswerRes::Answer(subst) => Some(subst),
@@ -207,7 +222,7 @@ impl<'db> SlgSolver<'db> {
         }
     }
 
-    fn get_or_create_table_for_goal(&mut self, goal: CanonilizedGoal) -> usize {
+    fn get_or_create_table_for_goal(&mut self, goal: Goal) -> usize {
         if self.forest.table_goals.contains_key(&goal) {
             return self.forest.table_goals[&goal];
         }
@@ -369,7 +384,8 @@ impl<'db> SlgSolver<'db> {
         }
         let subgoal_index = strand.exclause.constraints.len() - 1;
         let subgoal = strand.exclause.constraints[subgoal_index].clone();
-        let (goal, mapping) = CanonilizedGoal::mk_canonical(subgoal);
+        let (goal, mapping) = Canonilized::mk_canonical(subgoal);
+        let goal = Goal::Exists(goal);
         let table_index = self.get_or_create_table_for_goal(goal);
         self.forest.tables[table_idx].strands[strand_idx].selected_subgoal =
             Some(SelectedSubgoal {
@@ -443,68 +459,4 @@ fn merge_subtitutions_with_generics_substitution(
         mapping.insert(index, subsitute_generics(generic_subst, ty));
     }
     Substitution { mapping }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::collections::HashMap;
-
-    use super::*;
-    use crate::{
-        clauses::{Constraint, Ty, TyRef},
-        database::Database,
-        query,
-    };
-
-    fn basic_db_prepare() -> (Database, HashMap<String, TyRef>) {
-        let mut db = Database::new();
-        // class Show(a)
-        let show = db.add_type_class(
-            "Show".to_string(),
-            vec!["a".to_string()],
-            vec![],
-            HashMap::new(),
-        );
-        // class Debug(a)
-        let debug = db.add_type_class(
-            "Debug".into(),
-            vec!["a".to_string()],
-            vec![],
-            HashMap::new(),
-        );
-        // type Int
-        let int = db.add_struct("Int".to_string(), vec![], vec![], HashMap::new());
-        // type String
-        let string = db.add_struct("String".into(), vec![], vec![], HashMap::new());
-        // type Foo(a)
-        let foo = db.add_struct(
-            "Foo".to_owned(),
-            vec!["a".to_owned()],
-            vec![Constraint::Class(show, vec![Ty::Generic(0)])],
-            HashMap::new(),
-        );
-        // instance for Show(Int)
-        db.add_instance_for(show, vec![], vec![], vec![Ty::Ref(int)]);
-        // instance for { Show(a) } => Debug(a)
-        db.add_instance_for(
-            debug,
-            vec!["a".to_string()],
-            vec![Constraint::Class(show, vec![Ty::Generic(0)])],
-            vec![Ty::Generic(0)],
-        );
-        // instance for { Debug(a) } => Debug(Foo(a))
-        db.add_instance_for(
-            debug,
-            vec!["a".to_string()],
-            vec![Constraint::Class(debug, vec![Ty::Generic(0)])],
-            vec![Ty::App(foo, vec![Ty::Generic(0)])],
-        );
-        let mut names = HashMap::new();
-        names.insert("string".into(), string);
-        names.insert("show".into(), show);
-        names.insert("debug".into(), debug);
-        names.insert("int".into(), int);
-        names.insert("foo".into(), foo);
-        (db, names)
-    }
 }

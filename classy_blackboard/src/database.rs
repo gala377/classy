@@ -96,7 +96,7 @@ impl Database {
         name: String,
         variables: Vec<String>,
         bounds: Vec<Constraint>,
-        members: HashMap<String, Ty>,
+        members: Vec<(String, Ty)>,
     ) -> TyRef {
         let type_impl = TypeImpl {
             name: name.to_string(),
@@ -113,7 +113,7 @@ impl Database {
         name: String,
         variables: Vec<String>,
         bounds: Vec<Constraint>,
-        members: HashMap<String, Ty>,
+        members: Vec<(String, Ty)>,
     ) -> TyRef {
         let type_impl = TypeImpl {
             name: name.to_string(),
@@ -157,6 +157,9 @@ impl Database {
         solver.solve()
     }
 
+    /// Union given type with all instances and type defnitions and returns
+    /// resulting exclauses alongside a substitution that has been made in order
+    /// to make the union possible.
     pub fn find_matching(&self, ty: &Ty) -> Vec<(ExClause, Substitution)> {
         let mut result = Vec::new();
         // match instances
@@ -218,6 +221,12 @@ impl Database {
     }
 }
 
+/// Union 2 types together and record all substitutions made along the way in
+/// passed map.
+///
+/// Note that substitution rules might be unclear. For example, substitution is.
+/// only recorder when an unboud EXISTS variable (?0) is matched agains other
+/// type. What it means that generic variables do not generate substitutions.
 fn union(t1: Ty, t2: Ty, substituted: &mut HashMap<usize, Ty>) -> Option<()> {
     match (t1, t2) {
         (Ty::UnBound(index), t2) => match substituted.get(&index) {
@@ -228,6 +237,8 @@ fn union(t1: Ty, t2: Ty, substituted: &mut HashMap<usize, Ty>) -> Option<()> {
                 Some(())
             }
         },
+        // TODO: we need to check that generics are substituted consistantly
+        (Ty::Forall(_), Ty::Generic(_)) => Some(()),
         (Ty::App(h1, as1), Ty::App(h2, as2)) if h1 == h2 => {
             if as1.len() != as2.len() {
                 return None;

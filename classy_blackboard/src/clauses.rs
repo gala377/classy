@@ -1,14 +1,12 @@
-use std::collections::HashMap;
-
 use crate::database::Goal;
 
 /// All type information necessary for inference
-#[derive(Debug)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct TypeImpl {
     pub name: String,
     pub type_params: Vec<String>,
     pub constraints: Vec<Constraint>,
-    pub members: HashMap<String, Ty>,
+    pub members: Vec<(String, Ty)>,
     pub is_class: bool,
 }
 
@@ -19,7 +17,7 @@ pub struct TyRef(pub usize);
 
 /// A constraint on the given type
 /// that has to be met
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum Constraint {
     Eq(Ty, Ty),
     Class(TyRef, Vec<Ty>),
@@ -53,6 +51,7 @@ pub enum Ty {
     Generic(usize),
     App(TyRef, Vec<Ty>),
     UnBound(usize),
+    Forall(usize),
 }
 
 impl Ty {
@@ -146,7 +145,7 @@ impl Into<Vec<Goal>> for Ty {
 /// args: [ Vec(a) ]
 /// type_params: [ a ]
 /// constraints: [ Clone(a) ]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Instance {
     pub type_class: TyRef,
     pub args: Vec<Ty>,
