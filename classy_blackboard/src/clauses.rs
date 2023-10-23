@@ -1,5 +1,3 @@
-use crate::database::Goal;
-
 /// All type information necessary for inference
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct TypeImpl {
@@ -117,53 +115,6 @@ impl Ty {
             Ty::App(_, args) => args.iter().for_each(|t| t.unbound_impl(res)),
             Ty::UnBound(usize) => res.push(*usize),
             Ty::Forall(_) => {}
-        }
-    }
-}
-
-impl Into<Vec<Goal>> for Ty {
-    /// Transforms a type into a vector of goals for the type to be well formed.
-    ///
-    /// What it means is that for a type to be well formed all applications
-    /// withing the type have to be well formed. So all applications are
-    /// getting gathered into a vector to be proven later to see if the type can
-    /// exists.
-    ///
-    /// Example:
-    /// ```compile_fail
-    /// type { Show(a) } => MyShow { inner: a }
-    ///
-    /// let b: (MyShow(Int)) -> String = ...
-    /// ````
-    ///
-    /// The constraints generated for `b` are [ MyShow(Int) ] which cannot be
-    /// proven as Int is not Show.
-    ///
-    /// TODO: This should generate WellFormed goals instead of just the Goal
-    fn into(self) -> Vec<Goal> {
-        match self {
-            Ty::Ref(_) => vec![],
-            Ty::Array(inner) => (*inner).into(),
-            Ty::Tuple(inner) => inner
-                .into_iter()
-                .flat_map(|t| <Self as Into<Vec<Goal>>>::into(t))
-                .collect(),
-            Ty::Fn(args, ret) => {
-                let mut goals: Vec<Goal> = (*ret).into();
-                for arg in args {
-                    goals.extend(<Self as Into<Vec<Goal>>>::into(arg));
-                }
-                goals
-            }
-            Ty::Generic(_) => vec![],
-            Ty::App(head, tail) => {
-                vec![Goal {
-                    head,
-                    args: tail.clone(),
-                }]
-            }
-            Ty::UnBound(_) => vec![],
-            Ty::Forall(_) => vec![],
         }
     }
 }

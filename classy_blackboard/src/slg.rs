@@ -155,6 +155,7 @@ struct SelectedSubgoal {
 }
 
 struct Table {
+    #[allow(dead_code)]
     goal: Goal,
     strands: VecDeque<Strand>,
     answers: Vec<Substitution>,
