@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use classy_blackboard::{
     clauses::{Constraint, Ty, TyRef},
     database::Database,
-    slg::{Canonilized, Forest, SlgSolver, Substitution},
+    slg::{Canonilized, Forest, Goal, SlgSolver, Substitution},
 };
 
 pub fn main() {
@@ -13,7 +13,7 @@ pub fn main() {
     let query = Ty::App(types["int"], vec![]);
     let query = Canonilized::wrap_ty(query);
     println!("New line for next solution, press q to quit");
-    while let Some(result) = solver.solve(query.clone()) {
+    while let Some(result) = solver.solve(Goal::Exists(query.clone())) {
         let mut line = String::new();
         std::io::stdin().read_line(&mut line).unwrap();
         match line.as_str().trim() {
@@ -60,29 +60,19 @@ fn pretty_print(db: &Database, subst: &Substitution) {
 fn basic_db_prepare() -> (Database, HashMap<String, TyRef>) {
     let mut db = Database::new();
     // class Show(a)
-    let show = db.add_type_class(
-        "Show".to_string(),
-        vec!["a".to_string()],
-        vec![],
-        HashMap::new(),
-    );
+    let show = db.add_type_class("Show".to_string(), vec!["a".to_string()], vec![], vec![]);
     // class Debug(a)
-    let debug = db.add_type_class(
-        "Debug".into(),
-        vec!["a".to_string()],
-        vec![],
-        HashMap::new(),
-    );
+    let debug = db.add_type_class("Debug".into(), vec!["a".to_string()], vec![], vec![]);
     // type Int
-    let int = db.add_struct("Int".to_string(), vec![], vec![], HashMap::new());
+    let int = db.add_struct("Int".to_string(), vec![], vec![], vec![]);
     // type String
-    let string = db.add_struct("String".into(), vec![], vec![], HashMap::new());
+    let string = db.add_struct("String".into(), vec![], vec![], vec![]);
     // type Foo(a)
     let foo = db.add_struct(
         "Foo".to_owned(),
         vec!["a".to_owned()],
         vec![Constraint::Class(show, vec![Ty::Generic(0)])],
-        HashMap::new(),
+        vec![],
     );
     // instance for Show(Int)
     db.add_instance_for(show, vec![], vec![], vec![Ty::Ref(int)]);

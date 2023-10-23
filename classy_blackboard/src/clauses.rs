@@ -44,17 +44,25 @@ impl Constraint {
 /// that cointains type information
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Ty {
+    // Types refering to the database
     Ref(TyRef),
     Array(Box<Ty>),
     Tuple(Vec<Ty>),
     Fn(Vec<Ty>, Box<Ty>),
+    // A generic variable inside the type
+    // TODO: should support DeBruijn indexes
     Generic(usize),
     App(TyRef, Vec<Ty>),
+    // An Existential variable used in queries. Will be substituted by the possible matches.
     UnBound(usize),
+    // A Universal variable, will not be substituted. Is only well formed if there exists
+    // an instantiation for all possible types matching additional constraints.
     Forall(usize),
 }
 
 impl Ty {
+    /// Substitute a generic variable under the index `generic_index` with the
+    /// type `with` and return the resulting type.
     pub fn substitute(&self, generic_index: usize, with: &Ty) -> Ty {
         match self {
             Ty::Ref(r) => Ty::Ref(*r),
@@ -79,15 +87,19 @@ impl Ty {
                     .collect(),
             ),
             Ty::UnBound(_) => self.clone(),
+            Ty::Forall(_) => self.clone(),
         }
     }
 
+    /// Returns a list of all unbound variables in the type
     pub fn unbound(&self) -> Vec<usize> {
         let mut res = Vec::new();
         self.unbound_impl(&mut res);
         res
     }
 
+    /// Walk the type recursively and collect all unbound variables into a.
+    /// vector
     fn unbound_impl(&self, res: &mut Vec<usize>) {
         match self {
             Ty::Ref(_) => {}
@@ -104,11 +116,30 @@ impl Ty {
             Ty::Generic(_) => {}
             Ty::App(_, args) => args.iter().for_each(|t| t.unbound_impl(res)),
             Ty::UnBound(usize) => res.push(*usize),
+            Ty::Forall(_) => {}
         }
     }
 }
 
 impl Into<Vec<Goal>> for Ty {
+    /// Transforms a type into a vector of goals for the type to be well formed.
+    ///
+    /// What it means is that for a type to be well formed all applications
+    /// withing the type have to be well formed. So all applications are
+    /// getting gathered into a vector to be proven later to see if the type can
+    /// exists.
+    ///
+    /// Example:
+    /// ```compile_fail
+    /// type { Show(a) } => MyShow { inner: a }
+    ///
+    /// let b: (MyShow(Int)) -> String = ...
+    /// ````
+    ///
+    /// The constraints generated for `b` are [ MyShow(Int) ] which cannot be
+    /// proven as Int is not Show.
+    ///
+    /// TODO: This should generate WellFormed goals instead of just the Goal
     fn into(self) -> Vec<Goal> {
         match self {
             Ty::Ref(_) => vec![],
@@ -132,6 +163,7 @@ impl Into<Vec<Goal>> for Ty {
                 }]
             }
             Ty::UnBound(_) => vec![],
+            Ty::Forall(_) => vec![],
         }
     }
 }

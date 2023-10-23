@@ -79,7 +79,10 @@ impl Database {
                 write!(res, ">").unwrap();
             }
             Ty::UnBound(index) => {
-                write!(res, "?{}", index).unwrap();
+                write!(res, "∃{}", index).unwrap();
+            }
+            Ty::Forall(index) => {
+                write!(res, "∀{}", index).unwrap();
             }
         }
     }

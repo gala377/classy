@@ -73,6 +73,7 @@ impl MkCanonical {
                 Box::new(self.fold_ty(*ret)),
             ),
             Ty::UnBound(_) => panic!("Unexpected unbound type variable"),
+            Ty::Forall(_) => panic!("Unexpected forall type variable"),
         }
     }
 }
@@ -228,15 +229,21 @@ impl<'db> SlgSolver<'db> {
         }
         let table_index = self.forest.new_table(goal.clone());
         let table = &mut self.forest.tables[table_index];
-        let matching = self.database.find_matching(&goal.0);
-        for (exclause, subst) in matching {
-            table.strands.push_back(Strand {
-                subst,
-                exclause,
-                selected_subgoal: None,
-            });
+        match goal {
+            Goal::Domain(_, _) => todo!(),
+            Goal::Exists(Canonilized(ty)) => {
+                let matching = self.database.find_matching(&ty);
+                for (exclause, subst) in matching {
+                    table.strands.push_back(Strand {
+                        subst,
+                        exclause,
+                        selected_subgoal: None,
+                    });
+                }
+                table_index
+            }
+            Goal::WellFormed(_) => todo!(),
         }
-        table_index
     }
 
     fn solve_using_stack_top(&mut self) -> Option<Substitution> {
