@@ -88,18 +88,18 @@ impl Database {
         self.names_to_ty.get(name).map(|i| TyRef(*i))
     }
 
-    pub fn find_matching_type(&self, goal: &Goal) -> Vec<(ExClause, Substitution)> {
+    pub fn find_matching_type(&self, _goal: &Goal) -> Vec<(ExClause, Substitution)> {
         unimplemented!()
     }
 
-    pub fn find_matching_instance(&self, goal: &Goal) -> Vec<(ExClause, Substitution)> {
+    pub fn find_matching_instance(&self, _goal: &Goal) -> Vec<(ExClause, Substitution)> {
         unimplemented!()
     }
 
     /// Union given goal with all clauses and return
     /// resulting exclauses alongside a substitution that has been made in order
     /// to make the union possible.
-    pub fn find_matching(&self, goal: &Goal) -> Vec<(ExClause, Substitution)> {
+    pub fn find_matching(&self, _goal: &Goal) -> Vec<(ExClause, Substitution)> {
         unimplemented!()
     }
 }

@@ -1,18 +1,10 @@
-use std::{
-    collections::{HashMap, VecDeque},
-    hash::Hash,
-};
+use std::collections::{HashMap, VecDeque};
 
 use crate::{
     database::Database,
     goal::{ExClause, Goal},
     ty::Ty,
 };
-
-struct MkCanonical {
-    next_id: UnboundIndex,
-    mapping: HashMap<GenericIndex, UnboundIndex>,
-}
 
 pub struct Forest {
     /// All of the instantiated tables
