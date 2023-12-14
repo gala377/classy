@@ -1,19 +1,21 @@
 use std::collections::HashMap;
 
 use classy_blackboard::{
-    clauses::{Constraint, Ty, TyRef},
     database::Database,
-    slg::{Canonilized, Forest, Goal, SlgSolver, Substitution},
+    goal::Goal,
+    slg::{Forest, SlgSolver, Substitution},
+    ty::{Constraint, Ty, TyRef},
 };
 
 pub fn main() {
     let (db, types) = basic_db_prepare();
     let forest = Forest::new();
     let mut solver = SlgSolver::new(&db, forest);
-    let query = Ty::App(types["int"], vec![]);
-    let query = Canonilized::wrap_ty(query);
+    let query = Ty::App(types["show"], vec![Ty::Generic("X".into())]);
+    let goal = Goal::Exists(vec!["X".into()], Box::new(Goal::Atom(query)));
+
     println!("New line for next solution, press q to quit");
-    while let Some(result) = solver.solve(Goal::Exists(query.clone())) {
+    while let Some(result) = solver.solve(goal.clone()) {
         let mut line = String::new();
         std::io::stdin().read_line(&mut line).unwrap();
         match line.as_str().trim() {
@@ -49,11 +51,9 @@ pub fn main() {
     */
 }
 
-fn pretty_print(db: &Database, subst: &Substitution) {
+fn pretty_print(_db: &Database, subst: &Substitution) {
     for (key, value) in subst.mapping.iter() {
-        let mut buff = String::new();
-        db.make_readable(value.clone(), &mut buff);
-        println!("?{} = {}", key, buff);
+        println!("?{key} = {value:?}");
     }
 }
 
@@ -67,11 +67,11 @@ fn basic_db_prepare() -> (Database, HashMap<String, TyRef>) {
     let int = db.add_struct("Int".to_string(), vec![], vec![], vec![]);
     // type String
     let string = db.add_struct("String".into(), vec![], vec![], vec![]);
-    // type Foo(a)
+    // type { Show(a) } => Foo(a)
     let foo = db.add_struct(
         "Foo".to_owned(),
         vec!["a".to_owned()],
-        vec![Constraint::Class(show, vec![Ty::Generic(0)])],
+        vec![Constraint::Class(show, vec![Ty::Generic("X".into())])],
         vec![],
     );
     // instance for Show(Int)
@@ -80,16 +80,17 @@ fn basic_db_prepare() -> (Database, HashMap<String, TyRef>) {
     db.add_instance_for(
         debug,
         vec!["a".to_string()],
-        vec![Constraint::Class(show, vec![Ty::Generic(0)])],
-        vec![Ty::Generic(0)],
+        vec![Constraint::Class(show, vec![Ty::Generic("a".into())])],
+        vec![Ty::Generic("a".into())],
     );
     // instance for { Debug(a) } => Debug(Foo(a))
     db.add_instance_for(
         debug,
         vec!["a".to_string()],
-        vec![Constraint::Class(debug, vec![Ty::Generic(0)])],
-        vec![Ty::App(foo, vec![Ty::Generic(0)])],
+        vec![Constraint::Class(debug, vec![Ty::Generic("a".into())])],
+        vec![Ty::App(foo, vec![Ty::Generic("a".into())])],
     );
+    // instance for Show(Foo(String))
     db.add_instance_for(
         show,
         vec![],

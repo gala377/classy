@@ -4,82 +4,25 @@ use std::{
 };
 
 use crate::{
-    clauses::{Instance, Ty, TypeImpl},
-    database::{Database, ExClause},
+    database::Database,
+    goal::{ExClause, Goal},
+    ty::Ty,
 };
-
-#[derive(Clone, Hash, PartialEq, Eq)]
-pub enum Goal {
-    Domain(Domain, Box<Goal>),
-    Exists(Canonilized),
-    WellFormed(Ty),
-}
-
-#[derive(Clone, Hash, PartialEq, Eq)]
-pub struct Domain {
-    pub type_impl: Vec<TypeImpl>,
-    pub instances: Vec<Instance>,
-}
-
-#[derive(Eq, PartialEq, Hash, Clone)]
-pub struct Canonilized(Ty);
-
-impl Canonilized {
-    pub fn mk_canonical(typ: Ty) -> (Self, HashMap<GenericIndex, UnboundIndex>) {
-        let mut mk = MkCanonical::new();
-        let res = mk.canonilize(typ);
-        (res, mk.mapping)
-    }
-
-    pub fn wrap_ty(typ: Ty) -> Self {
-        Self(typ)
-    }
-}
 
 struct MkCanonical {
     next_id: UnboundIndex,
     mapping: HashMap<GenericIndex, UnboundIndex>,
 }
 
-impl MkCanonical {
-    fn new() -> Self {
-        Self {
-            next_id: 0,
-            mapping: HashMap::new(),
-        }
-    }
-
-    fn canonilize(&mut self, ty: Ty) -> Canonilized {
-        Canonilized(self.fold_ty(ty))
-    }
-
-    fn fold_ty(&mut self, ty: Ty) -> Ty {
-        match ty {
-            Ty::Generic(index) if self.mapping.contains_key(&index) => {
-                Ty::UnBound(*self.mapping.get(&index).unwrap())
-            }
-            Ty::Generic(index) => {
-                let new_index = self.next_id;
-                self.next_id += 1;
-                self.mapping.insert(index, new_index);
-                Ty::UnBound(new_index)
-            }
-            Ty::App(id, args) => Ty::App(id, args.into_iter().map(|t| self.fold_ty(t)).collect()),
-            Ty::Ref(_) => ty,
-            Ty::Array(t) => Ty::Array(Box::new(self.fold_ty(*t))),
-            Ty::Tuple(ts) => Ty::Tuple(ts.into_iter().map(|t| self.fold_ty(t)).collect()),
-            Ty::Fn(args, ret) => Ty::Fn(
-                args.into_iter().map(|t| self.fold_ty(t)).collect(),
-                Box::new(self.fold_ty(*ret)),
-            ),
-            Ty::UnBound(_) => panic!("Unexpected unbound type variable"),
-            Ty::Forall(_) => panic!("Unexpected forall type variable"),
-        }
-    }
-}
-
 pub struct Forest {
+    /// All of the instantiated tables
+    /// This is a mapping where tables[table.table_index] == table
     tables: Vec<Table>,
+    /// A mapping from a goal to a table index of a table instantiated for that
+    /// goal.
+    ///
+    /// So given a goal we this holds:
+    /// tables[table_goals[goal]].goal == goal
     table_goals: HashMap<Goal, usize>,
 }
 
@@ -103,6 +46,7 @@ impl Forest {
 type UnboundIndex = usize;
 type GenericIndex = usize;
 
+/// A substitution from unboud variables to types.
 #[derive(Clone, Debug)]
 pub struct Substitution {
     pub mapping: HashMap<usize, Ty>,
@@ -230,26 +174,24 @@ impl<'db> SlgSolver<'db> {
         }
         let table_index = self.forest.new_table(goal.clone());
         let table = &mut self.forest.tables[table_index];
-        match goal {
-            Goal::Domain(_, _) => todo!(),
-            Goal::Exists(Canonilized(ty)) => {
-                let matching = self.database.find_matching(&ty);
-                for (exclause, subst) in matching {
-                    table.strands.push_back(Strand {
-                        subst,
-                        exclause,
-                        selected_subgoal: None,
-                    });
-                }
-                table_index
-            }
-            Goal::WellFormed(_) => todo!(),
+        let matching = self.database.find_matching(&goal);
+        for (exclause, subst) in matching {
+            table.strands.push_back(Strand {
+                subst,
+                exclause,
+                selected_subgoal: None,
+            });
         }
+        table_index
     }
 
     fn solve_using_stack_top(&mut self) -> Option<Substitution> {
         loop {
+            // get the current stack frame, this stack frame needs to be solved
+            // in this iteration
             let mut stack_entry = self.stack.entries.last()?.clone();
+            // No strand is active for the given stack frame
+            // we need to activate it to have something to solve
             if stack_entry.active_strand_index.is_none() {
                 // activate first strands
                 let Some(strand_index) = self.select_strand(stack_entry.table_index) else {
@@ -257,16 +199,23 @@ impl<'db> SlgSolver<'db> {
                     self.stack.entries.pop();
                     continue;
                 };
+                // Save the active strand index in the stack entry
+                // and continue the loop
                 self.stack.entries.last_mut().unwrap().active_strand_index = Some(strand_index);
                 stack_entry.active_strand_index = Some(strand_index);
             }
-            let strand_index = stack_entry.active_strand_index.unwrap();
+            // Now we know that for sure some strand is active so we can take it
+            let active_strand_index = stack_entry.active_strand_index.unwrap();
             let no_subgoal_selected = self.forest.tables[stack_entry.table_index].strands
-                [strand_index]
+                [active_strand_index]
                 .selected_subgoal
                 .is_none();
+            // We check if the active strand has a subgoal selected if not
+            // we need to select one to solve in this iteration
             if no_subgoal_selected {
-                match self.select_subgoal(&stack_entry, strand_index) {
+                match self.select_subgoal(&stack_entry, active_strand_index) {
+                    // We selected the subgoal that already has an answer computed
+                    // (it has been cashed by previous iterations)
                     SubgoalSelection::Answer(subst) => {
                         // we got an answer pop the stack
                         self.stack.entries.pop();
@@ -281,58 +230,75 @@ impl<'db> SlgSolver<'db> {
                     SubgoalSelection::NoMoreSubgoals => {
                         unreachable!("This should not be returned by select_subgoal")
                     }
-                    // subgoal has been selected nothing to do then
+                    // subgoal has been selected, we can continue with the loop
                     SubgoalSelection::Subgoal(_) => {}
                 };
             }
+            // We are now sure there exists a subgoal to solve
             let selected_subgoal = self.forest.tables[stack_entry.table_index].strands
-                [strand_index]
+                [active_strand_index]
                 .selected_subgoal
                 .clone()
                 .unwrap();
+            // Get the answer to the goal. The answer are substitutions. For example:
+            // 1 -> Int, meaning that replacing var 1 for Int is the answer.
             let subst = match self.ensure_answer_from_table(
                 selected_subgoal.next_answer,
                 selected_subgoal.table_index,
             ) {
+                // We just got an answer to this subgoal, and the answer is this mapping
                 AnswerRes::Answer(subst) => subst,
-                // skip to the next iteration, new table has been pushed to the stack
+                // Skip to the next iteration, new table has been pushed to the stack
                 AnswerRes::SolveUsingStackTop => continue,
                 AnswerRes::NoMoreAnswers => {
                     // no more answers can be derived from this table
                     // we need to pop the strand from the table and select the next one
                     self.forest.tables[stack_entry.table_index]
                         .strands
-                        .remove(strand_index)
+                        .remove(active_strand_index)
                         .unwrap();
-                    // we just remove the active strand as the next iteration of the loop
-                    // will select the next one and return in case there are no more strands
+                    // we just remove the active strand so the next iteration of the loop
+                    // will select the next one and return if there are no more strands
                     self.stack.entries.last_mut().unwrap().active_strand_index = None;
                     continue;
                 }
             };
+            // This maps vars to generics, for example ?0 => a.
             let uncanonilize_mapping = selected_subgoal.uncanonilize_mapping.clone();
-            // move the subgoal to the next answer
-            self.forest.tables[stack_entry.table_index].strands[strand_index]
+            // We got an answer from the subgoal, but there might be more. So we
+            // need to set the subgoal to gives is the next answer when we query it the
+            // next time.
+            self.forest.tables[stack_entry.table_index].strands[active_strand_index]
                 .selected_subgoal
                 .replace(SelectedSubgoal {
                     next_answer: selected_subgoal.next_answer + 1,
                     ..selected_subgoal
                 });
-            // remap substitution to the generics
+            // Remap substitution to the generics.
+            // Basically or substitution only applies to the form with vars but the
+            // original goal had generics in it. So we need to map the vars back to
+            // the generics.
             let mut generic_mapping = HashMap::new();
             for (binder_index, ty) in subst.mapping {
                 let generic_index = uncanonilize_mapping[&binder_index];
                 generic_mapping.insert(generic_index, ty);
             }
+            // Create a new exclause for the table to prove
+            // This is achieved by removing the subgoal we just proven from it
+            // And applyign the substitution we got to the head and rest of the subgoals
             let new_ex_clause = prepare_exclause_from_an_answer(
-                &self.forest.tables[stack_entry.table_index].strands[strand_index].exclause,
+                &self.forest.tables[stack_entry.table_index].strands[active_strand_index].exclause,
                 &generic_mapping,
                 selected_subgoal.subgoal_index,
             );
+            // Merge substitutions we already got within this strand with the new
+            // substitutions we got from the subgoal.
             let new_subst = merge_subtitutions_with_generics_substitution(
-                &self.forest.tables[stack_entry.table_index].strands[strand_index].subst,
+                &self.forest.tables[stack_entry.table_index].strands[active_strand_index].subst,
                 &generic_mapping,
             );
+            // Create a new strand that has new exclause to prove an well
+            // as the new merged substitutions.
             let new_strand = Strand {
                 subst: new_subst,
                 exclause: new_ex_clause,
@@ -343,6 +309,8 @@ impl<'db> SlgSolver<'db> {
                 .push_back(new_strand);
             let new_strand_index = self.forest.tables[stack_entry.table_index].strands.len() - 1;
             self.stack.entries.pop();
+            // To prove the previous strand we need to prove the new one
+            // so we push it on top fo the stack to solve
             self.stack.entries.push(StackEntry {
                 table_index: stack_entry.table_index,
                 active_strand_index: Some(new_strand_index),
@@ -383,17 +351,27 @@ impl<'db> SlgSolver<'db> {
         Some(0)
     }
 
+    // TODO: Remove once the internal todo is solved
+    #[allow(unreachable_code, unused_variables)]
     fn select_next_subgoal(&mut self, table_idx: usize, strand_idx: usize) -> SubgoalSelection {
         let table = &mut self.forest.tables[table_idx];
         let strand = &mut table.strands[strand_idx];
         // we select the last subgoal so its easy to pop it later
-        if strand.exclause.constraints.is_empty() {
+        if strand.exclause.subgoals.is_empty() {
             return SubgoalSelection::NoMoreSubgoals;
         }
-        let subgoal_index = strand.exclause.constraints.len() - 1;
-        let subgoal = strand.exclause.constraints[subgoal_index].clone();
-        let (goal, mapping) = Canonilized::mk_canonical(subgoal);
-        let goal = Goal::Exists(goal);
+        let subgoal_index = strand.exclause.subgoals.len() - 1;
+        let subgoal = strand.exclause.subgoals[subgoal_index].clone();
+        /*
+            TODO:
+                This is where we need to take a subgoal, and unmap it?
+                What we would do before is thtat we would keep all the Generics
+                Within the type and here we would map them to unboud variables.
+                Then we would sabe the mapping how to unmap them back into generics.
+                Depending on how we solve clauses this might be different.
+        */
+        let goal = todo!();
+        let mapping = todo!();
         let table_index = self.get_or_create_table_for_goal(goal);
         self.forest.tables[table_idx].strands[strand_idx].selected_subgoal =
             Some(SelectedSubgoal {
@@ -418,53 +396,38 @@ enum SubgoalSelection {
     NoMoreSubgoals,
 }
 
-fn subsitute_generics(map: &HashMap<usize, Ty>, ty: Ty) -> Ty {
-    match ty {
-        Ty::Array(inner) => Ty::Array(Box::new(subsitute_generics(map, *inner))),
-        Ty::Tuple(inner) => Ty::Tuple(
-            inner
-                .into_iter()
-                .map(|t| subsitute_generics(map, t))
-                .collect(),
-        ),
-        Ty::Fn(args, ret) => Ty::Fn(
-            args.into_iter()
-                .map(|t| subsitute_generics(map, t))
-                .collect(),
-            Box::new(subsitute_generics(map, *ret)),
-        ),
-        Ty::Generic(index) if map.contains_key(&index) => map[&index].clone(),
-        Ty::App(head, args) => Ty::App(
-            head,
-            args.into_iter()
-                .map(|t| subsitute_generics(map, t))
-                .collect(),
-        ),
-        t => t,
-    }
-}
-
+/// Replaces all the generics in the type with the types from the mapping
+/// Also remove selected subgoal from the exclause.
+///
+/// This is to create new goals for the table to prove
 fn prepare_exclause_from_an_answer(
-    exclause: &ExClause,
-    generic_mapping: &HashMap<usize, Ty>,
-    selected_subgoal: usize,
+    _exclause: &ExClause,
+    _generic_mapping: &HashMap<usize, Ty>,
+    _selected_subgoal: usize,
 ) -> ExClause {
-    let mut new_exclause = exclause.clone();
-    new_exclause.constraints.remove(selected_subgoal);
-    for constraint in new_exclause.constraints.iter_mut() {
-        *constraint = subsitute_generics(&generic_mapping, constraint.clone());
-    }
-    new_exclause.head = subsitute_generics(&generic_mapping, new_exclause.head);
-    new_exclause
+    // let mut new_exclause = exclause.clone();
+    // new_exclause.subgoals.remove(selected_subgoal);
+    // for constraint in new_exclause.subgoals.iter_mut() {
+    //     *constraint = subsitute_generics(&generic_mapping, constraint.clone());
+    // }
+    // new_exclause.head = subsitute_generics(&generic_mapping, new_exclause.head);
+    // new_exclause
+    todo!()
 }
 
+/// Honestly I have no idea what this function does
+///
+/// @param subst - Substitutions made to the clause to get the table goal
+/// @param generic_subst - Substitutions made to the clause to get the original
+/// goal
 fn merge_subtitutions_with_generics_substitution(
-    subst: &Substitution,
-    generic_subst: &HashMap<usize, Ty>,
+    _subst: &Substitution,
+    _generic_subst: &HashMap<usize, Ty>,
 ) -> Substitution {
-    let mut mapping = HashMap::new();
-    for (index, ty) in subst.mapping.clone() {
-        mapping.insert(index, subsitute_generics(generic_subst, ty));
-    }
-    Substitution { mapping }
+    // let mut mapping = HashMap::new();
+    // for (index, ty) in subst.mapping.clone() {
+    //     mapping.insert(index, subsitute_generics(generic_subst, ty));
+    // }
+    // Substitution { mapping }
+    todo!()
 }

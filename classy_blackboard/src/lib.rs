@@ -1,4 +1,5 @@
 pub mod clauses;
 pub mod database;
-pub mod query;
+pub mod goal;
 pub mod slg;
+pub mod ty;
