@@ -1,3 +1,5 @@
+#![feature(box_patterns)]
+
 pub mod clauses;
 pub mod database;
 pub mod goal;

@@ -1,4 +1,9 @@
-use crate::{clauses::Clause, ty::Ty};
+use std::collections::HashMap;
+
+use crate::{
+    clauses::Clause,
+    ty::{ClassRef, Ty, TyRef},
+};
 
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub enum Goal {
@@ -8,8 +13,23 @@ pub enum Goal {
     Exists(Vec<String>, Box<Goal>),
     /// forall<T> { Foo(T) }
     Forall(Vec<String>, Box<Goal>),
-    /// Can express any other goal after it has been canonilized
-    Atom(Ty),
+    /// Leaf node for goals, implemented by the user
+    Domain(DomainGoal),
+}
+#[derive(Clone, Hash, PartialEq, Eq, Debug)]
+pub enum DomainGoal {
+    // Does given instance exist and is well formed
+    InstanceExistsAndWellFormed { head: ClassRef, args: Vec<Ty> },
+    // Is there methods block for given type
+    MethodBlockExists { on_type: Ty },
+    // Is given class well formed
+    ClassExists(ClassRef),
+    // Type implementation exists
+    TypeImplExists(TyRef),
+    // Type well formed
+    TypeWellFormed { ty: Ty },
+    // Class well formed
+    ClassWellFormed { head: ClassRef, args: Vec<Ty> },
 }
 
 #[derive(Debug, Clone)]
@@ -18,4 +38,72 @@ pub struct ExClause {
     pub head: Goal,
     // subgoals that need to be satisfied in order to satisfy the main goal
     pub subgoals: Vec<Goal>,
+}
+
+impl Goal {
+    pub fn substitute_generics(&self, substitution: &HashMap<String, Ty>) -> Goal {
+        match self {
+            Goal::Implies(clauses, goal) => Goal::Implies(
+                clauses
+                    .iter()
+                    .map(|clause| clause.substitute_generics(substitution))
+                    .collect(),
+                Box::new(goal.substitute_generics(substitution)),
+            ),
+            Goal::Exists(generics, goal) => {
+                let mut substitution = substitution.clone();
+                for generic in generics {
+                    substitution.remove(generic);
+                }
+                Goal::Exists(
+                    generics.clone(),
+                    Box::new(goal.substitute_generics(&substitution)),
+                )
+            }
+            Goal::Forall(generics, goal) => {
+                let mut substitution = substitution.clone();
+                for generic in generics {
+                    substitution.remove(generic);
+                }
+                Goal::Forall(
+                    generics.clone(),
+                    Box::new(goal.substitute_generics(&substitution)),
+                )
+            }
+            Goal::Domain(domain_goal) => {
+                Goal::Domain(domain_goal.substitute_generics(substitution))
+            }
+        }
+    }
+}
+
+impl DomainGoal {
+    pub fn substitute_generics(&self, substitution: &HashMap<String, Ty>) -> DomainGoal {
+        match self {
+            DomainGoal::InstanceExistsAndWellFormed { head, args } => {
+                DomainGoal::InstanceExistsAndWellFormed {
+                    head: head.clone(),
+                    args: args
+                        .iter()
+                        .map(|ty| ty.substitute_generics(substitution))
+                        .collect(),
+                }
+            }
+            DomainGoal::MethodBlockExists { on_type } => DomainGoal::MethodBlockExists {
+                on_type: on_type.substitute_generics(substitution),
+            },
+            DomainGoal::ClassExists(class_ref) => DomainGoal::ClassExists(class_ref.clone()),
+            DomainGoal::TypeImplExists(ty_ref) => DomainGoal::TypeImplExists(*ty_ref),
+            DomainGoal::TypeWellFormed { ty } => DomainGoal::TypeWellFormed {
+                ty: ty.substitute_generics(substitution),
+            },
+            DomainGoal::ClassWellFormed { head, args } => DomainGoal::ClassWellFormed {
+                head: head.clone(),
+                args: args
+                    .iter()
+                    .map(|ty| ty.substitute_generics(substitution))
+                    .collect(),
+            },
+        }
+    }
 }

@@ -1,7 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::{
-    database::Database,
+    database::{Database, MatchResult},
     goal::{ExClause, Goal},
     ty::Ty,
 };
@@ -166,8 +166,13 @@ impl<'db> SlgSolver<'db> {
         }
         let table_index = self.forest.new_table(goal.clone());
         let table = &mut self.forest.tables[table_index];
-        let matching = self.database.find_matching(&goal);
-        for (exclause, subst) in matching {
+        let matching = self.database.find_matching(&goal, todo!(), todo!());
+        for MatchResult {
+            exclause,
+            substitution: subst,
+            ..
+        } in matching
+        {
             table.strands.push_back(Strand {
                 subst,
                 exclause,
