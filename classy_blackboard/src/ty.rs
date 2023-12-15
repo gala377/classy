@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use crate::{database::UniverseIndex, goal::LabelingFunction};
+
 /// Reference to the database
 /// that cointains type information
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -69,6 +71,32 @@ impl Ty {
             Ty::Variable(_) => self.clone(),
             Ty::SynthesizedConstant(_) => self.clone(),
             Ty::Generic(name) => substitution.get(name).unwrap_or(self).clone(),
+        }
+    }
+
+    pub fn max_universe(&self, labeling_function: &dyn LabelingFunction) -> UniverseIndex {
+        match self {
+            Ty::Ref(ty_ref) => UniverseIndex::ROOT,
+            Ty::Array(ty) => ty.max_universe(labeling_function),
+            Ty::Tuple(tys) => tys
+                .iter()
+                .map(|ty| ty.max_universe(labeling_function))
+                .max()
+                .unwrap(),
+            Ty::Fn(args, ret) => args
+                .iter()
+                .map(|ty| ty.max_universe(labeling_function))
+                .max()
+                .unwrap()
+                .max(ret.max_universe(labeling_function)),
+            Ty::App(ty_ref, args) => args
+                .iter()
+                .map(|ty| ty.max_universe(labeling_function))
+                .max()
+                .unwrap(),
+            Ty::Variable(idx) => labeling_function.check_variable(*idx).unwrap(),
+            Ty::SynthesizedConstant(idx) => labeling_function.check_constant(*idx).unwrap(),
+            Ty::Generic(_) => panic!("Generic type in normalized type"),
         }
     }
 }

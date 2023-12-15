@@ -1,8 +1,8 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::{
-    database::{Database, MatchResult},
-    goal::{ExClause, Goal},
+    database::{Database, GenericRef, MatchResult, UniverseIndex, VariableGenerator},
+    goal::{ExClause, Goal, LabelingFunction},
     ty::Ty,
 };
 
@@ -66,6 +66,7 @@ struct Strand {
     subst: Substitution,
     exclause: ExClause,
     selected_subgoal: Option<SelectedSubgoal>,
+    origin: Option<GenericRef>,
 }
 
 #[derive(Clone)]
@@ -107,11 +108,53 @@ impl Table {
     }
 }
 
+impl LabelingFunction for HashMap<usize, UniverseIndex> {
+    fn check_variable(&self, variable: usize) -> Option<UniverseIndex> {
+        self.get(&variable).cloned()
+    }
+
+    fn check_constant(&self, constant: usize) -> Option<UniverseIndex> {
+        self.get(&constant).cloned()
+    }
+
+    fn add_variable(&mut self, variable: usize, universe: UniverseIndex) {
+        assert!(self.insert(variable, universe).is_none())
+    }
+
+    fn add_constant(&mut self, constant: usize, universe: UniverseIndex) {
+        assert!(self.insert(constant, universe).is_none())
+    }
+}
+
+struct VariableGeneratorImpl<'l, 'c> {
+    labeling_function: &'l mut dyn LabelingFunction,
+    next_variable: &'c mut usize,
+}
+
+impl VariableGenerator for VariableGeneratorImpl<'_, '_> {
+    fn next_variable(&mut self, in_universe: UniverseIndex) -> Ty {
+        let variable = *self.next_variable;
+        *self.next_variable += 1;
+        self.labeling_function.add_variable(variable, in_universe);
+        Ty::Variable(variable)
+    }
+
+    fn next_constant(&mut self, in_universe: UniverseIndex) -> Ty {
+        let constant = *self.next_variable;
+        *self.next_variable += 1;
+        self.labeling_function.add_constant(constant, in_universe);
+        Ty::SynthesizedConstant(constant)
+    }
+}
+
 pub struct SlgSolver<'db> {
     forest: Forest,
     stack: Stack,
     database: &'db Database,
     next_answer: usize,
+    labeling_function: HashMap<usize, UniverseIndex>,
+
+    next_variable: usize,
 }
 
 impl<'db> SlgSolver<'db> {
@@ -121,6 +164,8 @@ impl<'db> SlgSolver<'db> {
             stack: Stack { entries: vec![] },
             database,
             next_answer: 0,
+            labeling_function: HashMap::new(),
+            next_variable: 0,
         }
     }
 
@@ -166,17 +211,26 @@ impl<'db> SlgSolver<'db> {
         }
         let table_index = self.forest.new_table(goal.clone());
         let table = &mut self.forest.tables[table_index];
-        let matching = self.database.find_matching(&goal, todo!(), todo!());
+        let current_universe = goal.max_universe(&self.labeling_function);
+        let matching = self.database.find_matching(
+            &goal,
+            current_universe,
+            &mut VariableGeneratorImpl {
+                labeling_function: &mut self.labeling_function,
+                next_variable: &mut self.next_variable,
+            },
+        );
         for MatchResult {
             exclause,
             substitution: subst,
-            ..
+            origin,
         } in matching
         {
             table.strands.push_back(Strand {
                 subst,
                 exclause,
                 selected_subgoal: None,
+                origin,
             });
         }
         table_index
@@ -300,6 +354,11 @@ impl<'db> SlgSolver<'db> {
                 subst: new_subst,
                 exclause: new_ex_clause,
                 selected_subgoal: None,
+                // copy the origin of the substitutions we got
+                // TODO: Is this correct? We should probably forward origin from the answer
+                origin: self.forest.tables[stack_entry.table_index].strands[active_strand_index]
+                    .origin
+                    .clone(),
             };
             self.forest.tables[stack_entry.table_index]
                 .strands
@@ -392,6 +451,8 @@ enum SubgoalSelection {
     Subgoal(usize),
     NoMoreSubgoals,
 }
+
+// TODO: All of the below
 
 /// Replaces all the generics in the type with the types from the mapping
 /// Also remove selected subgoal from the exclause.

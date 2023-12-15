@@ -7,8 +7,15 @@ use crate::{
     ty::{ClassRef, Constraint, InstanceRef, MethodBlockRef, Ty, TyRef},
 };
 
-#[derive(Copy, Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Copy, Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct UniverseIndex(usize);
+
+impl UniverseIndex {
+    pub const ROOT: UniverseIndex = UniverseIndex(0);
+    pub fn next(&self) -> UniverseIndex {
+        UniverseIndex(self.0 + 1)
+    }
+}
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct DefId(usize);

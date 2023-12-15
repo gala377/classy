@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     clauses::Clause,
+    database::UniverseIndex,
     ty::{ClassRef, Ty, TyRef},
 };
 
@@ -16,6 +17,24 @@ pub enum Goal {
     /// Leaf node for goals, implemented by the user
     Domain(DomainGoal),
 }
+
+pub trait LabelingFunction {
+    fn check_variable(&self, variable: usize) -> Option<UniverseIndex>;
+    fn check_constant(&self, constant: usize) -> Option<UniverseIndex>;
+    fn add_variable(&mut self, variable: usize, universe: UniverseIndex);
+    fn add_constant(&mut self, constant: usize, universe: UniverseIndex);
+}
+
+impl Goal {
+    pub fn max_universe(&self, labeling_function: &dyn LabelingFunction) -> UniverseIndex {
+        match self {
+            Goal::Implies(_, goal) => goal.max_universe(labeling_function),
+            Goal::Domain(domain_goal) => domain_goal.max_universe(labeling_function),
+            _ => UniverseIndex::ROOT,
+        }
+    }
+}
+
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub enum DomainGoal {
     // Does given instance exist and is well formed
@@ -30,6 +49,27 @@ pub enum DomainGoal {
     TypeWellFormed { ty: Ty },
     // Class well formed
     ClassWellFormed { head: ClassRef, args: Vec<Ty> },
+}
+
+impl DomainGoal {
+    pub fn max_universe(&self, labeling_function: &dyn LabelingFunction) -> UniverseIndex {
+        match self {
+            DomainGoal::InstanceExistsAndWellFormed { args, .. } => args
+                .iter()
+                .map(|ty| ty.max_universe(labeling_function))
+                .max()
+                .unwrap(),
+            DomainGoal::MethodBlockExists { on_type } => on_type.max_universe(labeling_function),
+            DomainGoal::ClassExists(..) => UniverseIndex::ROOT,
+            DomainGoal::TypeImplExists(..) => UniverseIndex::ROOT,
+            DomainGoal::TypeWellFormed { ty } => ty.max_universe(labeling_function),
+            DomainGoal::ClassWellFormed { args, .. } => args
+                .iter()
+                .map(|ty| ty.max_universe(labeling_function))
+                .max()
+                .unwrap(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
