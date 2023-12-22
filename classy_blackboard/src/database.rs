@@ -2,7 +2,8 @@ use std::collections::HashMap;
 
 use crate::{
     clauses::Clause,
-    goal::{DomainGoal, ExClause, Goal},
+    fold::Folder,
+    goal::{DomainGoal, ExClause, Goal, LabelingFunction},
     slg::Substitution,
     ty::{ClassRef, Constraint, InstanceRef, MethodBlockRef, Ty, TyRef},
 };
@@ -66,9 +67,10 @@ pub enum GenericRef {
     MethodBlock(MethodBlockRef),
 }
 
-pub trait VariableGenerator {
+pub trait VariableContext {
     fn next_variable(&mut self, in_universe: UniverseIndex) -> Ty;
     fn next_constant(&mut self, in_universe: UniverseIndex) -> Ty;
+    fn labeling_function(&mut self) -> &mut dyn LabelingFunction;
 }
 
 struct AnnotatedClause {
@@ -216,7 +218,7 @@ impl Database {
             // ! This is fine.
             // ! Because there can be multiple binders we will increase the universe one per binder
             // ! of there is no paramerter we will not increase the universe
-            type_params.clone(),
+            type_params.len(),
             Box::new(Clause::Implies(
                 Box::new(Clause::Fact(DomainGoal::MethodBlockExists {
                     on_type: on_type.clone(),
@@ -240,7 +242,10 @@ impl Database {
                 constraints.is_empty(),
                 "if there are no type params there are no types to constraint"
             );
-            return Clause::Fact(DomainGoal::ClassExists(class_ref));
+            return Clause::Fact(DomainGoal::ClassWellFormed {
+                head: class_ref.clone(),
+                args: Vec::new(),
+            });
         }
         // we know we have at some type arguments
         let clauses = constraints
@@ -249,14 +254,28 @@ impl Database {
             .collect::<Vec<_>>();
         if clauses.is_empty() {
             Clause::Forall(
-                type_params.clone(),
-                Box::new(Clause::Fact(DomainGoal::ClassExists(class_ref))),
+                type_params.len(),
+                Box::new(Clause::Fact(DomainGoal::ClassWellFormed {
+                    head: class_ref,
+                    args: type_params
+                        .iter()
+                        .enumerate()
+                        .map(|(index, _)| Ty::Generic { scopes: 0, index })
+                        .collect(),
+                })),
             )
         } else {
             Clause::Forall(
-                type_params.clone(),
+                type_params.len(),
                 Box::new(Clause::Implies(
-                    Box::new(Clause::Fact(DomainGoal::ClassExists(class_ref))),
+                    Box::new(Clause::Fact(DomainGoal::ClassWellFormed {
+                        head: class_ref,
+                        args: type_params
+                            .iter()
+                            .enumerate()
+                            .map(|(index, _)| Ty::Generic { scopes: 0, index })
+                            .collect(),
+                    })),
                     clauses,
                 )),
             )
@@ -294,7 +313,7 @@ impl Database {
             // ! This is fine.
             // ! Because there can be multiple binders we will increase the universe one per binder
             // ! of there is no paramerter we will not increase the universe
-            type_params.clone(),
+            type_params.len(),
             Box::new(Clause::Implies(
                 Box::new(Clause::Fact(DomainGoal::InstanceExistsAndWellFormed {
                     head: type_class.clone(),
@@ -319,7 +338,9 @@ impl Database {
                 constraints.is_empty(),
                 "if there are no type params there are no types to constraint"
             );
-            return Clause::Fact(DomainGoal::TypeImplExists(type_ref.clone()));
+            return Clause::Fact(DomainGoal::TypeWellFormed {
+                ty: Ty::Ref(type_ref),
+            });
         }
         // we know we have at some type arguments
         let clauses = constraints
@@ -328,14 +349,32 @@ impl Database {
             .collect::<Vec<_>>();
         if clauses.is_empty() {
             Clause::Forall(
-                type_params.clone(),
-                Box::new(Clause::Fact(DomainGoal::TypeImplExists(type_ref.clone()))),
+                type_params.len(),
+                Box::new(Clause::Fact(DomainGoal::TypeWellFormed {
+                    ty: Ty::App(
+                        type_ref,
+                        type_params
+                            .iter()
+                            .enumerate()
+                            .map(|(index, _)| Ty::Generic { scopes: 0, index })
+                            .collect(),
+                    ),
+                })),
             )
         } else {
             Clause::Forall(
-                type_params.clone(),
+                type_params.len(),
                 Box::new(Clause::Implies(
-                    Box::new(Clause::Fact(DomainGoal::TypeImplExists(type_ref.clone()))),
+                    Box::new(Clause::Fact(DomainGoal::TypeWellFormed {
+                        ty: Ty::App(
+                            type_ref,
+                            type_params
+                                .iter()
+                                .enumerate()
+                                .map(|(index, _)| Ty::Generic { scopes: 0, index })
+                                .collect(),
+                        ),
+                    })),
                     clauses,
                 )),
             )
@@ -388,7 +427,7 @@ impl Database {
         &self,
         goal: &Goal,
         current_universe: UniverseIndex,
-        variable_generator: &mut dyn VariableGenerator,
+        variable_generator: &mut dyn VariableContext,
     ) -> Vec<MatchResult> {
         let mut goal = goal.clone();
         let mut assumptions = Vec::new();
@@ -423,7 +462,7 @@ impl Database {
         clause: &Clause,
         goal: &DomainGoal,
         current_universe: UniverseIndex,
-        variable_generator: &mut dyn VariableGenerator,
+        variable_generator: &mut dyn VariableContext,
         origin: Option<GenericRef>,
     ) -> Option<MatchResult> {
         let clause = self.normalize_clause(&clause, current_universe, variable_generator);
@@ -433,7 +472,7 @@ impl Database {
             Clause::Fact(fact) => (fact, Vec::new()),
             _ => panic!("Clause is not normalized: {clause:?}"),
         };
-        self.unify(goal, &raw_clause)
+        self.unify(goal, &raw_clause, variable_generator)
             .map(|substitution| MatchResult {
                 exclause: ExClause {
                     head: Goal::Domain(raw_clause),
@@ -450,25 +489,196 @@ impl Database {
         &self,
         clause: &Clause,
         current_universe: UniverseIndex,
-        variable_generator: &mut dyn VariableGenerator,
+        variable_generator: &mut dyn VariableContext,
     ) -> Clause {
         let mut clause = clause.clone();
         while let Clause::Forall(generics, next_clause) = clause {
-            let substitution = generics
-                .iter()
-                .cloned()
-                .map(|g| (g, variable_generator.next_variable(current_universe)))
-                .collect();
-            clause = next_clause.substitute_generics(&substitution);
+            // TODO: unwrap foralls and replace generics with constants
+            let constants = (0..(generics))
+                .into_iter()
+                .map(|_| variable_generator.next_constant(current_universe))
+                .collect::<Vec<_>>();
+            todo!()
         }
         clause
     }
 
-    fn unify(&self, _goal: &DomainGoal, _clause: &DomainGoal) -> Option<Substitution> {
-        todo!()
+    fn unify(
+        &self,
+        goal: &DomainGoal,
+        clause: &DomainGoal,
+        variable_generator: &mut dyn VariableContext,
+    ) -> Option<Substitution> {
+        let mut stack = vec![(goal.clone(), clause.clone())];
+        let mut substitution = Substitution::new();
+        macro_rules! subst_stack {
+            () => {
+                let mut substitutor = $crate::substitutor::VariableSubstitutor {
+                    substitutions: &substitution.mapping,
+                };
+                for (g1, g2) in &mut stack {
+                    *g1 = substitutor.fold_domain_goal(g1.clone());
+                    *g2 = substitutor.fold_domain_goal(g2.clone());
+                }
+            };
+        }
+        while let Some((g1, g2)) = stack.pop() {
+            use DomainGoal::*;
+            match (g1, g2) {
+                (TypeWellFormed { ty: ty1 }, TypeWellFormed { ty: ty2 }) => {
+                    self.unify_ty(&ty1, &ty2, &mut substitution, variable_generator)?;
+                    subst_stack!();
+                }
+                (
+                    ClassWellFormed {
+                        head: head1,
+                        args: args1,
+                    },
+                    ClassWellFormed {
+                        head: head2,
+                        args: args2,
+                    },
+                ) if head1 == head2 && args1.len() == args2.len() => {
+                    for (a1, a2) in args1.iter().zip(args2.iter()) {
+                        self.unify_ty(a1, a2, &mut substitution, variable_generator)?;
+                        subst_stack!();
+                    }
+                }
+                (
+                    InstanceExistsAndWellFormed {
+                        head: head1,
+                        args: args1,
+                    },
+                    InstanceExistsAndWellFormed {
+                        head: head2,
+                        args: args2,
+                    },
+                ) if head1 == head2 && args1.len() == args2.len() => {
+                    for (a1, a2) in args1.iter().zip(args2.iter()) {
+                        self.unify_ty(a1, a2, &mut substitution, variable_generator)?;
+                        subst_stack!();
+                    }
+                }
+                (MethodBlockExists { on_type: ty1 }, MethodBlockExists { on_type: ty2 }) => {
+                    self.unify_ty(&ty1, &ty2, &mut substitution, variable_generator)?;
+                    subst_stack!();
+                }
+                _ => return None,
+            }
+        }
+        Some(substitution)
     }
 
-    fn unify_ty(&self, _goal: &Ty, _clause: &Ty) -> Option<Substitution> {
-        todo!()
+    fn unify_ty(
+        &self,
+        t1: &Ty,
+        t2: &Ty,
+        substitutions: &mut Substitution,
+        variable_generator: &mut dyn VariableContext,
+    ) -> Option<()> {
+        let mut stack = vec![(t1.clone(), t2.clone())];
+
+        macro_rules! subst_stack {
+            ($var:expr, $for_t:expr) => {
+                for (t1, t2) in stack.iter_mut() {
+                    *t1 = t1.substitute_variable($var, $for_t);
+                    *t2 = t2.substitute_variable($var, $for_t);
+                }
+            };
+        }
+
+        macro_rules! subst_substitutions {
+            ($var:expr, $for_t:expr) => {
+                for t in substitutions.mapping.values_mut() {
+                    *t = t.substitute_variable($var, $for_t);
+                }
+            };
+        }
+        while let Some((t1, t2)) = stack.pop() {
+            use Ty::*;
+            match (t1, t2) {
+                (Ref(r1), Ref(r2)) if r1 == r2 => {}
+                (Array(t1), Array(t2)) => stack.push((*t1, *t2)),
+                (Tuple(t1), Tuple(t2)) if t1.len() == t2.len() => {
+                    stack.extend(t1.into_iter().zip(t2.into_iter()));
+                }
+                (Fn(args1, ret1), Fn(args2, ret2)) if args1.len() == args2.len() => {
+                    stack.extend(args1.into_iter().zip(args2.into_iter()));
+                    stack.push((*ret1, *ret2));
+                }
+                (Variable(idx1), Variable(idx2)) if idx1 == idx2 => {}
+                (SynthesizedConstant(idx1), SynthesizedConstant(idx2)) if idx1 == idx2 => {}
+                (Generic { .. }, _) | (_, Generic { .. }) => {
+                    panic!("Unexpected generic type in normalized type")
+                }
+                // app { scheme<X> { () -> X }, Int }
+                (App(ty_1, args_1), App(ty_2, args_2))
+                    if ty_1 == ty_2 && args_1.len() == args_2.len() =>
+                {
+                    stack.extend(args_1.into_iter().zip(args_2.into_iter()));
+                }
+                (SynthesizedConstant(c), Variable(v)) | (Variable(v), SynthesizedConstant(c)) => {
+                    let c_universe = variable_generator
+                        .labeling_function()
+                        .check_constant(c)
+                        .unwrap();
+                    let v_universe = variable_generator
+                        .labeling_function()
+                        .check_variable(v)
+                        .unwrap();
+                    if c_universe > v_universe {
+                        println!("Type unification failed because universe check failed");
+                        return None;
+                    }
+                    let for_t = SynthesizedConstant(c);
+                    subst_stack!(v, &for_t);
+                    subst_substitutions!(v, &for_t);
+                    substitutions.add(v, for_t);
+                }
+                (Variable(idx), t) | (t, Variable(idx)) => {
+                    if t.occurence_check(idx) {
+                        println!("Type unification failed because of occurence check");
+                        return None;
+                    }
+                    let constants = t.extract_constants();
+                    let v_universe = variable_generator
+                        .labeling_function()
+                        .check_variable(idx)
+                        .unwrap();
+                    for c in constants {
+                        let c_universe = variable_generator
+                            .labeling_function()
+                            .check_constant(c)
+                            .unwrap();
+                        if c_universe > v_universe {
+                            println!("Type unification failed because universe check failed");
+                            return None;
+                        }
+                    }
+                    let variables = t.extract_variables();
+                    let adjusted_universe = variables.iter().fold(v_universe, |acc, v| {
+                        let v_universe = variable_generator
+                            .labeling_function()
+                            .check_variable(*v)
+                            .unwrap();
+                        acc.min(v_universe)
+                    });
+                    variable_generator
+                        .labeling_function()
+                        .adjust_universe(idx, adjusted_universe);
+                    for v in variables {
+                        variable_generator
+                            .labeling_function()
+                            .adjust_universe(v, adjusted_universe);
+                    }
+
+                    subst_stack!(idx, &t);
+                    subst_substitutions!(idx, &t);
+                    substitutions.add(idx, t);
+                }
+                _ => return None,
+            }
+        }
+        Some(())
     }
 }

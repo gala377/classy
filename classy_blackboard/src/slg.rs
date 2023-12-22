@@ -1,8 +1,10 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::{
-    database::{Database, GenericRef, MatchResult, UniverseIndex, VariableGenerator},
+    database::{Database, GenericRef, MatchResult, UniverseIndex, VariableContext},
+    fold::Folder,
     goal::{ExClause, Goal, LabelingFunction},
+    substitutor::VariableSubstitutor,
     ty::Ty,
 };
 
@@ -50,6 +52,25 @@ impl From<HashMap<usize, Ty>> for Substitution {
     }
 }
 
+impl Substitution {
+    pub fn add(&mut self, index: usize, ty: Ty) {
+        self.mapping.insert(index, ty);
+    }
+
+    pub fn new() -> Self {
+        Self {
+            mapping: HashMap::new(),
+        }
+    }
+
+    pub fn apply(&self, g: &Goal) -> Goal {
+        let mut folder = VariableSubstitutor {
+            substitutions: &self.mapping,
+        };
+        folder.fold_goal(g.clone())
+    }
+}
+
 struct Stack {
     entries: Vec<StackEntry>,
 }
@@ -88,7 +109,7 @@ struct SelectedSubgoal {
     ///  When getting an answer ?0 => Int
     ///  We can then remap it using this map by replacing generic
     ///  corresponding to the ?0 with Int, getting Clone(Vec(Int))
-    uncanonilize_mapping: HashMap<UnboundIndex, GenericIndex>,
+    uncanonilize_mapping: HashMap<Ty, String>,
 }
 
 struct Table {
@@ -124,6 +145,14 @@ impl LabelingFunction for HashMap<usize, UniverseIndex> {
     fn add_constant(&mut self, constant: usize, universe: UniverseIndex) {
         assert!(self.insert(constant, universe).is_none())
     }
+
+    fn adjust_universe(&mut self, var: usize, universe: UniverseIndex) {
+        self.iter_mut().for_each(|(v, u)| {
+            if *v == var {
+                *u = universe;
+            }
+        })
+    }
 }
 
 struct VariableGeneratorImpl<'l, 'c> {
@@ -131,7 +160,7 @@ struct VariableGeneratorImpl<'l, 'c> {
     next_variable: &'c mut usize,
 }
 
-impl VariableGenerator for VariableGeneratorImpl<'_, '_> {
+impl VariableContext for VariableGeneratorImpl<'_, '_> {
     fn next_variable(&mut self, in_universe: UniverseIndex) -> Ty {
         let variable = *self.next_variable;
         *self.next_variable += 1;
@@ -144,6 +173,10 @@ impl VariableGenerator for VariableGeneratorImpl<'_, '_> {
         *self.next_variable += 1;
         self.labeling_function.add_constant(constant, in_universe);
         Ty::SynthesizedConstant(constant)
+    }
+
+    fn labeling_function(&mut self) -> &mut dyn LabelingFunction {
+        self.labeling_function
     }
 }
 
@@ -170,6 +203,13 @@ impl<'db> SlgSolver<'db> {
     }
 
     pub fn solve(&mut self, goal: Goal) -> Option<Substitution> {
+        // TODO: Actually all the generics should be numbers as it was before
+        // TODO: Actually they should be expressed as Debruijn indices
+        // TODO: This is so the caching works as expected.
+        // TODO: Basically if we normalize goals the each goal will get its own table
+        // TODO: So every goal should start in form with no variables just generics and
+        // TODO: somehow descriptors for constants?
+        // TODO: Where constants reference forall scope and generics reference exists
         let res = self.ensure_answer(self.next_answer, goal);
         self.next_answer += 1;
         res
@@ -331,7 +371,7 @@ impl<'db> SlgSolver<'db> {
             // the generics.
             let mut generic_mapping = HashMap::new();
             for (binder_index, ty) in subst.mapping {
-                let generic_index = uncanonilize_mapping[&binder_index];
+                let generic_index = uncanonilize_mapping[&Ty::Variable(binder_index)];
                 generic_mapping.insert(generic_index, ty);
             }
             // Create a new exclause for the table to prove
@@ -418,14 +458,12 @@ impl<'db> SlgSolver<'db> {
         }
         let subgoal_index = strand.exclause.subgoals.len() - 1;
         let subgoal = strand.exclause.subgoals[subgoal_index].clone();
-        /*
-            TODO:
-                This is where we need to take a subgoal, and unmap it?
-                What we would do before is thtat we would keep all the Generics
-                Within the type and here we would map them to unboud variables.
-                Then we would sabe the mapping how to unmap them back into generics.
-                Depending on how we solve clauses this might be different.
-        */
+        let substitution = &strand.subst;
+        let goal = substitution.apply(&subgoal);
+        let max_universe = goal.max_universe(&self.labeling_function);
+        // TODO: This is wrong, we actually cannot noramlize the goal here
+        // TODO: We need to have goal using generics in the "pure form" where
+        // TODO: the ordering of generics starts from 0
         let goal = todo!();
         let mapping = todo!();
         let table_index = self.get_or_create_table_for_goal(goal);

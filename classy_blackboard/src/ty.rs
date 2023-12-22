@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::{database::UniverseIndex, goal::LabelingFunction};
 
 /// Reference to the database
@@ -19,8 +17,11 @@ pub enum Ty {
     /// there exists an instantiation for all possible types matching
     /// additional constraints.
     SynthesizedConstant(usize),
-    /// Placeholder for generic types in clauses
-    Generic(String),
+    /// Placeholder for generic types in clauses expressed as an De Bruijn index
+    Generic {
+        scopes: usize,
+        index: usize,
+    },
 }
 
 /// A reference to a type into a
@@ -47,36 +48,9 @@ pub enum Constraint {
 }
 
 impl Ty {
-    pub fn substitute_generics(&self, substitution: &HashMap<String, Ty>) -> Ty {
-        match self {
-            Ty::Ref(_) => self.clone(),
-            Ty::Array(ty) => Ty::Array(Box::new(ty.substitute_generics(substitution))),
-            Ty::Tuple(tys) => Ty::Tuple(
-                tys.iter()
-                    .map(|ty| ty.substitute_generics(substitution))
-                    .collect(),
-            ),
-            Ty::Fn(args, ret) => Ty::Fn(
-                args.iter()
-                    .map(|ty| ty.substitute_generics(substitution))
-                    .collect(),
-                Box::new(ret.substitute_generics(substitution)),
-            ),
-            Ty::App(ty_ref, args) => Ty::App(
-                *ty_ref,
-                args.iter()
-                    .map(|ty| ty.substitute_generics(substitution))
-                    .collect(),
-            ),
-            Ty::Variable(_) => self.clone(),
-            Ty::SynthesizedConstant(_) => self.clone(),
-            Ty::Generic(name) => substitution.get(name).unwrap_or(self).clone(),
-        }
-    }
-
     pub fn max_universe(&self, labeling_function: &dyn LabelingFunction) -> UniverseIndex {
         match self {
-            Ty::Ref(ty_ref) => UniverseIndex::ROOT,
+            Ty::Ref(_) => UniverseIndex::ROOT,
             Ty::Array(ty) => ty.max_universe(labeling_function),
             Ty::Tuple(tys) => tys
                 .iter()
@@ -89,14 +63,110 @@ impl Ty {
                 .max()
                 .unwrap()
                 .max(ret.max_universe(labeling_function)),
-            Ty::App(ty_ref, args) => args
+            Ty::App(_, args) => args
                 .iter()
                 .map(|ty| ty.max_universe(labeling_function))
                 .max()
                 .unwrap(),
             Ty::Variable(idx) => labeling_function.check_variable(*idx).unwrap(),
             Ty::SynthesizedConstant(idx) => labeling_function.check_constant(*idx).unwrap(),
-            Ty::Generic(_) => panic!("Generic type in normalized type"),
+            Ty::Generic { .. } => panic!("Generic type in normalized type"),
+        }
+    }
+
+    /// Checks if the given variable is contained in the type.
+    /// true if is is, false otherwise.
+    pub fn occurence_check(&self, variable: usize) -> bool {
+        match self {
+            Ty::Ref(_) => false,
+            Ty::Array(ty) => ty.occurence_check(variable),
+            Ty::Tuple(tys) => tys.iter().any(|ty| ty.occurence_check(variable)),
+            Ty::Fn(args, ret) => {
+                args.iter().any(|ty| ty.occurence_check(variable)) || ret.occurence_check(variable)
+            }
+            Ty::App(_, args) => args.iter().any(|ty| ty.occurence_check(variable)),
+            Ty::Variable(idx) => *idx == variable,
+            Ty::SynthesizedConstant(_) => false,
+            Ty::Generic { .. } => false,
+        }
+    }
+
+    pub fn extract_variables(&self) -> Vec<usize> {
+        match self {
+            Ty::Ref(_) => vec![],
+            Ty::Array(ty) => ty.extract_variables(),
+            Ty::Tuple(tys) => tys
+                .iter()
+                .flat_map(|ty| ty.extract_variables())
+                .collect::<Vec<_>>(),
+            Ty::Fn(args, ret) => args
+                .iter()
+                .flat_map(|ty| ty.extract_variables())
+                .chain(ret.extract_variables())
+                .collect::<Vec<_>>(),
+            Ty::App(_, args) => args
+                .iter()
+                .flat_map(|ty| ty.extract_variables())
+                .collect::<Vec<_>>(),
+            Ty::Variable(idx) => vec![*idx],
+            Ty::SynthesizedConstant(_) => vec![],
+            Ty::Generic { .. } => vec![],
+        }
+    }
+
+    pub fn extract_constants(&self) -> Vec<usize> {
+        match self {
+            Ty::Ref(_) => vec![],
+            Ty::Array(ty) => ty.extract_constants(),
+            Ty::Tuple(tys) => tys
+                .iter()
+                .flat_map(|ty| ty.extract_constants())
+                .collect::<Vec<_>>(),
+            Ty::Fn(args, ret) => args
+                .iter()
+                .flat_map(|ty| ty.extract_constants())
+                .chain(ret.extract_constants())
+                .collect::<Vec<_>>(),
+            Ty::App(_, args) => args
+                .iter()
+                .flat_map(|ty| ty.extract_constants())
+                .collect::<Vec<_>>(),
+            Ty::Variable(_) => vec![],
+            Ty::SynthesizedConstant(idx) => vec![*idx],
+            Ty::Generic { .. } => vec![],
+        }
+    }
+
+    pub fn substitute_variable(&self, variable: usize, ty: &Ty) -> Ty {
+        match self {
+            Ty::Ref(_) => self.clone(),
+            Ty::Array(ty) => Ty::Array(Box::new(ty.substitute_variable(variable, ty))),
+            Ty::Tuple(tys) => Ty::Tuple(
+                tys.iter()
+                    .map(|ty| ty.substitute_variable(variable, ty))
+                    .collect(),
+            ),
+            Ty::Fn(args, ret) => Ty::Fn(
+                args.iter()
+                    .map(|ty| ty.substitute_variable(variable, ty))
+                    .collect(),
+                Box::new(ret.substitute_variable(variable, ty)),
+            ),
+            Ty::App(ty_ref, args) => Ty::App(
+                *ty_ref,
+                args.iter()
+                    .map(|ty| ty.substitute_variable(variable, ty))
+                    .collect(),
+            ),
+            Ty::Variable(idx) => {
+                if *idx == variable {
+                    ty.clone()
+                } else {
+                    self.clone()
+                }
+            }
+            Ty::SynthesizedConstant(_) => self.clone(),
+            Ty::Generic { .. } => self.clone(),
         }
     }
 }
