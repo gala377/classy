@@ -4,6 +4,7 @@ use crate::{
     clauses::Clause,
     fold::Folder,
     goal::{DomainGoal, ExClause, Goal, LabelingFunction},
+    normalizer::ClauseNormalizer,
     slg::Substitution,
     ty::{ClassRef, Constraint, InstanceRef, MethodBlockRef, Ty, TyRef},
 };
@@ -15,6 +16,15 @@ impl UniverseIndex {
     pub const ROOT: UniverseIndex = UniverseIndex(0);
     pub fn next(&self) -> UniverseIndex {
         UniverseIndex(self.0 + 1)
+    }
+
+    pub fn collapse(&self, by: UniverseIndex) -> UniverseIndex {
+        assert!(self.0 >= by.0);
+        UniverseIndex(self.0 - by.0)
+    }
+
+    pub fn as_usize(&self) -> usize {
+        self.0
     }
 }
 
@@ -150,9 +160,7 @@ impl Database {
     pub fn get_type_impl_mut(&mut self, ty: TyRef) -> &mut TypeImpl {
         &mut self.type_impls[ty.0]
     }
-}
 
-impl Database {
     /// This method needs to be called after database has been filled with
     /// all the declarations. It will lower all the declarations into clauses
     /// that they can be used by the solver.
@@ -217,7 +225,7 @@ impl Database {
         Clause::Forall(
             // ! This is fine.
             // ! Because there can be multiple binders we will increase the universe one per binder
-            // ! of there is no paramerter we will not increase the universe
+            // ! if there is no paramerter we will not increase the universe
             type_params.len(),
             Box::new(Clause::Implies(
                 Box::new(Clause::Fact(DomainGoal::MethodBlockExists {
@@ -312,7 +320,7 @@ impl Database {
         Clause::Forall(
             // ! This is fine.
             // ! Because there can be multiple binders we will increase the universe one per binder
-            // ! of there is no paramerter we will not increase the universe
+            // ! if there is no paramerter we will not increase the universe
             type_params.len(),
             Box::new(Clause::Implies(
                 Box::new(Clause::Fact(DomainGoal::InstanceExistsAndWellFormed {
@@ -491,16 +499,8 @@ impl Database {
         current_universe: UniverseIndex,
         variable_generator: &mut dyn VariableContext,
     ) -> Clause {
-        let mut clause = clause.clone();
-        while let Clause::Forall(generics, next_clause) = clause {
-            // TODO: unwrap foralls and replace generics with constants
-            let constants = (0..(generics))
-                .into_iter()
-                .map(|_| variable_generator.next_constant(current_universe))
-                .collect::<Vec<_>>();
-            todo!()
-        }
-        clause
+        let normalizer = &mut ClauseNormalizer::new(variable_generator, current_universe);
+        normalizer.fold_clause(clause.clone())
     }
 
     fn unify(

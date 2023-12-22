@@ -3,7 +3,8 @@ use std::collections::{HashMap, VecDeque};
 use crate::{
     database::{Database, GenericRef, MatchResult, UniverseIndex, VariableContext},
     fold::Folder,
-    goal::{ExClause, Goal, LabelingFunction},
+    goal::{CanonicalGoal, ExClause, Goal, LabelingFunction, UnCanonMap},
+    normalizer::GoalNormalizer,
     substitutor::VariableSubstitutor,
     ty::Ty,
 };
@@ -36,9 +37,6 @@ impl Forest {
         index
     }
 }
-
-type UnboundIndex = usize;
-type GenericIndex = usize;
 
 /// A substitution from unboud variables to types.
 #[derive(Clone, Debug)]
@@ -88,6 +86,7 @@ struct Strand {
     exclause: ExClause,
     selected_subgoal: Option<SelectedSubgoal>,
     origin: Option<GenericRef>,
+    labeling: Vec<UniverseIndex>,
 }
 
 #[derive(Clone)]
@@ -109,7 +108,7 @@ struct SelectedSubgoal {
     ///  When getting an answer ?0 => Int
     ///  We can then remap it using this map by replacing generic
     ///  corresponding to the ?0 with Int, getting Clone(Vec(Int))
-    uncanonilize_mapping: HashMap<Ty, String>,
+    uncanonilize_mapping: UnCanonMap,
 }
 
 struct Table {
@@ -185,9 +184,31 @@ pub struct SlgSolver<'db> {
     stack: Stack,
     database: &'db Database,
     next_answer: usize,
-    labeling_function: HashMap<usize, UniverseIndex>,
+}
 
-    next_variable: usize,
+impl LabelingFunction for Vec<UniverseIndex> {
+    fn check_variable(&self, variable: usize) -> Option<UniverseIndex> {
+        self.get(variable).cloned()
+    }
+
+    fn check_constant(&self, constant: usize) -> Option<UniverseIndex> {
+        self.get(constant).cloned()
+    }
+
+    fn add_variable(&mut self, variable: usize, universe: UniverseIndex) {
+        assert!(self.len() == variable);
+        self.push(universe)
+    }
+
+    fn add_constant(&mut self, constant: usize, universe: UniverseIndex) {
+        assert!(self.len() == constant);
+        self.push(universe)
+    }
+
+    fn adjust_universe(&mut self, var: usize, universe: UniverseIndex) {
+        assert!(self.len() > var);
+        self[var] = universe
+    }
 }
 
 impl<'db> SlgSolver<'db> {
@@ -197,25 +218,29 @@ impl<'db> SlgSolver<'db> {
             stack: Stack { entries: vec![] },
             database,
             next_answer: 0,
-            labeling_function: HashMap::new(),
-            next_variable: 0,
         }
     }
 
     pub fn solve(&mut self, goal: Goal) -> Option<Substitution> {
-        // TODO: Actually all the generics should be numbers as it was before
-        // TODO: Actually they should be expressed as Debruijn indices
-        // TODO: This is so the caching works as expected.
-        // TODO: Basically if we normalize goals the each goal will get its own table
-        // TODO: So every goal should start in form with no variables just generics and
-        // TODO: somehow descriptors for constants?
-        // TODO: Where constants reference forall scope and generics reference exists
-        let res = self.ensure_answer(self.next_answer, goal);
+        // TODO
+        // this goal should be normalized somehow so it does
+        // not contain forall and exist goals
+        let mut labeling = Vec::new();
+        let mut next_variable = 0;
+        let mut var_ctx = VariableGeneratorImpl {
+            labeling_function: &mut labeling,
+            next_variable: &mut next_variable,
+        };
+        let mut normalizer = GoalNormalizer::new(&mut var_ctx, UniverseIndex::ROOT);
+        let goal = normalizer.fold_goal(goal);
+        let (canonical_goal, _) = CanonicalGoal::new(goal, &labeling);
+        let res = self.ensure_answer(self.next_answer, canonical_goal);
         self.next_answer += 1;
         res
     }
 
-    pub fn ensure_answer(&mut self, answer: usize, goal: Goal) -> Option<Substitution> {
+    #[tracing::instrument(skip(self))]
+    pub fn ensure_answer(&mut self, answer: usize, goal: CanonicalGoal) -> Option<Substitution> {
         let table_index = self.get_or_create_table_for_goal(goal);
         match self.ensure_answer_from_table(answer, table_index) {
             AnswerRes::Answer(subst) => Some(subst),
@@ -245,21 +270,25 @@ impl<'db> SlgSolver<'db> {
         }
     }
 
-    fn get_or_create_table_for_goal(&mut self, goal: Goal) -> usize {
-        if self.forest.table_goals.contains_key(&goal) {
-            return self.forest.table_goals[&goal];
+    fn get_or_create_table_for_goal(&mut self, mut goal: CanonicalGoal) -> usize {
+        if self.forest.table_goals.contains_key(&goal.goal) {
+            return self.forest.table_goals[&goal.goal];
         }
-        let table_index = self.forest.new_table(goal.clone());
+        let table_index = self.forest.new_table(goal.goal.clone());
         let table = &mut self.forest.tables[table_index];
-        let current_universe = goal.max_universe(&self.labeling_function);
+        // Goal is in canonical form so it is already normalized and has universes
+        // starting from 0
+        let current_universe = goal.max_universe();
+        let mut next_variable = goal.labeling_function.len();
         let matching = self.database.find_matching(
-            &goal,
+            &goal.goal,
             current_universe,
             &mut VariableGeneratorImpl {
-                labeling_function: &mut self.labeling_function,
-                next_variable: &mut self.next_variable,
+                labeling_function: &mut goal.labeling_function,
+                next_variable: &mut next_variable,
             },
         );
+        // matching process created new variables and constants
         for MatchResult {
             exclause,
             substitution: subst,
@@ -271,6 +300,7 @@ impl<'db> SlgSolver<'db> {
                 exclause,
                 selected_subgoal: None,
                 origin,
+                labeling: goal.labeling_function.clone(),
             });
         }
         table_index
@@ -354,7 +384,7 @@ impl<'db> SlgSolver<'db> {
                     continue;
                 }
             };
-            // This maps vars to generics, for example ?0 => a.
+            // This maps variables from the subgoal to the generics in the original goal
             let uncanonilize_mapping = selected_subgoal.uncanonilize_mapping.clone();
             // We got an answer from the subgoal, but there might be more. So we
             // need to set the subgoal to gives is the next answer when we query it the
@@ -365,13 +395,10 @@ impl<'db> SlgSolver<'db> {
                     next_answer: selected_subgoal.next_answer + 1,
                     ..selected_subgoal
                 });
-            // Remap substitution to the generics.
-            // Basically or substitution only applies to the form with vars but the
-            // original goal had generics in it. So we need to map the vars back to
-            // the generics.
+            // Remap the answer to the original goal
             let mut generic_mapping = HashMap::new();
             for (binder_index, ty) in subst.mapping {
-                let generic_index = uncanonilize_mapping[&Ty::Variable(binder_index)];
+                let generic_index = uncanonilize_mapping[binder_index];
                 generic_mapping.insert(generic_index, ty);
             }
             // Create a new exclause for the table to prove
@@ -394,10 +421,12 @@ impl<'db> SlgSolver<'db> {
                 subst: new_subst,
                 exclause: new_ex_clause,
                 selected_subgoal: None,
-                // copy the origin of the substitutions we got
                 // TODO: Is this correct? We should probably forward origin from the answer
                 origin: self.forest.tables[stack_entry.table_index].strands[active_strand_index]
                     .origin
+                    .clone(),
+                labeling: self.forest.tables[stack_entry.table_index].strands[active_strand_index]
+                    .labeling
                     .clone(),
             };
             self.forest.tables[stack_entry.table_index]
@@ -458,21 +487,18 @@ impl<'db> SlgSolver<'db> {
         }
         let subgoal_index = strand.exclause.subgoals.len() - 1;
         let subgoal = strand.exclause.subgoals[subgoal_index].clone();
-        let substitution = &strand.subst;
-        let goal = substitution.apply(&subgoal);
-        let max_universe = goal.max_universe(&self.labeling_function);
-        // TODO: This is wrong, we actually cannot noramlize the goal here
-        // TODO: We need to have goal using generics in the "pure form" where
-        // TODO: the ordering of generics starts from 0
-        let goal = todo!();
-        let mapping = todo!();
-        let table_index = self.get_or_create_table_for_goal(goal);
+        // we apply the substitution and get a goal that has all the bound
+        // variables replaced with the types from the substitution
+        let goal = strand.subst.apply(&subgoal);
+        // We renumber constants and variables to start from 0
+        let (canonical_goal, unmap_variables) = CanonicalGoal::new(goal, &strand.labeling);
+        let table_index = self.get_or_create_table_for_goal(canonical_goal);
         self.forest.tables[table_idx].strands[strand_idx].selected_subgoal =
             Some(SelectedSubgoal {
                 subgoal_index,
                 next_answer: 0,
                 table_index,
-                uncanonilize_mapping: mapping,
+                uncanonilize_mapping: unmap_variables,
             });
         SubgoalSelection::Subgoal(subgoal_index)
     }
@@ -497,33 +523,36 @@ enum SubgoalSelection {
 ///
 /// This is to create new goals for the table to prove
 fn prepare_exclause_from_an_answer(
-    _exclause: &ExClause,
-    _generic_mapping: &HashMap<usize, Ty>,
-    _selected_subgoal: usize,
+    exclause: &ExClause,
+    generic_mapping: &HashMap<usize, Ty>,
+    selected_subgoal: usize,
 ) -> ExClause {
-    // let mut new_exclause = exclause.clone();
-    // new_exclause.subgoals.remove(selected_subgoal);
-    // for constraint in new_exclause.subgoals.iter_mut() {
-    //     *constraint = subsitute_generics(&generic_mapping, constraint.clone());
-    // }
-    // new_exclause.head = subsitute_generics(&generic_mapping, new_exclause.head);
-    // new_exclause
-    todo!()
+    let mut substitutor = VariableSubstitutor {
+        substitutions: generic_mapping,
+    };
+    let mut new_exclause = exclause.clone();
+    new_exclause.subgoals.remove(selected_subgoal);
+
+    for constraint in new_exclause.subgoals.iter_mut() {
+        *constraint = substitutor.fold_goal(constraint.clone());
+    }
+    new_exclause.head = substitutor.fold_goal(new_exclause.head);
+    new_exclause
 }
 
-/// Honestly I have no idea what this function does
-///
-/// @param subst - Substitutions made to the clause to get the table goal
-/// @param generic_subst - Substitutions made to the clause to get the original
-/// goal
+/// Update old substitution with the information from the new one.
+/// This basically means replacing variables in the types of the old subsitution
+/// with the types from the new one
 fn merge_subtitutions_with_generics_substitution(
-    _subst: &Substitution,
-    _generic_subst: &HashMap<usize, Ty>,
+    subst: &Substitution,
+    generic_subst: &HashMap<usize, Ty>,
 ) -> Substitution {
-    // let mut mapping = HashMap::new();
-    // for (index, ty) in subst.mapping.clone() {
-    //     mapping.insert(index, subsitute_generics(generic_subst, ty));
-    // }
-    // Substitution { mapping }
-    todo!()
+    let mut substitutor = VariableSubstitutor {
+        substitutions: generic_subst,
+    };
+    let mut mapping = HashMap::new();
+    for (index, ty) in subst.mapping.clone() {
+        mapping.insert(index, substitutor.fold_ty(ty));
+    }
+    Substitution { mapping }
 }
