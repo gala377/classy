@@ -52,8 +52,7 @@ pub fn main() {
         )],
     });
     database.lower_to_clauses();
-    let forest = Forest::new();
-    let mut solver = SlgSolver::new(&database, forest);
+    let mut forest = Forest::new();
     // let goal = Goal::Forall(
     //     1,
     //     Box::new(Goal::Domain(DomainGoal::TypeWellFormed {
@@ -119,23 +118,24 @@ pub fn main() {
             })),
         )),
     );
-    let result = solver.solve(goal.clone());
-    print_result(result);
 
-    let result = solver.solve(goal.clone());
-    print_result(result);
+    let mut solver = SlgSolver::new(&database, &mut forest, goal.clone());
+    while let Some(result) = solver.next() {
+        print_result(result);
+    }
+    println!("no more solutions");
+
+    let mut solver = SlgSolver::new(&database, &mut forest, goal.clone());
+    while let Some(result) = solver.next() {
+        print_result(result);
+    }
+    println!("no more solutions");
 }
 
-fn print_result(result: Option<Substitution>) {
-    match result {
-        Some(subst) if subst.mapping.is_empty() => {
-            println!("yes");
-        }
-        Some(subst) => {
-            println!("yes: {:?}", subst);
-        }
-        None => {
-            println!("no answers");
-        }
+fn print_result(result: Substitution) {
+    if result.mapping.is_empty() {
+        println!("yes");
+    } else {
+        println!("solution: {:?}", result.mapping);
     }
 }

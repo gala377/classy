@@ -181,13 +181,6 @@ impl VariableContext for VariableGeneratorImpl<'_, '_> {
     }
 }
 
-pub struct SlgSolver<'db> {
-    forest: Forest,
-    stack: Stack,
-    database: &'db Database,
-    next_answer: usize,
-}
-
 impl LabelingFunction for Vec<UniverseIndex> {
     fn check_variable(&self, variable: usize) -> Option<UniverseIndex> {
         self.get(variable).cloned()
@@ -213,13 +206,22 @@ impl LabelingFunction for Vec<UniverseIndex> {
     }
 }
 
-impl<'db> SlgSolver<'db> {
-    pub fn new(database: &'db Database, forest: Forest) -> Self {
+pub struct SlgSolver<'db, 'forest> {
+    forest: &'forest mut Forest,
+    stack: Stack,
+    database: &'db Database,
+    next_answer: usize,
+    goal: Goal,
+}
+
+impl<'db, 'forest> SlgSolver<'db, 'forest> {
+    pub fn new(database: &'db Database, forest: &'forest mut Forest, goal: Goal) -> Self {
         Self {
             forest,
             stack: Stack { entries: vec![] },
             database,
             next_answer: 0,
+            goal,
         }
     }
 
@@ -544,8 +546,6 @@ enum SubgoalSelection {
     NoMoreSubgoals,
 }
 
-// TODO: All of the below
-
 /// Replaces all the generics in the type with the types from the mapping
 /// Also remove selected subgoal from the exclause.
 ///
@@ -583,4 +583,12 @@ fn merge_subtitutions_with_generics_substitution(
         mapping.insert(index, substitutor.fold_ty(ty));
     }
     Substitution { mapping }
+}
+
+impl<'db, 'forest> Iterator for SlgSolver<'db, 'forest> {
+    type Item = Substitution;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.solve(self.goal.clone())
+    }
 }
