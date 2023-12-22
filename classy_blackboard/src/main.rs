@@ -121,6 +121,9 @@ pub fn main() {
     );
     let result = solver.solve(goal.clone());
     print_result(result);
+
+    let result = solver.solve(goal.clone());
+    print_result(result);
 }
 
 fn print_result(result: Option<Substitution>) {
