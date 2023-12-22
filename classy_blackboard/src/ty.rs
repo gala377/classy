@@ -29,7 +29,7 @@ pub enum Ty {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TyRef(pub usize);
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub struct ClassRef(pub usize);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

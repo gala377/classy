@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use tracing::info;
+
 use crate::{
     clauses::Clause,
     fold::Folder,
@@ -431,6 +433,7 @@ impl Database {
     ///     A generator that will be used to generate new variables when
     ///     normalizing the clauses, it should adjust the labeling function
     ///     itself.
+    #[tracing::instrument(skip(self, variable_generator))]
     pub fn find_matching(
         &self,
         goal: &Goal,
@@ -448,11 +451,13 @@ impl Database {
             g => panic!("Goal is not normalized: {g:?}"),
         };
         let mut results = Vec::new();
-        for clause in assumptions {
-            self.match_clause(&clause, &goal, current_universe, variable_generator, None)
+        for clause in &assumptions {
+            info!("Matching assumption: {:?}", clause);
+            self.match_clause(clause, &goal, current_universe, variable_generator, None)
                 .map(|match_result| results.push(match_result));
         }
         for annotated_clause in &self.clauses {
+            info!("Matching clause: {:?}", annotated_clause.clause);
             self.match_clause(
                 &annotated_clause.clause,
                 &goal,
@@ -460,7 +465,15 @@ impl Database {
                 variable_generator,
                 Some(annotated_clause.origin.clone()),
             )
-            .map(|match_result| results.push(match_result));
+            .map(|mut match_result| {
+                info!("Clause matched");
+                if !assumptions.is_empty() {
+                    match_result.exclause.subgoals.iter_mut().for_each(|goal| {
+                        *goal = Goal::Implies(assumptions.clone(), Box::new(goal.clone()))
+                    });
+                }
+                results.push(match_result)
+            });
         }
         results
     }

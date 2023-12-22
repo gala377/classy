@@ -1,5 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 
+use tracing::info;
+
 use crate::{
     database::{Database, GenericRef, MatchResult, UniverseIndex, VariableContext},
     fold::Folder,
@@ -222,9 +224,6 @@ impl<'db> SlgSolver<'db> {
     }
 
     pub fn solve(&mut self, goal: Goal) -> Option<Substitution> {
-        // TODO
-        // this goal should be normalized somehow so it does
-        // not contain forall and exist goals
         let mut labeling = Vec::new();
         let mut next_variable = 0;
         let mut var_ctx = VariableGeneratorImpl {
@@ -233,14 +232,34 @@ impl<'db> SlgSolver<'db> {
         };
         let mut normalizer = GoalNormalizer::new(&mut var_ctx, UniverseIndex::ROOT);
         let goal = normalizer.fold_goal(goal);
-        let (canonical_goal, _) = CanonicalGoal::new(goal, &labeling);
+        let (canonical_goal, unmap) = CanonicalGoal::new(goal, &labeling);
+        let max_var = unmap.len();
         let res = self.ensure_answer(self.next_answer, canonical_goal);
         self.next_answer += 1;
+        let res = res.map(|subst| {
+            let new_mapping = subst
+                .mapping
+                .into_iter()
+                .filter(|(var, val)| {
+                    if var >= &max_var {
+                        return false;
+                    }
+                    if let Ty::SynthesizedConstant(_) = val {
+                        return false;
+                    }
+                    return true;
+                })
+                .collect::<HashMap<_, _>>();
+            Substitution {
+                mapping: new_mapping,
+            }
+        });
         res
     }
 
     #[tracing::instrument(skip(self))]
     pub fn ensure_answer(&mut self, answer: usize, goal: CanonicalGoal) -> Option<Substitution> {
+        info!("Looking for answer to {:?}", goal.goal);
         let table_index = self.get_or_create_table_for_goal(goal);
         match self.ensure_answer_from_table(answer, table_index) {
             AnswerRes::Answer(subst) => Some(subst),
@@ -270,10 +289,13 @@ impl<'db> SlgSolver<'db> {
         }
     }
 
+    #[tracing::instrument(skip(self))]
     fn get_or_create_table_for_goal(&mut self, mut goal: CanonicalGoal) -> usize {
         if self.forest.table_goals.contains_key(&goal.goal) {
+            info!("Table for {:?} already exists", goal.goal);
             return self.forest.table_goals[&goal.goal];
         }
+        info!("Creating table for {:?}", goal.goal);
         let table_index = self.forest.new_table(goal.goal.clone());
         let table = &mut self.forest.tables[table_index];
         // Goal is in canonical form so it is already normalized and has universes
@@ -288,6 +310,10 @@ impl<'db> SlgSolver<'db> {
                 next_variable: &mut next_variable,
             },
         );
+        if matching.is_empty() {
+            info!("No match found for {:?}", goal.goal);
+            return table_index;
+        }
         // matching process created new variables and constants
         for MatchResult {
             exclause,
@@ -295,6 +321,7 @@ impl<'db> SlgSolver<'db> {
             origin,
         } in matching
         {
+            info!("Found match {:?} with substitution {:?}", exclause, subst);
             table.strands.push_back(Strand {
                 subst,
                 exclause,
@@ -398,8 +425,9 @@ impl<'db> SlgSolver<'db> {
             // Remap the answer to the original goal
             let mut generic_mapping = HashMap::new();
             for (binder_index, ty) in subst.mapping {
-                let generic_index = uncanonilize_mapping[binder_index];
-                generic_mapping.insert(generic_index, ty);
+                uncanonilize_mapping.get(binder_index).map(|index| {
+                    generic_mapping.insert(*index, ty);
+                });
             }
             // Create a new exclause for the table to prove
             // This is achieved by removing the subgoal we just proven from it
