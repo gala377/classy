@@ -280,7 +280,7 @@ mod tests {
         let results = solver.collect::<Vec<_>>();
         println!("{results:?}");
         assert_eq!(results.len(), 2);
-        assert!(results[0].mapping[&0] == Ty::Ref(int));
-        assert!(results[1].mapping[&0] == Ty::Ref(string));
+        assert!(results[0].subst.mapping[&0] == Ty::Ref(int));
+        assert!(results[1].subst.mapping[&0] == Ty::Ref(string));
     }
 }

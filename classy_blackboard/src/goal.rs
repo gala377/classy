@@ -49,6 +49,8 @@ pub enum DomainGoal {
     TypeWellFormed { ty: Ty },
     // Class well formed
     ClassWellFormed { head: ClassRef, args: Vec<Ty> },
+    // Find method blocks and instances that contain given method
+    FindMethod { name: String, on_type: Ty },
 }
 
 impl DomainGoal {
@@ -66,6 +68,7 @@ impl DomainGoal {
                 .map(|ty| ty.max_universe(labeling_function))
                 .max()
                 .unwrap(),
+            DomainGoal::FindMethod { on_type, .. } => on_type.max_universe(labeling_function),
         }
     }
 }

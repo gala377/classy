@@ -54,7 +54,7 @@ pub struct TypeClass {
     pub name: String,
     pub type_params: Vec<String>,
     pub constraints: Vec<Constraint>,
-    pub members: Vec<(DefId, Ty)>,
+    pub members: Vec<(String, DefId, Ty)>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -137,6 +137,20 @@ impl Database {
 
     pub fn add_method_block(&mut self, method_block: MethodsBlock) {
         self.method_blocks.push(method_block);
+    }
+
+    pub fn get_method_block(&self, method_block: GenericRef) -> &MethodsBlock {
+        match method_block {
+            GenericRef::MethodBlock(method_block) => &self.method_blocks[method_block.0],
+            _ => panic!("Expected method block"),
+        }
+    }
+
+    pub fn get_instance(&self, instance: GenericRef) -> &Instance {
+        match instance {
+            GenericRef::Instance(reference) => &self.instances[reference.0],
+            _ => panic!("Expected instance"),
+        }
     }
 
     pub fn typeref_from_name(&self, name: &str) -> Option<TyRef> {
@@ -599,6 +613,33 @@ impl Database {
                     self.unify_ty(
                         &ty1,
                         &ty2,
+                        &mut substitution,
+                        variable_generator,
+                        origin.clone(),
+                    )?;
+                    subst_stack!();
+                }
+                (
+                    FindMethod { name, on_type },
+                    MethodBlockExists {
+                        on_type: target_type,
+                    },
+                ) => {
+                    let method_found = match origin.clone() {
+                        Some(reference @ GenericRef::MethodBlock(_)) => self
+                            .get_method_block(reference)
+                            .methods
+                            .iter()
+                            .find(|def| def.name == *name)
+                            .is_some(),
+                        _ => false,
+                    };
+                    if !method_found {
+                        return None;
+                    }
+                    self.unify_ty(
+                        &on_type,
+                        &target_type,
                         &mut substitution,
                         variable_generator,
                         origin.clone(),

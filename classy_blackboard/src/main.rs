@@ -1,7 +1,7 @@
 use classy_blackboard::{
-    database::{Database, Instance, TypeClass, TypeImpl},
+    database::{Database, Definition, Instance, MethodsBlock, TypeClass, TypeImpl},
     goal::{DomainGoal, Goal},
-    slg::{Forest, SlgSolver, Substitution},
+    slg::{Answer, Forest, SlgSolver},
     ty::{Constraint, Ty},
 };
 
@@ -74,6 +74,29 @@ pub fn main() {
         ],
         constraints: vec![],
     });
+    database.add_method_block(MethodsBlock {
+        name: None,
+        on_type: Ty::Ref(int),
+        type_params: vec![],
+        constraints: vec![],
+        methods: vec![Definition {
+            name: "to_string".into(),
+            type_params: vec![],
+            ty: Ty::Fn(vec![], Box::new(Ty::Ref(int))),
+        }],
+    });
+
+    database.add_method_block(MethodsBlock {
+        name: None,
+        on_type: Ty::Ref(int),
+        type_params: vec![],
+        constraints: vec![],
+        methods: vec![Definition {
+            name: "as_string".into(),
+            type_params: vec![],
+            ty: Ty::Fn(vec![], Box::new(Ty::Ref(int))),
+        }],
+    });
     database.lower_to_clauses();
     let query = Goal::Exists(
         1,
@@ -101,14 +124,30 @@ pub fn main() {
         print!("result {}: ", i);
         print_result(result);
     }
+    let query = Goal::Domain(DomainGoal::FindMethod {
+        name: "to_string".into(),
+        on_type: Ty::Ref(int),
+    });
+    let solver = SlgSolver::new(&database, &mut forest, query);
+    let results = solver.take(10).collect::<Vec<_>>();
+    println!("\n\n\n\n");
+    if results.is_empty() {
+        println!("no results");
+    }
+    for (i, result) in results.iter().enumerate() {
+        print!("result {}: ", i);
+        print_result(result);
+    }
 }
 
-fn print_result(result: &Substitution) {
-    if result.mapping.is_empty() {
+fn print_result(result: &Answer) {
+    if result.subst.mapping.is_empty() {
         println!("yes");
-        println!("{:?}", result.origins);
+        println!("answer origin: {:?}", result.origin);
+        println!("substitution origins: {:?}", result.subst.origins);
     } else {
-        println!("{:?}", result.mapping);
-        println!("{:?}", result.origins);
+        println!("substitutions: {:?}", result.subst.mapping);
+        println!("answer origin: {:?}", result.origin);
+        println!("substitution origins: {:?}", result.subst.origins);
     }
 }

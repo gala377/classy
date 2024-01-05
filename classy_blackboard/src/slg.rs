@@ -114,7 +114,7 @@ struct Table {
     #[allow(dead_code)]
     goal: Goal,
     strands: VecDeque<Strand>,
-    answers: Vec<Substitution>,
+    answers: Vec<Answer>,
 }
 
 impl Table {
@@ -222,7 +222,7 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
         }
     }
 
-    pub fn solve(&mut self) -> Option<Substitution> {
+    pub fn solve(&mut self) -> Option<Answer> {
         let goal = self.goal.clone();
         let mut labeling = Vec::new();
         let mut next_variable = 0;
@@ -236,7 +236,7 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
         let max_var = unmap.len();
         let res = self.ensure_answer(self.next_answer, canonical_goal);
         self.next_answer += 1;
-        let res = res.map(|subst| {
+        let res = res.map(|Answer { subst, origin }| {
             let new_mapping = subst
                 .mapping
                 .iter()
@@ -251,16 +251,19 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                     return true;
                 })
                 .collect::<HashMap<_, _>>();
-            Substitution {
-                mapping: new_mapping,
-                origins: subst.origins,
+            Answer {
+                subst: Substitution {
+                    mapping: new_mapping,
+                    origins: subst.origins,
+                },
+                origin,
             }
         });
         res
     }
 
     #[tracing::instrument(skip(self))]
-    pub fn ensure_answer(&mut self, answer: usize, goal: CanonicalGoal) -> Option<Substitution> {
+    pub fn ensure_answer(&mut self, answer: usize, goal: CanonicalGoal) -> Option<Answer> {
         info!("Looking for answer to {:?}", goal.goal);
         let table_index = self.get_or_create_table_for_goal(goal);
         match self.ensure_answer_from_table(answer, table_index) {
@@ -335,7 +338,7 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
         table_index
     }
 
-    fn solve_using_stack_top(&mut self) -> Option<Substitution> {
+    fn solve_using_stack_top(&mut self) -> Option<Answer> {
         loop {
             // get the current stack frame, this stack frame needs to be solved
             // in this iteration
@@ -426,7 +429,7 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                 });
             // Remap the answer to the original goal
             let mut generic_mapping = HashMap::new();
-            for (binder_index, ty) in subst.mapping {
+            for (binder_index, ty) in subst.subst.mapping {
                 uncanonilize_mapping.get(binder_index).map(|index| {
                     generic_mapping.insert(*index, ty);
                 });
@@ -499,6 +502,9 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                     _ => None,
                 })
                 .collect::<HashMap<_, _>>();
+            let origin = self.forest.tables[stack_entry.table_index].strands[strand_index]
+                .origin
+                .clone();
             let mut substitutor = VariableSubstitutor {
                 substitutions: &unmap,
             };
@@ -516,10 +522,11 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                 .remove(strand_index)
                 .unwrap();
             // push the substitutions as the answer
+            let answer = Answer { subst, origin };
             self.forest.tables[stack_entry.table_index]
                 .answers
-                .push(subst.clone());
-            return SubgoalSelection::Answer(subst);
+                .push(answer.clone());
+            return SubgoalSelection::Answer(answer);
         }
         info!(
             "Selected subgoal {:?} for table {}",
@@ -565,14 +572,14 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
 }
 
 enum AnswerRes {
-    Answer(Substitution),
+    Answer(Answer),
     SolveUsingStackTop,
     NoMoreAnswers,
 }
 
 #[derive(Debug)]
 enum SubgoalSelection {
-    Answer(Substitution),
+    Answer(Answer),
     Subgoal(usize),
     NoMoreSubgoals,
 }
@@ -625,9 +632,15 @@ fn merge_subtitutions_with_generics_substitution(
 }
 
 impl<'db, 'forest> Iterator for SlgSolver<'db, 'forest> {
-    type Item = Substitution;
+    type Item = Answer;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.solve()
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct Answer {
+    pub subst: Substitution,
+    pub origin: Option<GenericRef>,
 }

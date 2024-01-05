@@ -100,6 +100,10 @@ pub trait Folder: Sized {
     fn fold_ty_generic(&mut self, scopes: usize, index: usize) -> Ty {
         walk_ty_generic(self, scopes, index)
     }
+
+    fn fold_domain_find_method(&mut self, name: String, on_type: Ty) -> DomainGoal {
+        walk_domain_find_method(self, name, on_type)
+    }
 }
 
 pub fn walk_clause(folder: &mut impl Folder, clause: Clause) -> Clause {
@@ -165,6 +169,7 @@ pub fn walk_domain_goal(folder: &mut impl Folder, goal: DomainGoal) -> DomainGoa
         DomainGoal::ClassWellFormed { head, args } => {
             folder.fold_domain_class_well_formed(head, args)
         }
+        DomainGoal::FindMethod { name, on_type } => folder.fold_domain_find_method(name, on_type),
     }
 }
 
@@ -251,4 +256,11 @@ pub fn walk_ty_synthesized_constant(_folder: &mut impl Folder, idx: usize) -> Ty
 
 pub fn walk_ty_generic(_folder: &mut impl Folder, scopes: usize, index: usize) -> Ty {
     Ty::Generic { scopes, index }
+}
+
+pub fn walk_domain_find_method(folder: &mut impl Folder, name: String, on_type: Ty) -> DomainGoal {
+    DomainGoal::FindMethod {
+        name,
+        on_type: folder.fold_ty(on_type),
+    }
 }
