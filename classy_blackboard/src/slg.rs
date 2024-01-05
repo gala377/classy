@@ -44,22 +44,19 @@ impl Forest {
 #[derive(Clone, Debug)]
 pub struct Substitution {
     pub mapping: HashMap<usize, Ty>,
-}
-
-impl From<HashMap<usize, Ty>> for Substitution {
-    fn from(mapping: HashMap<usize, Ty>) -> Self {
-        Self { mapping }
-    }
+    pub origins: HashMap<usize, Option<GenericRef>>,
 }
 
 impl Substitution {
-    pub fn add(&mut self, index: usize, ty: Ty) {
+    pub fn add(&mut self, index: usize, ty: Ty, origin: Option<GenericRef>) {
         self.mapping.insert(index, ty);
+        self.origins.insert(index, origin);
     }
 
     pub fn new() -> Self {
         Self {
             mapping: HashMap::new(),
+            origins: HashMap::new(),
         }
     }
 
@@ -242,7 +239,8 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
         let res = res.map(|subst| {
             let new_mapping = subst
                 .mapping
-                .into_iter()
+                .iter()
+                .map(|(var, ty)| (var.clone(), ty.clone()))
                 .filter(|(var, val)| {
                     if var >= &max_var {
                         return false;
@@ -255,6 +253,7 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                 .collect::<HashMap<_, _>>();
             Substitution {
                 mapping: new_mapping,
+                origins: subst.origins,
             }
         });
         res
@@ -507,7 +506,10 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
             for (index, ty) in subst.mapping.clone() {
                 mapping.insert(index, substitutor.fold_ty(ty));
             }
-            let subst = Substitution { mapping };
+            let subst = Substitution {
+                mapping,
+                origins: subst.origins,
+            };
             // remove the strand from the table as there is nothing more to do with it
             self.forest.tables[stack_entry.table_index]
                 .strands
@@ -616,7 +618,10 @@ fn merge_subtitutions_with_generics_substitution(
     for (index, ty) in subst.mapping.clone() {
         mapping.insert(index, substitutor.fold_ty(ty));
     }
-    Substitution { mapping }
+    Substitution {
+        mapping,
+        origins: subst.origins.clone(),
+    }
 }
 
 impl<'db, 'forest> Iterator for SlgSolver<'db, 'forest> {
@@ -625,4 +630,10 @@ impl<'db, 'forest> Iterator for SlgSolver<'db, 'forest> {
     fn next(&mut self) -> Option<Self::Item> {
         self.solve()
     }
+}
+
+struct Answer {
+    substitutions: Substitution,
+    // Where does each substitution come from
+    origins: HashMap<usize, GenericRef>,
 }

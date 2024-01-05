@@ -1,5 +1,4 @@
 use classy_blackboard::{
-    clauses::Clause,
     database::{Database, Instance, TypeClass, TypeImpl},
     goal::{DomainGoal, Goal},
     slg::{Forest, SlgSolver, Substitution},
@@ -107,7 +106,9 @@ pub fn main() {
 fn print_result(result: &Substitution) {
     if result.mapping.is_empty() {
         println!("yes");
+        println!("{:?}", result.origins);
     } else {
         println!("{:?}", result.mapping);
+        println!("{:?}", result.origins);
     }
 }

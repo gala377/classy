@@ -493,7 +493,7 @@ impl Database {
             Clause::Fact(fact) => (fact, Vec::new()),
             _ => panic!("Clause is not normalized: {clause:?}"),
         };
-        self.unify(goal, &raw_clause, variable_generator)
+        self.unify(goal, &raw_clause, variable_generator, origin.clone())
             .map(|substitution| MatchResult {
                 exclause: ExClause {
                     head: Goal::Domain(raw_clause),
@@ -525,6 +525,7 @@ impl Database {
         goal: &DomainGoal,
         clause: &DomainGoal,
         variable_generator: &mut dyn VariableContext,
+        origin: Option<GenericRef>,
     ) -> Option<Substitution> {
         let mut stack = vec![(goal.clone(), clause.clone())];
         let mut substitution = Substitution::new();
@@ -543,7 +544,13 @@ impl Database {
             use DomainGoal::*;
             match (g1, g2) {
                 (TypeWellFormed { ty: ty1 }, TypeWellFormed { ty: ty2 }) => {
-                    self.unify_ty(&ty1, &ty2, &mut substitution, variable_generator)?;
+                    self.unify_ty(
+                        &ty1,
+                        &ty2,
+                        &mut substitution,
+                        variable_generator,
+                        origin.clone(),
+                    )?;
                     subst_stack!();
                 }
                 (
@@ -557,7 +564,13 @@ impl Database {
                     },
                 ) if head1 == head2 && args1.len() == args2.len() => {
                     for (a1, a2) in args1.iter().zip(args2.iter()) {
-                        self.unify_ty(a1, a2, &mut substitution, variable_generator)?;
+                        self.unify_ty(
+                            a1,
+                            a2,
+                            &mut substitution,
+                            variable_generator,
+                            origin.clone(),
+                        )?;
                         subst_stack!();
                     }
                 }
@@ -572,12 +585,24 @@ impl Database {
                     },
                 ) if head1 == head2 && args1.len() == args2.len() => {
                     for (a1, a2) in args1.iter().zip(args2.iter()) {
-                        self.unify_ty(a1, a2, &mut substitution, variable_generator)?;
+                        self.unify_ty(
+                            a1,
+                            a2,
+                            &mut substitution,
+                            variable_generator,
+                            origin.clone(),
+                        )?;
                         subst_stack!();
                     }
                 }
                 (MethodBlockExists { on_type: ty1 }, MethodBlockExists { on_type: ty2 }) => {
-                    self.unify_ty(&ty1, &ty2, &mut substitution, variable_generator)?;
+                    self.unify_ty(
+                        &ty1,
+                        &ty2,
+                        &mut substitution,
+                        variable_generator,
+                        origin.clone(),
+                    )?;
                     subst_stack!();
                 }
                 _ => return None,
@@ -592,6 +617,7 @@ impl Database {
         t2: &Ty,
         substitutions: &mut Substitution,
         variable_generator: &mut dyn VariableContext,
+        origin: Option<GenericRef>,
     ) -> Option<()> {
         let mut stack = vec![(t1.clone(), t2.clone())];
 
@@ -650,7 +676,7 @@ impl Database {
                     let for_t = SynthesizedConstant(c);
                     subst_stack!(v, &for_t);
                     subst_substitutions!(v, &for_t);
-                    substitutions.add(v, for_t);
+                    substitutions.add(v, for_t, origin.clone());
                 }
                 (Variable(idx), t) | (t, Variable(idx)) => {
                     if t.occurence_check(idx) {
@@ -691,7 +717,7 @@ impl Database {
 
                     subst_stack!(idx, &t);
                     subst_substitutions!(idx, &t);
-                    substitutions.add(idx, t);
+                    substitutions.add(idx, t, origin.clone());
                 }
                 _ => return None,
             }
