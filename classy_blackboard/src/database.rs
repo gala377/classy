@@ -486,7 +486,7 @@ impl Database {
         variable_generator: &mut dyn VariableContext,
         origin: Option<GenericRef>,
     ) -> Option<MatchResult> {
-        let clause = self.normalize_clause(&clause, current_universe, variable_generator);
+        let (clause, unmap) = self.normalize_clause(&clause, current_universe, variable_generator);
         // extract the inner domain foal and the body of a clause
         let (raw_clause, body) = match clause {
             Clause::Implies(box Clause::Fact(fact), body) => (fact, body),
@@ -498,6 +498,7 @@ impl Database {
                 exclause: ExClause {
                     head: Goal::Domain(raw_clause),
                     subgoals: body,
+                    unmap: unmap.clone().unwrap_or_default(),
                 },
                 substitution,
                 origin: origin.clone(),
@@ -511,9 +512,12 @@ impl Database {
         clause: &Clause,
         current_universe: UniverseIndex,
         variable_generator: &mut dyn VariableContext,
-    ) -> Clause {
-        let normalizer = &mut ClauseNormalizer::new(variable_generator, current_universe);
-        normalizer.fold_clause(clause.clone())
+    ) -> (Clause, Option<Vec<Ty>>) {
+        let mut normalizer = ClauseNormalizer::new(variable_generator, current_universe);
+        (
+            normalizer.fold_clause(clause.clone()),
+            normalizer.initial_generics_subst,
+        )
     }
 
     fn unify(

@@ -225,7 +225,8 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
         }
     }
 
-    pub fn solve(&mut self, goal: Goal) -> Option<Substitution> {
+    pub fn solve(&mut self) -> Option<Substitution> {
+        let goal = self.goal.clone();
         let mut labeling = Vec::new();
         let mut next_variable = 0;
         let mut var_ctx = VariableGeneratorImpl {
@@ -480,10 +481,33 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
     ) -> SubgoalSelection {
         let next_subgoal = self.select_next_subgoal(stack_entry.table_index, strand_index);
         if let SubgoalSelection::NoMoreSubgoals = next_subgoal {
+            info!("No more subgoals for table {}", stack_entry.table_index);
             // this node is an answer as it does not have any subgoals to select
             let subst = self.forest.tables[stack_entry.table_index].strands[strand_index]
                 .subst
                 .clone();
+
+            // unmap answer to have generics instead of variables
+            let unmap = self.forest.tables[stack_entry.table_index].strands[strand_index]
+                .exclause
+                .unmap
+                .iter()
+                .cloned()
+                .enumerate()
+                .filter_map(|(index, ty)| match ty {
+                    Ty::Variable(var) => Some((var, Ty::Generic { scopes: 0, index })),
+                    Ty::SynthesizedConstant(var) => Some((var, Ty::Generic { scopes: 0, index })),
+                    _ => None,
+                })
+                .collect::<HashMap<_, _>>();
+            let mut substitutor = VariableSubstitutor {
+                substitutions: &unmap,
+            };
+            let mut mapping = HashMap::new();
+            for (index, ty) in subst.mapping.clone() {
+                mapping.insert(index, substitutor.fold_ty(ty));
+            }
+            let subst = Substitution { mapping };
             // remove the strand from the table as there is nothing more to do with it
             self.forest.tables[stack_entry.table_index]
                 .strands
@@ -495,6 +519,10 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                 .push(subst.clone());
             return SubgoalSelection::Answer(subst);
         }
+        info!(
+            "Selected subgoal {:?} for table {}",
+            next_subgoal, stack_entry.table_index
+        );
         // otherwise return the next subgoal
         next_subgoal
     }
@@ -506,9 +534,9 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
         Some(0)
     }
 
-    // TODO: Remove once the internal todo is solved
     #[allow(unreachable_code, unused_variables)]
     fn select_next_subgoal(&mut self, table_idx: usize, strand_idx: usize) -> SubgoalSelection {
+        info!("Selecting next subgoal for table {}", table_idx);
         let table = &mut self.forest.tables[table_idx];
         let strand = &mut table.strands[strand_idx];
         // we select the last subgoal so its easy to pop it later
@@ -540,6 +568,7 @@ enum AnswerRes {
     NoMoreAnswers,
 }
 
+#[derive(Debug)]
 enum SubgoalSelection {
     Answer(Substitution),
     Subgoal(usize),
@@ -565,6 +594,11 @@ fn prepare_exclause_from_an_answer(
         *constraint = substitutor.fold_goal(constraint.clone());
     }
     new_exclause.head = substitutor.fold_goal(new_exclause.head);
+    new_exclause.unmap = new_exclause
+        .unmap
+        .iter()
+        .map(|ty| substitutor.fold_ty(ty.clone()))
+        .collect();
     new_exclause
 }
 
@@ -589,6 +623,6 @@ impl<'db, 'forest> Iterator for SlgSolver<'db, 'forest> {
     type Item = Substitution;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.solve(self.goal.clone())
+        self.solve()
     }
 }

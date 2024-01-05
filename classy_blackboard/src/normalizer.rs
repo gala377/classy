@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::clauses::Clause;
 use crate::database::{UniverseIndex, VariableContext};
 use crate::fold::{walk_clause, walk_goal, Folder};
@@ -13,6 +15,7 @@ pub struct ClauseNormalizer<'ctx> {
     variable_context: &'ctx mut dyn VariableContext,
     substitutions: Vec<Vec<Ty>>,
     universe: UniverseIndex,
+    pub initial_generics_subst: Option<Vec<Ty>>,
 }
 
 impl<'ctx> ClauseNormalizer<'ctx> {
@@ -24,6 +27,7 @@ impl<'ctx> ClauseNormalizer<'ctx> {
             variable_context,
             substitutions: vec![],
             universe,
+            initial_generics_subst: None,
         }
     }
 }
@@ -35,6 +39,9 @@ impl Folder for ClauseNormalizer<'_> {
                 .map(|_| self.variable_context.next_variable(self.universe))
                 .collect(),
         );
+        if self.initial_generics_subst.is_none() {
+            self.initial_generics_subst = Some(self.substitutions.last().unwrap().clone());
+        }
         let res = walk_clause(self, clause);
         self.substitutions.pop();
         res

@@ -76,6 +76,10 @@ pub struct ExClause {
     pub head: Goal,
     // subgoals that need to be satisfied in order to satisfy the main goal
     pub subgoals: Vec<Goal>,
+    // mapping from variables to generics so that they can be unmapped
+    // unmap[i] means that top scope generic with index i has been replaced
+    // by the given type so unmap[i] is equal to Generic { 0, i }
+    pub unmap: Vec<Ty>,
 }
 
 /// A cononical version of a Goal.
