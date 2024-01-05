@@ -631,9 +631,3 @@ impl<'db, 'forest> Iterator for SlgSolver<'db, 'forest> {
         self.solve()
     }
 }
-
-struct Answer {
-    substitutions: Substitution,
-    // Where does each substitution come from
-    origins: HashMap<usize, GenericRef>,
-}
