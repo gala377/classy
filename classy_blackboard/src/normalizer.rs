@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::clauses::Clause;
 use crate::database::{UniverseIndex, VariableContext};
 use crate::fold::{walk_clause, walk_goal, Folder};
