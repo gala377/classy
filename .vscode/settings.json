@@ -6,5 +6,8 @@
     "rust-analyzer.linkedProjects": [
         "./classy_blackboard/Cargo.toml",
         "./classy_blackboard/Cargo.toml"
-    ]
+    ],
+    "files.watcherExclude": {
+        "**/target": true
+    }
 }
