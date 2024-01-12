@@ -9,52 +9,18 @@ type Option(a) {
     None
 }
 
-methods Option(a) {
-    or other = this match {
-        Some(x) => Some(x)
-        None => other
-    }
-
-    and other = this match {
-        None => None
-        _ => other
-    }
-
-    default val = this match {
-        Some(x) => x
-        None => val
-    }
-}
-
-methods Option(a) {
-    default_f f = this match {
-        Some(x) => x
-        None => f()
-    }
-
+methods for Option(a) {
+    map: ((a) -> b) -> Option(b) 
     map f = this match {
-        Some(x) => Some(f x)
+        Some(a) => Some(f(a))
         None => None
     }
 }
 
-
-methods Option(Int) {
-    print a = print("hello")
-}
-
-
-methods Int {
-    print_int = print(this)
-}
-
-static x = "world"
+retConst x = "world"
 
 main {
-    let a = Option.
-        Some("hello").
-        map(static).
-        or(Option.Some("and some"))
+    let a = Option.Some("hello").map(retConst)
     a match {
         Some("world") => print("it is world")
         _ => print("anything else")

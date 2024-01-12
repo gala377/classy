@@ -85,7 +85,7 @@ pub trait Folder: Sized {
         walk_ty_fn(self, args, ret)
     }
 
-    fn fold_ty_app(&mut self, head: TyRef, args: Vec<Ty>) -> Ty {
+    fn fold_ty_app(&mut self, head: Box<Ty>, args: Vec<Ty>) -> Ty {
         walk_ty_app(self, head, args)
     }
 
@@ -239,9 +239,9 @@ pub fn walk_ty_fn(folder: &mut impl Folder, args: Vec<Ty>, ret: Ty) -> Ty {
     )
 }
 
-pub fn walk_ty_app(folder: &mut impl Folder, head: TyRef, args: Vec<Ty>) -> Ty {
+pub fn walk_ty_app(folder: &mut impl Folder, head: Box<Ty>, args: Vec<Ty>) -> Ty {
     Ty::App(
-        head,
+        Box::new(folder.fold_ty(*head)),
         args.into_iter().map(|ty| folder.fold_ty(ty)).collect(),
     )
 }

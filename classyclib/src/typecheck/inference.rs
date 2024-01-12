@@ -4,6 +4,7 @@ use std::{
     rc::Rc,
 };
 
+use classy_blackboard::database::{self, Database as BlackboardDatabase};
 use classy_syntax::ast::{self, ExprKind, Visitor};
 
 use crate::{
@@ -19,7 +20,7 @@ use crate::{
     },
 };
 
-use super::{ast_to_type::PrefexScope, types::DeBruijn};
+use super::{ast_to_type::PrefexScope, type_context::MethodSet, types::DeBruijn};
 
 /// Maps unique node id in the ast with its type.
 pub type TypeEnv = HashMap<usize, Type>;
@@ -67,22 +68,41 @@ impl<'ast> ast::Visitor<'ast> for GetNode {
 }
 
 pub(super) struct Inference<'sess> {
-    // the scope, maps names to types
+    /// the scope, maps names to types
     scope: Rc<RefCell<Scope>>,
-    // allows matching expression ids with types
+    /// allows matching expression ids with types
     env: HashMap<UniqueId, Type>,
+    /// Constraints generated for this mutually recursive function group.
     constraints: Vec<Constraint>,
+    /// Return type of checked function.
     ret_t: Option<Type>,
     call_stack: Vec<String>,
+    /// Names of functions that have been already typechecked so we can just get
+    /// it's type straight away instead of pushing it onto the inference
+    /// stack.
     already_typechecked: HashSet<String>,
+    /// A set of function names that wait for their generalization to happen
+    /// after all of the functions within the mutually recursive group they
+    /// belong to have their constraints generated and solved.
+    ///
+    /// We will generalize all of those functions when we can. So when the
+    /// generalize_after counter hits 0.
     typecheck_until_generalization: HashSet<String>,
     generalize_after: usize,
     id_provider: SharedIdProvider,
     session: &'sess Session,
+
+    /// Database used for constraint solving, to resolve methods and instances.
+    /// The database is derived from the type context.
+    blackboard_database: Rc<classy_blackboard::database::Database>,
 }
 
 impl<'sess> Inference<'sess> {
-    pub fn new(scope: Rc<RefCell<Scope>>, session: &'sess Session) -> Self {
+    pub fn new(
+        scope: Rc<RefCell<Scope>>,
+        session: &'sess Session,
+        blackboard_database: classy_blackboard::database::Database,
+    ) -> Self {
         Self {
             scope,
             env: HashMap::new(),
@@ -94,6 +114,7 @@ impl<'sess> Inference<'sess> {
             call_stack: Vec::new(),
             generalize_after: 0,
             session,
+            blackboard_database: Rc::new(blackboard_database),
         }
     }
 
@@ -117,6 +138,7 @@ impl<'sess> Inference<'sess> {
             already_typechecked: self.already_typechecked.clone(),
             generalize_after: self.generalize_after,
             session: self.session,
+            blackboard_database: self.blackboard_database.clone(),
         };
         let ret = f(&mut sub);
         self.merge(sub);
@@ -164,6 +186,7 @@ impl<'sess> Inference<'sess> {
             typecheck_until_generalization: self.typecheck_until_generalization.clone(),
             generalize_after: 0,
             session: self.session,
+            blackboard_database: self.blackboard_database.clone(),
         };
         println!("Generating constraints for {debug_name}");
         let mut prefex = PrefexScope::new();
@@ -180,7 +203,18 @@ impl<'sess> Inference<'sess> {
             // Only now we solve constraints after we gathered all information
             // after mutally recursive calls in the call stack.
             println!("Solving constraints");
-            let mut solver = ConstraintSolver::new(tctx, self.id_provider.clone());
+            // TODO: We have this weird way of finding recursive groups of functions by
+            // traversing the class stack. So we do solving within the inference
+            // code instead of generating constraints for everything and just
+            // passing it to the solver. We need to have forest and database
+            // here to create a SlgSolver. Also we need to gather typeclasses
+            // from the function definition, if any, to pass them to the
+            // constraint solver so it knows its context.
+            let mut solver = ConstraintSolver::new(
+                tctx,
+                self.id_provider.clone(),
+                &*inferer.blackboard_database,
+            );
             let constraints = inferer.constraints.clone();
             solver.solve(constraints);
             println!("Constraints solved {debug_name}");
@@ -217,8 +251,9 @@ impl<'sess> Inference<'sess> {
         let replace_to_infere = &mut ReplaceInferTypes::new(session.id_provider());
         tctx.fold_types(replace_to_infere);
         let global_scope = Rc::new(RefCell::new(Scope::from_type_ctx(tctx)));
-        let mut inferer = Inference::new(global_scope.clone(), session);
-
+        let blackboard_database = prepare_blackboard_databse(tctx);
+        let mut inferer = Inference::new(global_scope.clone(), session, blackboard_database);
+        // TODO: Create a blackboard database from the provided type context
         for item in &ast.items {
             match &item.kind {
                 ast::TopLevelItemKind::FunctionDefinition(fn_def) => {
@@ -310,6 +345,7 @@ impl<'sess> Inference<'sess> {
             generalize_after: 0,
             id_provider: self.id_provider.clone(),
             session: self.session,
+            blackboard_database: self.blackboard_database.clone(),
         };
         let const_actual_type = {
             let const_scope = Scope::new(global_scope.clone());
@@ -322,7 +358,11 @@ impl<'sess> Inference<'sess> {
         inferer
             .constraints
             .push(Constraint::Eq(const_actual_type, t));
-        let mut solver = ConstraintSolver::new(tctx, self.id_provider.clone());
+        let mut solver = ConstraintSolver::new(
+            tctx,
+            self.id_provider.clone(),
+            &*inferer.blackboard_database,
+        );
         let constraints = inferer.constraints.clone();
         solver.solve(constraints);
         let mut substitutions = solver.substitutions.into_iter().collect();
@@ -947,6 +987,7 @@ impl<'sess> Inference<'sess> {
             typecheck_until_generalization: self.typecheck_until_generalization.clone(),
             generalize_after: 0,
             session: self.session,
+            blackboard_database: self.blackboard_database.clone(),
         };
         for def in definitions {
             inferer.generate_constrains_for_function(tctx, self.scope.clone(), prefex_scope, def);
@@ -955,10 +996,20 @@ impl<'sess> Inference<'sess> {
             println!("Constraint {cons:?}");
         }
         /*
-           TODO: During this solcing constraint solver looks up name
+           TODO: During this solving constraint solver looks up name
            for type of "arg" which is Generic(0, 0), it should be generic(1, 0)
+
+
+        So what I think happens is that when the solver solves this and the function refers to
+        the argument of type t1 which later is generalized to generic type of the outer
+        function the shifting does not work. So the local function is infered to be generic
+        when in fact it is not.
         */
-        let mut solver = ConstraintSolver::new(tctx, self.id_provider.clone());
+        let mut solver = ConstraintSolver::new(
+            tctx,
+            self.id_provider.clone(),
+            &*inferer.blackboard_database,
+        );
         let constraints = inferer.constraints.clone();
         solver.solve(constraints);
         let mut substitutions = solver.substitutions.into_iter().collect();
@@ -1180,6 +1231,188 @@ impl TypeFolder for RequiresTypeChecking {
     fn fold_fresh(&mut self, id: usize) -> Result<Type, ()> {
         self.requires_typechecking = true;
         Ok(Type::Fresh(id))
+    }
+}
+
+fn prepare_blackboard_databse(tctx: &TypCtx) -> BlackboardDatabase {
+    let mut database = BlackboardDatabase::new();
+    // Add basic types
+    database.add_type_impl(database::TypeImpl {
+        name: "String".to_owned(),
+        type_params: vec![],
+        constraints: vec![],
+        fields: vec![],
+    });
+
+    database.add_type_impl(database::TypeImpl {
+        name: "String".to_owned(),
+        type_params: vec![],
+        constraints: vec![],
+        fields: vec![],
+    });
+    database.add_type_impl(database::TypeImpl {
+        name: "Int".to_owned(),
+        type_params: vec![],
+        constraints: vec![],
+        fields: vec![],
+    });
+    database.add_type_impl(database::TypeImpl {
+        name: "UInt".to_owned(),
+        type_params: vec![],
+        constraints: vec![],
+        fields: vec![],
+    });
+    database.add_type_impl(database::TypeImpl {
+        name: "Bool".to_owned(),
+        type_params: vec![],
+        constraints: vec![],
+        fields: vec![],
+    });
+    database.add_type_impl(database::TypeImpl {
+        name: "Byte".to_owned(),
+        type_params: vec![],
+        constraints: vec![],
+        fields: vec![],
+    });
+    database.add_type_impl(database::TypeImpl {
+        name: "Unit".to_owned(),
+        type_params: vec![],
+        constraints: vec![],
+        fields: vec![],
+    });
+    database.add_type_impl(database::TypeImpl {
+        name: "Float".to_owned(),
+        type_params: vec![],
+        constraints: vec![],
+        fields: vec![],
+    });
+    // Add all structs and algebraic data types
+    for ty in tctx.definitions.values() {
+        let type_impl = match ty {
+            Type::Struct { def, .. } | Type::ADT { def, .. } => {
+                let name = tctx.name_by_def_id(*def);
+                database::TypeImpl {
+                    name,
+                    type_params: vec![],
+                    constraints: vec![],
+                    fields: vec![],
+                }
+            }
+            Type::Scheme {
+                prefex,
+                typ: box Type::Struct { def, .. } | box Type::ADT { def, .. },
+            } => {
+                let name = tctx.name_by_def_id(*def);
+                let type_params = prefex.clone();
+                database::TypeImpl {
+                    name,
+                    type_params,
+                    constraints: vec![],
+                    fields: vec![],
+                }
+            }
+            Type::Alias(_)
+            | Type::Generic(_, _)
+            | Type::Fresh(_)
+            | Type::ToInfere
+            | Type::Divergent => {
+                panic!("Unexpected type")
+            }
+            _ => continue,
+        };
+        database.add_type_impl(type_impl);
+    }
+
+    for method_sets in tctx.methods.values() {
+        for MethodSet {
+            specialisation,
+            methods,
+        } in method_sets
+        {
+            let ty = tctx.definitions.get(specialisation).unwrap();
+            let methods = methods
+                .iter()
+                .map(|(name, tid)| (name.clone(), tctx.definitions.get(tid).unwrap().clone()))
+                .collect::<Vec<_>>();
+            database.add_method_block(database::MethodsBlock {
+                // TODO: Support named method blocks
+                name: None,
+                methods: methods
+                    .into_iter()
+                    .map(|(name, ty)| database::Definition {
+                        type_params: match &ty {
+                            Type::Scheme { prefex, .. } => prefex.clone(),
+                            _ => vec![],
+                        },
+                        name,
+                        ty: ty_to_blackboard_type(tctx, &ty, &database),
+                    })
+                    .collect(),
+                type_params: match ty {
+                    Type::Scheme { prefex, .. } => prefex.clone(),
+                    _ => vec![],
+                },
+                constraints: vec![],
+                on_type: ty_to_blackboard_type(tctx, ty, &database),
+            })
+        }
+    }
+    database.lower_to_clauses();
+    database
+}
+
+fn ty_to_blackboard_type(
+    tctx: &TypCtx,
+    ty: &Type,
+    database: &classy_blackboard::database::Database,
+) -> classy_blackboard::ty::Ty {
+    match ty {
+        Type::Int => classy_blackboard::ty::Ty::Ref(database.typeref_from_name("Int").unwrap()),
+        Type::UInt => classy_blackboard::ty::Ty::Ref(database.typeref_from_name("UInt").unwrap()),
+        Type::Bool => classy_blackboard::ty::Ty::Ref(database.typeref_from_name("Bool").unwrap()),
+        Type::String => {
+            classy_blackboard::ty::Ty::Ref(database.typeref_from_name("String").unwrap())
+        }
+        Type::Float => classy_blackboard::ty::Ty::Ref(database.typeref_from_name("Float").unwrap()),
+        Type::Unit => classy_blackboard::ty::Ty::Ref(database.typeref_from_name("Unit").unwrap()),
+        Type::Byte => classy_blackboard::ty::Ty::Ref(database.typeref_from_name("Byte").unwrap()),
+        Type::Struct { def, .. } | Type::ADT { def, .. } => classy_blackboard::ty::Ty::Ref(
+            database
+                .typeref_from_name(&tctx.name_by_def_id(*def))
+                .unwrap(),
+        ),
+        Type::Function { args, ret } => classy_blackboard::ty::Ty::Fn(
+            args.iter()
+                .map(|t| ty_to_blackboard_type(tctx, t, database))
+                .collect(),
+            Box::new(ty_to_blackboard_type(tctx, ret, database)),
+        ),
+        Type::Tuple(args) => classy_blackboard::ty::Ty::Tuple(
+            args.iter()
+                .map(|t| ty_to_blackboard_type(tctx, t, database))
+                .collect(),
+        ),
+        Type::Array(inner) => {
+            classy_blackboard::ty::Ty::Array(Box::new(ty_to_blackboard_type(tctx, inner, database)))
+        }
+        Type::Scheme { typ, .. } => ty_to_blackboard_type(tctx, typ, database),
+        Type::App { typ, args } => {
+            let typ = ty_to_blackboard_type(tctx, typ, database);
+            let args = args
+                .iter()
+                .map(|t| ty_to_blackboard_type(tctx, t, database))
+                .collect();
+            classy_blackboard::ty::Ty::App(Box::new(typ), args)
+        }
+        Type::Generic(shift, index) => classy_blackboard::ty::Ty::Generic {
+            scopes: shift.0 as usize,
+            index: *index as usize,
+        },
+        Type::Alias(id) => {
+            let resolved = tctx.resolve_alias(*id);
+            ty_to_blackboard_type(tctx, &resolved, database)
+        }
+        t => panic!("Unsupported type {t:?}"),
     }
 }
 

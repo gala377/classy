@@ -941,3 +941,12 @@ WARNING: Unmatched cancel notification for request id 3943
 2024.01.09 19:23:54 WARN  no build target for: /Users/rgalczak/Projects/Rust/classy/scripts/examples.scala
 Jan 09, 2024 7:24:16 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
 INFO: Unsupported notification method: $/setTrace
+2024.01.09 19:25:02 INFO  Shutting down server
+2024.01.09 19:25:02 INFO  shutting down Metals
+2024.01.09 19:25:02 INFO  Exiting server
+2024.01.12 14:44:20 INFO  Started: Metals version 1.2.0 in folders '/Users/rgalczak/Projects/Rust/classy' for client Visual Studio Code 1.85.1.
+2024.01.12 14:44:22 WARN  Build server is not auto-connectable.
+2024.01.12 14:44:22 WARN  no build tool detected in workspace '/Users/rgalczak/Projects/Rust/classy'. The most common cause for this problem is that the editor was opened in the wrong working directory, for example if you use sbt then the workspace directory should contain build.sbt. 
+2024.01.12 14:44:22 WARN  no build target for: /Users/rgalczak/Projects/Rust/classy/scripts/examples.scala
+2024.01.12 14:44:30 INFO  no build target found for /Users/rgalczak/Projects/Rust/classy/scripts/examples.scala. Using presentation compiler with project's scala-library version: 3.3.1
+2024.01.12 14:44:34 INFO  time: code lens generation in 11s

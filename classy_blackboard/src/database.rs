@@ -376,7 +376,7 @@ impl Database {
                 type_params.len(),
                 Box::new(Clause::Fact(DomainGoal::TypeWellFormed {
                     ty: Ty::App(
-                        type_ref,
+                        Box::new(Ty::Ref(type_ref)),
                         type_params
                             .iter()
                             .enumerate()
@@ -391,7 +391,7 @@ impl Database {
                 Box::new(Clause::Implies(
                     Box::new(Clause::Fact(DomainGoal::TypeWellFormed {
                         ty: Ty::App(
-                            type_ref,
+                            Box::new(Ty::Ref(type_ref)),
                             type_params
                                 .iter()
                                 .enumerate()
@@ -696,9 +696,8 @@ impl Database {
                     panic!("Unexpected generic type in normalized type")
                 }
                 // app { scheme<X> { () -> X }, Int }
-                (App(ty_1, args_1), App(ty_2, args_2))
-                    if ty_1 == ty_2 && args_1.len() == args_2.len() =>
-                {
+                (App(ty_1, args_1), App(ty_2, args_2)) if args_1.len() == args_2.len() => {
+                    stack.push((ty_1.as_ref().clone(), ty_2.as_ref().clone()));
                     stack.extend(args_1.into_iter().zip(args_2.into_iter()));
                 }
                 (SynthesizedConstant(c), Variable(v)) | (Variable(v), SynthesizedConstant(c)) => {

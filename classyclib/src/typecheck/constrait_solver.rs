@@ -1,6 +1,8 @@
 use core::panic;
 use std::collections::{HashMap, VecDeque};
 
+use classy_blackboard::slg::SlgSolver;
+
 use crate::{
     session::SharedIdProvider,
     typecheck::{
@@ -25,18 +27,32 @@ impl TypeFolder for FreshTypeReplacer {
     }
 }
 
-pub(super) struct ConstraintSolver<'ctx> {
+pub(super) struct ConstraintSolver<'ctx, 'solver_db> {
     pub substitutions: Vec<(usize, Type)>,
     pub tctx: &'ctx TypCtx,
     pub id_provider: SharedIdProvider,
+    pub blackboard_database: &'solver_db classy_blackboard::database::Database,
+    forest: classy_blackboard::slg::Forest,
+    // TODO:
+    // typeclasses provided in the function or method declaration.
+    // so for
+    //  `foo: { Show(a), Convert(a, b) } => (a) -> b`
+    // the context would be [ Show(Generic(0, 0)), Convert(Generic(0, 0), Generic(0, 1))]
+    // pub context: Vec<?>,
 }
 
-impl<'ctx> ConstraintSolver<'ctx> {
-    pub fn new(tctx: &'ctx TypCtx, id_provider: SharedIdProvider) -> Self {
+impl<'ctx, 'solver_db> ConstraintSolver<'ctx, 'solver_db> {
+    pub fn new(
+        tctx: &'ctx TypCtx,
+        id_provider: SharedIdProvider,
+        blackboard_database: &'solver_db classy_blackboard::database::Database,
+    ) -> Self {
         Self {
             substitutions: Vec::new(),
             tctx,
             id_provider,
+            blackboard_database,
+            forest: classy_blackboard::slg::Forest::new(),
         }
     }
 
@@ -331,6 +347,21 @@ impl<'ctx> ConstraintSolver<'ctx> {
                 }
                 panic!()
             }
+            Constraint::HasMethod {
+                receiver,
+                method,
+                args,
+                ret,
+            } => {
+                // TODO:
+                // translate has method into a domain goal from the receiver type
+                // and the name, get the type of the methods and extend the stack
+                // TODO: LATER
+                // Get the definition ID of the methods and put it in some map so that we
+                // can use it later when generating code.
+                todo!("Method constraints")
+            }
+
             c => panic!("Cannot unify constraint {c:?}"),
         }
     }

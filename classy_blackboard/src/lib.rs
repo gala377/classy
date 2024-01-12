@@ -54,7 +54,7 @@ mod tests {
             1,
             Box::new(Goal::Domain(DomainGoal::TypeWellFormed {
                 ty: Ty::App(
-                    foo,
+                    Box::new(Ty::Ref(foo)),
                     vec![Ty::Generic {
                         scopes: 0,
                         index: 0,
@@ -95,7 +95,7 @@ mod tests {
             1,
             Box::new(Goal::Domain(DomainGoal::TypeWellFormed {
                 ty: Ty::App(
-                    foo,
+                    Box::new(Ty::Ref(foo)),
                     vec![Ty::Generic {
                         scopes: 0,
                         index: 0,
@@ -144,7 +144,7 @@ mod tests {
                 })],
                 Box::new(Goal::Domain(DomainGoal::TypeWellFormed {
                     ty: Ty::App(
-                        foo,
+                        Box::new(Ty::Ref(foo)),
                         vec![Ty::Generic {
                             scopes: 0,
                             index: 0,
@@ -200,7 +200,7 @@ mod tests {
                 })],
                 Box::new(Goal::Domain(DomainGoal::TypeWellFormed {
                     ty: Ty::App(
-                        foo,
+                        Box::new(Ty::Ref(foo)),
                         vec![Ty::Generic {
                             scopes: 0,
                             index: 0,
@@ -267,7 +267,7 @@ mod tests {
             1,
             Box::new(Goal::Domain(DomainGoal::TypeWellFormed {
                 ty: Ty::App(
-                    foo,
+                    Box::new(Ty::Ref(foo)),
                     vec![Ty::Generic {
                         scopes: 0,
                         index: 0,

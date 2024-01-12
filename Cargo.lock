@@ -224,6 +224,7 @@ name = "classyclib"
 version = "0.1.0"
 dependencies = [
  "bitvec",
+ "classy_blackboard",
  "classy_sexpr",
  "classy_sexpr_proc_macro",
  "classy_syntax",

@@ -40,6 +40,7 @@ impl ast::Folder for ImplicitForall {
             attributes,
         }: ast::FunctionDefinition,
     ) -> ast::FunctionDefinition {
+        println!("function: {:?}", name);
         self.prefex.clear();
         let new_t = self.fold_typ(typ);
         let new_t = if !self.prefex.is_empty() {
@@ -98,6 +99,7 @@ impl ast::Folder for ImplicitForall {
         &mut self,
         meths: ast::MethodsBlock<ast::FunctionDefinition>,
     ) -> ast::MethodsBlock<ast::FunctionDefinition> {
+        println!("methods block: {:?}", meths);
         let typ = self.fold_methods_type(meths.typ);
         let generics = match &typ {
             ast::Typ::Poly { free_variables, .. } => free_variables.clone(),
@@ -110,7 +112,7 @@ impl ast::Folder for ImplicitForall {
         let methods = meths
             .methods
             .into_iter()
-            .map(|def| ast::fold::fold_method_definition(self, def))
+            .map(|def| self.fold_method_definition(def))
             .collect();
         self.ignore_names.pop_scope();
 
@@ -119,6 +121,17 @@ impl ast::Folder for ImplicitForall {
             typ,
             methods,
         }
+    }
+
+    fn fold_method_definition(
+        &mut self,
+        ast::Method { id, item }: ast::Method<ast::FunctionDefinition>,
+    ) -> ast::Method<ast::FunctionDefinition> {
+        println!("method: {:?}", item);
+        println!("Resolving as function");
+        let item = self.fold_function_definition(item);
+        println!("New item is: {:?}", item);
+        ast::Method { id, item }
     }
 }
 

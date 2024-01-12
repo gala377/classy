@@ -9,7 +9,7 @@ pub enum Ty {
     Array(Box<Ty>),
     Tuple(Vec<Ty>),
     Fn(Vec<Ty>, Box<Ty>),
-    App(TyRef, Vec<Ty>),
+    App(Box<Ty>, Vec<Ty>),
     /// An Existential variable used in queries. Will be substituted by the
     /// possible matches.
     Variable(usize),
@@ -153,7 +153,7 @@ impl Ty {
                 Box::new(ret.substitute_variable(variable, ty)),
             ),
             Ty::App(ty_ref, args) => Ty::App(
-                *ty_ref,
+                Box::new(ty_ref.substitute_variable(variable, ty)),
                 args.iter()
                     .map(|ty| ty.substitute_variable(variable, ty))
                     .collect(),

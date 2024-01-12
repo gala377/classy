@@ -15,3 +15,4 @@ thiserror = "1.0.37"
 classy_syntax = { path = "../classy_syntax" }
 classy_sexpr = { path = "../classy_sexpr" }
 classy_sexpr_proc_macro = { path = "../classy_sexpr_proc_macro" }
+classy_blackboard = { path = "../classy_blackboard" }

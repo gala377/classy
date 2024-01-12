@@ -35,7 +35,7 @@ pub fn main() {
     database.add_instance(Instance {
         type_class: show,
         args: vec![Ty::App(
-            foo,
+            Box::new(Ty::Ref(foo)),
             vec![Ty::Generic {
                 scopes: 0,
                 index: 0,
@@ -113,7 +113,10 @@ pub fn main() {
     );
     let _query = Goal::Domain(DomainGoal::InstanceExistsAndWellFormed {
         head: convert,
-        args: vec![Ty::App(bar, vec![Ty::Ref(int)]), Ty::Ref(int)],
+        args: vec![
+            Ty::App(Box::new(Ty::Ref(bar)), vec![Ty::Ref(int)]),
+            Ty::Ref(int),
+        ],
     });
 
     let mut forest = Forest::new();
