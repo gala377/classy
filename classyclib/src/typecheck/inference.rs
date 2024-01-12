@@ -1361,7 +1361,7 @@ fn prepare_blackboard_databse(tctx: &TypCtx) -> BlackboardDatabase {
     database
 }
 
-fn ty_to_blackboard_type(
+pub fn ty_to_blackboard_type(
     tctx: &TypCtx,
     ty: &Type,
     database: &classy_blackboard::database::Database,

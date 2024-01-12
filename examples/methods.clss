@@ -17,13 +17,18 @@ methods for Option(a) {
     }
 }
 
-retConst x = "world"
+methods for Option(String) {
+  as_string: () -> String
+  as_string() = this match {
+    Some(inner) => inner
+    None => "None"
+  }
+}
+
+
 
 main {
-    let a = Option.Some("hello").map(retConst)
-    a match {
-        Some("world") => print("it is world")
-        _ => print("anything else")
-    }
+  let b = Option.Some(1)
+  print(b.as_string())
 }
 

@@ -1,12 +1,14 @@
 use core::panic;
 use std::collections::{HashMap, VecDeque};
 
+use classy_blackboard::goal;
 use classy_blackboard::slg::SlgSolver;
 
 use crate::{
     session::SharedIdProvider,
     typecheck::{
         constraints::Constraint,
+        inference::ty_to_blackboard_type,
         types::{Type, TypeFolder},
     },
 };
@@ -102,8 +104,15 @@ impl<'ctx, 'solver_db> ConstraintSolver<'ctx, 'solver_db> {
                     constraints.push_back(Constraint::Eq(t1.clone(), t2.clone()));
                 }
             }
+            Constraint::Eq(Type::App { typ, args }, app2 @ Type::App { .. }) => {
+                constraints.push_back(Constraint::Eq(instance(self.tctx, args, *typ), app2));
+            }
             Constraint::Eq(app @ Type::App { .. }, t) => {
                 constraints.push_back(Constraint::Eq(t, app));
+            }
+            Constraint::Eq(Type::Fresh(id), other @ Type::App { .. }) => {
+                self.substitutions.push((id, other.clone()));
+                replace_in_constraints(id, other, constraints)
             }
             Constraint::Eq(t, Type::App { typ: app_t, args }) => {
                 constraints.push_back(Constraint::Eq(t, instance(self.tctx, args, *app_t)));
@@ -353,12 +362,35 @@ impl<'ctx, 'solver_db> ConstraintSolver<'ctx, 'solver_db> {
                 args,
                 ret,
             } => {
-                // TODO:
-                // translate has method into a domain goal from the receiver type
-                // and the name, get the type of the methods and extend the stack
-                // TODO: LATER
-                // Get the definition ID of the methods and put it in some map so that we
-                // can use it later when generating code.
+                let receiver_t =
+                    ty_to_blackboard_type(self.tctx, &receiver, self.blackboard_database);
+                let goal = goal::Goal::Domain(goal::DomainGoal::FindMethod {
+                    name: method.clone(),
+                    on_type: receiver_t.clone(),
+                });
+                let goal = if let classy_blackboard::ty::Ty::App(_, args) = &receiver_t {
+                    goal::Goal::Exists(args.len(), Box::new(goal))
+                } else {
+                    goal
+                };
+                // TODO: If the type is scheme we should do forall? Or instance it with a fresh
+                // variable
+                println!("goal: {:?}", goal);
+                let solver = SlgSolver::new(self.blackboard_database, &mut self.forest, goal);
+                let result = solver.take(10).collect::<Vec<_>>();
+                if result.is_empty() {
+                    panic!("Could not find method {method} on {receiver:?}");
+                }
+                if result.len() > 1 {
+                    println!("Ambiguous method {method} on {receiver:?}");
+                    println!("Possible candidates");
+                    for r in result {
+                        println!("  {r:?}");
+                    }
+                    panic!("Compilation error");
+                }
+                println!("Found candidate: {:?}", result[0]);
+                // TODO: Translate definition id into actual method definition
                 todo!("Method constraints")
             }
 
