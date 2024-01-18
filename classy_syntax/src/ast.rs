@@ -340,6 +340,7 @@ pub enum ExprKind {
         method: String,
         args: Vec<Expr>,
         kwargs: HashMap<String, Expr>,
+        resolved_definition: Option<usize>,
     },
 }
 
@@ -586,6 +587,7 @@ impl Expr {
                 method,
                 args,
                 kwargs,
+                ..
             } => {
                 let mut res = receiver.pretty();
                 res.push_str(&format!(".{}(", method));
@@ -874,6 +876,7 @@ impl classy_sexpr::ToSExpr for ExprKind {
                 method,
                 args,
                 kwargs,
+                ..
             } => sexpr!((method $receiver #method $args $kwargs)),
         }
     }

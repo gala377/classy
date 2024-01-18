@@ -140,13 +140,13 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
     ) -> ExprKind {
         let ast::ExprKind::Name(ast::Name::Unresolved { path, identifier }) = receiver.kind.clone()
         else {
-            return ast::fold::fold_method_call(self, receiver, field, args, kwargs);
+            return ast::fold::fold_method_call(self, receiver, field, args, kwargs, None);
         };
         let Some(t) = self.tctx.get_type(&identifier) else {
-            return ast::fold::fold_method_call(self, receiver, field, args, kwargs);
+            return ast::fold::fold_method_call(self, receiver, field, args, kwargs, None);
         };
         let Some(t) = resolve_case(self.tctx, &field, &t) else {
-            return ast::fold::fold_method_call(self, receiver, field, args, kwargs);
+            return ast::fold::fold_method_call(self, receiver, field, args, kwargs, None);
         };
         match t {
             Type::Struct { fields, .. } => {
@@ -242,7 +242,7 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
                     args,
                 )
             }
-            _ => ast::fold::fold_method_call(self, receiver, field, args, kwargs),
+            _ => ast::fold::fold_method_call(self, receiver, field, args, kwargs, None),
         }
     }
 }
@@ -275,6 +275,7 @@ impl<'ctx> ast::fold::Folder for PromoteCallToStructLiteral<'ctx> {
         method: String,
         args: Vec<ast::Expr>,
         kwargs: std::collections::HashMap<String, ast::Expr>,
+        reslved_definition: Option<usize>,
     ) -> ExprKind {
         self.try_to_resolve_adt(receiver, method, args, kwargs)
     }
@@ -411,22 +412,22 @@ mod tests {
         run_test(
             input,
             sexpr!((
-            (type Foo [] {
-                record
-                    [bar (poly [] Int)]
-                    [baz (poly [] Int)]
-            })
+                (type Foo [] {
+                    record
+                        [bar (poly [] Int)]
+                        [baz (poly [] Int)]
+                })
 
-            (fn {}
-                (type (poly [] (fn () (poly [] unit))))
-                main () {
-                    struct Foo {
-                        ["bar" 1] 
-                        ["baz" 2]
+                (fn {}
+                    (type (poly [] (fn () (poly [] unit))))
+                    main () {
+                        struct Foo {
+                            ["bar" 1]
+                            ["baz" 2]
+                        }
                     }
-                }
-            )
-        )),
+                )
+            )),
         )
     }
 
@@ -440,17 +441,17 @@ mod tests {
         run_test(
             input,
             sexpr!((
-            (type Foo [] {
-                record
-            })
+                (type Foo [] {
+                    record
+                })
 
-            (fn {}
-                (type (fn () infere))
-                main () {
-                    struct Foo {}
-                }
-            )
-        )),
+                (fn {}
+                    (type (fn () infere))
+                    main () {
+                        struct Foo {}
+                    }
+                )
+            )),
         )
     }
 }

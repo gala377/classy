@@ -1,8 +1,8 @@
 use core::panic;
 use std::collections::{HashMap, VecDeque};
 
-use classy_blackboard::goal;
 use classy_blackboard::slg::SlgSolver;
+use classy_blackboard::{goal, slg::Answer};
 
 use crate::{
     session::SharedIdProvider,
@@ -389,6 +389,10 @@ impl<'ctx, 'solver_db> ConstraintSolver<'ctx, 'solver_db> {
                     }
                     panic!("Compilation error");
                 }
+                let Answer { origin, .. } = result[0].clone();
+                let origin = origin.unwrap();
+                // TODO: get the definition id of the methods block from the origin
+                // TODO: Can we do anything with substitutions?
                 println!("Found candidate: {:?}", result[0]);
                 // TODO: Translate definition id into actual method definition
                 todo!("Method constraints")

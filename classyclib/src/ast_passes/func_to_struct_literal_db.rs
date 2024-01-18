@@ -166,9 +166,10 @@ impl Folder for PromoteCallToStructLiteral<'_> {
         method: String,
         args: Vec<ast::Expr>,
         kwargs: std::collections::HashMap<String, ast::Expr>,
+        resolved_definition: Option<usize>,
     ) -> ast::ExprKind {
         if !kwargs.is_empty() {
-            return ast::fold::fold_method_call(self, receiver, method, args, kwargs);
+            return ast::fold::fold_method_call(self, receiver, method, args, kwargs, None);
         }
         if let Some((name, (constr, typ))) = self.is_adt_constructor(&receiver, &method) {
             match typ {
@@ -196,7 +197,7 @@ impl Folder for PromoteCallToStructLiteral<'_> {
                 }
             }
         }
-        ast::fold::fold_method_call(self, receiver, method, args, kwargs)
+        ast::fold::fold_method_call(self, receiver, method, args, kwargs, None)
     }
 }
 
@@ -302,9 +303,15 @@ mod tests {
                 )
             )),
             TestDb {
-                types: vec![
-                    (pid(0), did(1), "Foo".into(), Type::Struct { def: 0, fields: vec![] })
-                ],
+                types: vec![(
+                    pid(0),
+                    did(1),
+                    "Foo".into(),
+                    Type::Struct {
+                        def: 0,
+                        fields: vec![],
+                    },
+                )],
                 packages: vec![],
             },
         )
@@ -328,22 +335,21 @@ mod tests {
                 )
             )),
             TestDb {
-                types: vec![
-                    (
-                        pid(0),
-                        did(1),
-                        "Foo".into(),
-                        Type::ADT {
-                            def: 0,
-                            constructors: vec![
-                                (
-                                    "A".into(),
-                                    Type::Struct { def: 0, fields: vec![] }
-                                )
-                            ]
-                        }
-                    )
-                ],
+                types: vec![(
+                    pid(0),
+                    did(1),
+                    "Foo".into(),
+                    Type::ADT {
+                        def: 0,
+                        constructors: vec![(
+                            "A".into(),
+                            Type::Struct {
+                                def: 0,
+                                fields: vec![],
+                            },
+                        )],
+                    },
+                )],
                 packages: vec![],
             },
         )
@@ -366,22 +372,15 @@ mod tests {
                 )
             )),
             TestDb {
-                types: vec![
-                    (
-                        pid(0),
-                        did(1),
-                        "Foo".into(),
-                        Type::ADT {
-                            def: 0,
-                            constructors: vec![
-                                (
-                                    "A".into(),
-                                    Type::Tuple(vec![])
-                                )
-                            ]
-                        }
-                    )
-                ],
+                types: vec![(
+                    pid(0),
+                    did(1),
+                    "Foo".into(),
+                    Type::ADT {
+                        def: 0,
+                        constructors: vec![("A".into(), Type::Tuple(vec![]))],
+                    },
+                )],
                 packages: vec![],
             },
         )
@@ -404,22 +403,15 @@ mod tests {
                 )
             )),
             TestDb {
-                types: vec![
-                    (
-                        pid(0),
-                        did(1),
-                        "Foo".into(),
-                        Type::ADT {
-                            def: 0,
-                            constructors: vec![
-                                (
-                                    "A".into(),
-                                    Type::Unit
-                                )
-                            ]
-                        }
-                    )
-                ],
+                types: vec![(
+                    pid(0),
+                    did(1),
+                    "Foo".into(),
+                    Type::ADT {
+                        def: 0,
+                        constructors: vec![("A".into(), Type::Unit)],
+                    },
+                )],
                 packages: vec![],
             },
         )
@@ -445,9 +437,15 @@ mod tests {
                 )
             )),
             TestDb {
-                types: vec![
-                    (pid(0), did(1), "inner::foo::Foo".into(), Type::Struct { def: 0, fields: vec![] })
-                ],
+                types: vec![(
+                    pid(0),
+                    did(1),
+                    "inner::foo::Foo".into(),
+                    Type::Struct {
+                        def: 0,
+                        fields: vec![],
+                    },
+                )],
                 packages: vec![],
             },
         )
@@ -473,9 +471,15 @@ mod tests {
                 )
             )),
             TestDb {
-                types: vec![
-                    (pid(0), did(1), "inner::foo::bar::Foo".into(), Type::Struct { def: 0, fields: vec![] })
-                ],
+                types: vec![(
+                    pid(0),
+                    did(1),
+                    "inner::foo::bar::Foo".into(),
+                    Type::Struct {
+                        def: 0,
+                        fields: vec![],
+                    },
+                )],
                 packages: vec![],
             },
         )
@@ -499,9 +503,15 @@ mod tests {
                 )
             )),
             TestDb {
-                types: vec![
-                    (pid(1), did(1), "Foo".into(), Type::Struct { def: 0, fields: vec![] })
-                ],
+                types: vec![(
+                    pid(1),
+                    did(1),
+                    "Foo".into(),
+                    Type::Struct {
+                        def: 0,
+                        fields: vec![],
+                    },
+                )],
                 packages: vec!["foo".into()],
             },
         )
@@ -526,9 +536,15 @@ mod tests {
                 )
             )),
             TestDb {
-                types: vec![
-                    (pid(1), did(1), "inner::Foo".into(), Type::Struct { def: 0, fields: vec![] })
-                ],
+                types: vec![(
+                    pid(1),
+                    did(1),
+                    "inner::Foo".into(),
+                    Type::Struct {
+                        def: 0,
+                        fields: vec![],
+                    },
+                )],
                 packages: vec!["foo".into()],
             },
         )

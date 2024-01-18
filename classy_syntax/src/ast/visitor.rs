@@ -385,6 +385,7 @@ pub fn walk_expr_kind<'ast, V: Visitor<'ast>>(v: &mut V, node: &'ast ast::ExprKi
             method,
             args,
             kwargs,
+            ..
         } => v.visit_method_call(receiver, method, args, kwargs),
         ast::ExprKind::LetRec { definitions } => v.visit_let_rec(definitions),
     }

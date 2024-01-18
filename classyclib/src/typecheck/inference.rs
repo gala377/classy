@@ -780,6 +780,7 @@ impl<'sess> Inference<'sess> {
                 method,
                 args,
                 kwargs,
+                ..
             } => {
                 assert!(
                     kwargs.is_empty(),
@@ -1406,7 +1407,7 @@ pub fn ty_to_blackboard_type(
         }
         Type::Generic(shift, index) => classy_blackboard::ty::Ty::Generic {
             scopes: shift.0 as usize,
-            index: *index as usize,
+            index: *index,
         },
         Type::Alias(id) => {
             let resolved = tctx.resolve_alias(*id);
