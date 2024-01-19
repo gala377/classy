@@ -269,7 +269,6 @@ impl<'sess> Inference<'sess> {
             blackboard_database,
             definitions,
         );
-        // TODO: Create a blackboard database from the provided type context
         for item in &ast.items {
             match &item.kind {
                 ast::TopLevelItemKind::FunctionDefinition(fn_def) => {

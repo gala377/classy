@@ -33,6 +33,13 @@ impl TypeFolder for FreshTypeReplacer {
     }
 }
 
+// TODO: Problem we have here is that function can have constraints within their
+// declaration. we create constraint solver per mutually recursive functions so
+// I think it is impossible to say which constraints were present for the given
+// constraint. we could somehow make it so that each relevant constraint (i
+// think only HasMethod is relevant) has a handle to a collection of constraints
+// that were present at declartaion site. This way we know which constraints
+// should be present when creating a goal to solve by the blackboard.
 pub(super) struct ConstraintSolver<'ctx, 'solver_db> {
     pub substitutions: Vec<(usize, Type)>,
     pub tctx: &'ctx TypCtx,
@@ -40,12 +47,10 @@ pub(super) struct ConstraintSolver<'ctx, 'solver_db> {
     pub blackboard_database: &'solver_db classy_blackboard::database::Database,
     forest: classy_blackboard::slg::Forest,
     definitions: Rc<HashMap<GenericRef, DefId>>,
-    // TODO:
-    // typeclasses provided in the function or method declaration.
-    // so for
-    //  `foo: { Show(a), Convert(a, b) } => (a) -> b`
-    // the context would be [ Show(Generic(0, 0)), Convert(Generic(0, 0), Generic(0, 1))]
-    // pub context: Vec<?>,
+    // TODO: This is how the constraints should look like i think
+    // We are going to index into the outer vector to get the clauses
+    // to inject into the goal for the blackboard to solve.
+    // enviromental_clauses: Vec<Vec<Constraint>>,
 }
 
 impl<'ctx, 'solver_db> ConstraintSolver<'ctx, 'solver_db> {
