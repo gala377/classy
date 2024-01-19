@@ -1,9 +1,12 @@
 use core::panic;
 use std::collections::{HashMap, VecDeque};
+use std::rc::Rc;
 
+use classy_blackboard::database::GenericRef;
 use classy_blackboard::slg::SlgSolver;
 use classy_blackboard::{goal, slg::Answer};
 
+use crate::knowledge::DefinitionId;
 use crate::{
     session::SharedIdProvider,
     typecheck::{
@@ -13,6 +16,7 @@ use crate::{
     },
 };
 
+use super::type_context::DefId;
 use super::{type_context::TypCtx, types::DeBruijn};
 
 pub(super) struct FreshTypeReplacer {
@@ -35,6 +39,7 @@ pub(super) struct ConstraintSolver<'ctx, 'solver_db> {
     pub id_provider: SharedIdProvider,
     pub blackboard_database: &'solver_db classy_blackboard::database::Database,
     forest: classy_blackboard::slg::Forest,
+    definitions: Rc<HashMap<GenericRef, DefId>>,
     // TODO:
     // typeclasses provided in the function or method declaration.
     // so for
@@ -48,6 +53,7 @@ impl<'ctx, 'solver_db> ConstraintSolver<'ctx, 'solver_db> {
         tctx: &'ctx TypCtx,
         id_provider: SharedIdProvider,
         blackboard_database: &'solver_db classy_blackboard::database::Database,
+        definitions: Rc<HashMap<GenericRef, DefId>>,
     ) -> Self {
         Self {
             substitutions: Vec::new(),
@@ -55,6 +61,7 @@ impl<'ctx, 'solver_db> ConstraintSolver<'ctx, 'solver_db> {
             id_provider,
             blackboard_database,
             forest: classy_blackboard::slg::Forest::new(),
+            definitions,
         }
     }
 
@@ -389,13 +396,34 @@ impl<'ctx, 'solver_db> ConstraintSolver<'ctx, 'solver_db> {
                     }
                     panic!("Compilation error");
                 }
+                // TODO: Can we do anything with substitutions?
                 let Answer { origin, .. } = result[0].clone();
                 let origin = origin.unwrap();
-                // TODO: get the definition id of the methods block from the origin
-                // TODO: Can we do anything with substitutions?
+                let def_id = self.definitions.get(&origin).unwrap();
+                let method_type = {
+                    println!("Got definition {def_id:?}");
+                    println!("All definitions");
+                    for (def_id, path) in self.tctx.method_blocks_by_def_id.iter() {
+                        println!("  {def_id:?} -> {path:?}");
+                    }
+                    let path = self.tctx.method_blocks_by_def_id[&def_id];
+                    println!("All sets");
+                    for (t_id, set) in &self.tctx.methods {
+                        println!("  {t_id:?} -> {set:?}");
+                    }
+                    let block = &self.tctx.methods[&path.0][path.1];
+                    block.methods[&method]
+                };
                 println!("Found candidate: {:?}", result[0]);
-                // TODO: Translate definition id into actual method definition
-                todo!("Method constraints")
+                let resolved = self.tctx.definitions[&method_type].clone();
+                println!("Type of the candidate is {:?}", resolved);
+                constraints.push_back(Constraint::Eq(
+                    resolved,
+                    Type::Function {
+                        args,
+                        ret: Box::new(ret),
+                    },
+                ));
             }
 
             c => panic!("Cannot unify constraint {c:?}"),

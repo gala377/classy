@@ -4,11 +4,12 @@ use std::{
     rc::Rc,
 };
 
-use classy_blackboard::database::{self, Database as BlackboardDatabase};
+use classy_blackboard::database::{self, Database as BlackboardDatabase, GenericRef};
 use classy_syntax::ast::{self, ExprKind, Visitor};
 
 use crate::{
     id_provider::UniqueId,
+    knowledge::DefinitionId,
     session::{Session, SharedIdProvider},
     typecheck::{
         constraints::Constraint,
@@ -20,7 +21,11 @@ use crate::{
     },
 };
 
-use super::{ast_to_type::PrefexScope, type_context::MethodSet, types::DeBruijn};
+use super::{
+    ast_to_type::PrefexScope,
+    type_context::{DefId, MethodSet},
+    types::DeBruijn,
+};
 
 /// Maps unique node id in the ast with its type.
 pub type TypeEnv = HashMap<usize, Type>;
@@ -95,6 +100,7 @@ pub(super) struct Inference<'sess> {
     /// Database used for constraint solving, to resolve methods and instances.
     /// The database is derived from the type context.
     blackboard_database: Rc<classy_blackboard::database::Database>,
+    definitions: Rc<HashMap<GenericRef, DefId>>,
 }
 
 impl<'sess> Inference<'sess> {
@@ -102,6 +108,7 @@ impl<'sess> Inference<'sess> {
         scope: Rc<RefCell<Scope>>,
         session: &'sess Session,
         blackboard_database: classy_blackboard::database::Database,
+        definitions: HashMap<GenericRef, DefId>,
     ) -> Self {
         Self {
             scope,
@@ -115,6 +122,7 @@ impl<'sess> Inference<'sess> {
             generalize_after: 0,
             session,
             blackboard_database: Rc::new(blackboard_database),
+            definitions: Rc::new(definitions),
         }
     }
 
@@ -139,6 +147,7 @@ impl<'sess> Inference<'sess> {
             generalize_after: self.generalize_after,
             session: self.session,
             blackboard_database: self.blackboard_database.clone(),
+            definitions: self.definitions.clone(),
         };
         let ret = f(&mut sub);
         self.merge(sub);
@@ -187,6 +196,7 @@ impl<'sess> Inference<'sess> {
             generalize_after: 0,
             session: self.session,
             blackboard_database: self.blackboard_database.clone(),
+            definitions: self.definitions.clone(),
         };
         println!("Generating constraints for {debug_name}");
         let mut prefex = PrefexScope::new();
@@ -214,6 +224,7 @@ impl<'sess> Inference<'sess> {
                 tctx,
                 self.id_provider.clone(),
                 &*inferer.blackboard_database,
+                self.definitions.clone(),
             );
             let constraints = inferer.constraints.clone();
             solver.solve(constraints);
@@ -251,8 +262,13 @@ impl<'sess> Inference<'sess> {
         let replace_to_infere = &mut ReplaceInferTypes::new(session.id_provider());
         tctx.fold_types(replace_to_infere);
         let global_scope = Rc::new(RefCell::new(Scope::from_type_ctx(tctx)));
-        let blackboard_database = prepare_blackboard_databse(tctx);
-        let mut inferer = Inference::new(global_scope.clone(), session, blackboard_database);
+        let (blackboard_database, definitions) = prepare_blackboard_databse(tctx);
+        let mut inferer = Inference::new(
+            global_scope.clone(),
+            session,
+            blackboard_database,
+            definitions,
+        );
         // TODO: Create a blackboard database from the provided type context
         for item in &ast.items {
             match &item.kind {
@@ -346,6 +362,7 @@ impl<'sess> Inference<'sess> {
             id_provider: self.id_provider.clone(),
             session: self.session,
             blackboard_database: self.blackboard_database.clone(),
+            definitions: self.definitions.clone(),
         };
         let const_actual_type = {
             let const_scope = Scope::new(global_scope.clone());
@@ -362,6 +379,7 @@ impl<'sess> Inference<'sess> {
             tctx,
             self.id_provider.clone(),
             &*inferer.blackboard_database,
+            inferer.definitions.clone(),
         );
         let constraints = inferer.constraints.clone();
         solver.solve(constraints);
@@ -989,6 +1007,7 @@ impl<'sess> Inference<'sess> {
             generalize_after: 0,
             session: self.session,
             blackboard_database: self.blackboard_database.clone(),
+            definitions: self.definitions.clone(),
         };
         for def in definitions {
             inferer.generate_constrains_for_function(tctx, self.scope.clone(), prefex_scope, def);
@@ -1010,6 +1029,7 @@ impl<'sess> Inference<'sess> {
             tctx,
             self.id_provider.clone(),
             &*inferer.blackboard_database,
+            inferer.definitions.clone(),
         );
         let constraints = inferer.constraints.clone();
         solver.solve(constraints);
@@ -1235,7 +1255,7 @@ impl TypeFolder for RequiresTypeChecking {
     }
 }
 
-fn prepare_blackboard_databse(tctx: &TypCtx) -> BlackboardDatabase {
+fn prepare_blackboard_databse(tctx: &TypCtx) -> (BlackboardDatabase, HashMap<GenericRef, DefId>) {
     let mut database = BlackboardDatabase::new();
     // Add basic types
     database.add_type_impl(database::TypeImpl {
@@ -1287,6 +1307,7 @@ fn prepare_blackboard_databse(tctx: &TypCtx) -> BlackboardDatabase {
         constraints: vec![],
         fields: vec![],
     });
+    let mut defnitions = HashMap::new();
     // Add all structs and algebraic data types
     for ty in tctx.definitions.values() {
         let type_impl = match ty {
@@ -1328,6 +1349,7 @@ fn prepare_blackboard_databse(tctx: &TypCtx) -> BlackboardDatabase {
         for MethodSet {
             specialisation,
             methods,
+            def_id,
         } in method_sets
         {
             let ty = tctx.definitions.get(specialisation).unwrap();
@@ -1335,7 +1357,7 @@ fn prepare_blackboard_databse(tctx: &TypCtx) -> BlackboardDatabase {
                 .iter()
                 .map(|(name, tid)| (name.clone(), tctx.definitions.get(tid).unwrap().clone()))
                 .collect::<Vec<_>>();
-            database.add_method_block(database::MethodsBlock {
+            let gref = database.add_method_block(database::MethodsBlock {
                 // TODO: Support named method blocks
                 name: None,
                 methods: methods
@@ -1355,11 +1377,12 @@ fn prepare_blackboard_databse(tctx: &TypCtx) -> BlackboardDatabase {
                 },
                 constraints: vec![],
                 on_type: ty_to_blackboard_type(tctx, ty, &database),
-            })
+            });
+            defnitions.insert(GenericRef::MethodBlock(gref), *def_id);
         }
     }
     database.lower_to_clauses();
-    database
+    (database, defnitions)
 }
 
 pub fn ty_to_blackboard_type(

@@ -33,6 +33,8 @@ pub fn prepare_for_typechecking(program: &classy_syntax::ast::SourceFile) -> Typ
     tctx = resolve_type_names(tctx);
     AliasResolver::resolve(&mut tctx);
     dedup_trivially_eq_types(&mut tctx);
+    // Also, as a final transformation on method blocks
+    // creates a reverse mapping to retrieve method block based on its defintion id
     tctx = assign_meth_blocks_base_types::assign_base_types(tctx);
     tctx
 }
@@ -152,6 +154,7 @@ pub fn dedup_trivially_eq_types(ctx: &mut TypCtx) {
                 new_methods.insert(meth_name.clone(), *new_type);
             }
             new_method_sets.push(MethodSet {
+                def_id: set.def_id,
                 specialisation: *new_id,
                 methods: new_methods,
             })

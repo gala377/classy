@@ -173,6 +173,7 @@ pub fn resolve_methods_block(
         }
     }
     let meth_set = MethodSet {
+        def_id: ctx.next_id(),
         specialisation: resolved_for_t,
         methods: resolved_meths,
     };

@@ -135,8 +135,9 @@ impl Database {
         self.instances.push(instance);
     }
 
-    pub fn add_method_block(&mut self, method_block: MethodsBlock) {
+    pub fn add_method_block(&mut self, method_block: MethodsBlock) -> MethodBlockRef {
         self.method_blocks.push(method_block);
+        MethodBlockRef(self.method_blocks.len() - 1)
     }
 
     pub fn get_method_block(&self, method_block: GenericRef) -> &MethodsBlock {

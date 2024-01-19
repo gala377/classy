@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct MethodSet {
+    pub def_id: DefId,
     // A full type (along with bounds and applications)
     // that the following methods apply to.
     pub specialisation: TypeId,
@@ -29,6 +30,8 @@ pub struct TypCtx {
     /// with its method sets. Each methods set consists of specialisation and a
     /// list of methods within this specialisation.
     pub methods: HashMap<TypeId, Vec<MethodSet>>,
+    /// allows getting method set by its definition id
+    pub method_blocks_by_def_id: HashMap<DefId, (TypeId, usize)>,
 
     pub next_id: TypeId,
 
@@ -47,6 +50,7 @@ impl TypCtx {
             nodes: HashMap::new(),
             variables: HashMap::new(),
             methods: HashMap::new(),
+            method_blocks_by_def_id: HashMap::new(),
         }
     }
 
@@ -107,24 +111,6 @@ impl TypCtx {
         self.add_type_definition(at, typ)
     }
 
-    pub fn init_methods_block(
-        &mut self,
-        for_type: TypeId,
-        specialisation: TypeId,
-        methods: Vec<(Name, TypeId)>,
-    ) {
-        let meth_set = MethodSet {
-            specialisation,
-            methods: methods.into_iter().collect(),
-        };
-        match self.methods.get_mut(&for_type) {
-            Some(sets) => sets.push(meth_set),
-            None => {
-                self.methods.insert(for_type, vec![meth_set]);
-            }
-        }
-    }
-
     pub fn update_type_def(&mut self, at: TypeId, typ: Type) {
         self.add_type_definition(at, typ)
     }
@@ -181,7 +167,7 @@ impl TypCtx {
     }
 
     // we want to get rid of that somehow
-    fn next_id(&mut self) -> TypeId {
+    pub fn next_id(&mut self) -> TypeId {
         let res = self.next_id;
         self.next_id += 1;
         res

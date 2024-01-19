@@ -9,14 +9,6 @@ type Option(a) {
     None
 }
 
-methods for Option(a) {
-    map: ((a) -> b) -> Option(b) 
-    map f = this match {
-        Some(a) => Some(f(a))
-        None => None
-    }
-}
-
 methods for Option(String) {
   as_string: () -> String
   as_string() = this match {
@@ -28,7 +20,7 @@ methods for Option(String) {
 
 
 main {
-  let b = Option.Some(1)
+  let b = Option.Some("hello")
   print(b.as_string())
 }
 
