@@ -9,11 +9,20 @@ type Option(a) {
     None
 }
 
+
 methods for Option(String) {
   as_string: () -> String
   as_string() = this match {
     Some(inner) => inner
     None => "None"
+  }
+}
+
+methods for Option(a) {
+  map : ((a) -> b) -> Option(b)
+  map f = this match {
+    Some(inner) => Some(f(inner))
+    None => None
   }
 }
 

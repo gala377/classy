@@ -19,6 +19,7 @@ pub enum Constraint {
         of_type: Type,
     },
     HasMethod {
+        nodeid: usize,
         receiver: Type,
         method: String,
         args: Vec<Type>,

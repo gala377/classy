@@ -157,7 +157,6 @@ pub fn resolve_methods_block(
         _ => vec![],
     };
     scope.add_type_vars(&generics);
-    scope.new_scope();
 
     let mut resolved_meths = HashMap::new();
     for ast::Method {

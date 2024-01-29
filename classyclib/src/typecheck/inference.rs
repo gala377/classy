@@ -1,17 +1,21 @@
+use core::panic;
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
+    iter,
     rc::Rc,
+    sync::mpsc::SendError,
 };
 
 use classy_blackboard::database::{self, Database as BlackboardDatabase, GenericRef};
-use classy_syntax::ast::{self, ExprKind, Visitor};
+use classy_syntax::ast::{self, ExprKind, FunctionDefinition, MethodsBlock, Visitor};
 
 use crate::{
     id_provider::UniqueId,
     knowledge::DefinitionId,
     session::{Session, SharedIdProvider},
     typecheck::{
+        ast_to_type,
         constraints::Constraint,
         constrait_solver::{instance, ConstraintSolver, FreshTypeReplacer},
         fix_fresh::{self, generalize_type_above, generalize_types},
@@ -29,8 +33,14 @@ use super::{
 
 /// Maps unique node id in the ast with its type.
 pub type TypeEnv = HashMap<usize, Type>;
+/// Maps a given method call id with the resolved definition id.
+pub type MethodResolution = HashMap<usize, DefId>;
 
-pub fn run(tctx: &mut TypCtx, ast: &ast::SourceFile, session: &Session) -> TypeEnv {
+pub fn run(
+    tctx: &mut TypCtx,
+    ast: &ast::SourceFile,
+    session: &Session,
+) -> (TypeEnv, MethodResolution) {
     tctx.remove_to_infere_type();
 
     let mut cons = Inference::infer_types(tctx, ast, session);
@@ -55,7 +65,7 @@ pub fn run(tctx: &mut TypCtx, ast: &ast::SourceFile, session: &Session) -> TypeE
         );
     }
     remove_aliases_in_env(&mut cons.env, tctx);
-    cons.env
+    (cons.env, cons.resolved_method_calls)
 }
 
 struct GetNode {
@@ -101,6 +111,8 @@ pub(super) struct Inference<'sess> {
     /// The database is derived from the type context.
     blackboard_database: Rc<classy_blackboard::database::Database>,
     definitions: Rc<HashMap<GenericRef, DefId>>,
+    /// Maps method call ids to the resolved method definition id
+    resolved_method_calls: HashMap<usize, DefId>,
 }
 
 impl<'sess> Inference<'sess> {
@@ -123,6 +135,7 @@ impl<'sess> Inference<'sess> {
             session,
             blackboard_database: Rc::new(blackboard_database),
             definitions: Rc::new(definitions),
+            resolved_method_calls: HashMap::new(),
         }
     }
 
@@ -148,6 +161,7 @@ impl<'sess> Inference<'sess> {
             session: self.session,
             blackboard_database: self.blackboard_database.clone(),
             definitions: self.definitions.clone(),
+            resolved_method_calls: HashMap::new(),
         };
         let ret = f(&mut sub);
         self.merge(sub);
@@ -197,6 +211,7 @@ impl<'sess> Inference<'sess> {
             session: self.session,
             blackboard_database: self.blackboard_database.clone(),
             definitions: self.definitions.clone(),
+            resolved_method_calls: HashMap::new(),
         };
         println!("Generating constraints for {debug_name}");
         let mut prefex = PrefexScope::new();
@@ -228,6 +243,8 @@ impl<'sess> Inference<'sess> {
             );
             let constraints = inferer.constraints.clone();
             solver.solve(constraints);
+            let resolved_methods = solver.resolved_nodes;
+            self.resolved_method_calls.extend(resolved_methods);
             println!("Constraints solved {debug_name}");
             let mut substitutions = solver.substitutions.into_iter().collect();
             fix_fresh::fix_types_after_inference(&mut substitutions, tctx, &mut inferer.env);
@@ -280,10 +297,73 @@ impl<'sess> Inference<'sess> {
                 ast::TopLevelItemKind::ConstDefinition(def) => {
                     inferer.infer_const_def(tctx, global_scope.clone(), def);
                 }
+                ast::TopLevelItemKind::MethodsBlock(methods) => {
+                    inferer.infer_methods_block(tctx, global_scope.clone(), methods);
+                }
                 _ => continue,
             }
         }
         inferer
+    }
+
+    fn infer_methods_block(
+        &mut self,
+        tctx: &mut TypCtx,
+        global_scope: Rc<RefCell<Scope>>,
+        methods_block: &MethodsBlock<FunctionDefinition>,
+    ) {
+        // TODO: Also do something about the constraints
+        let mut prefex_scope = PrefexScope::new();
+        let scope = global_scope.borrow();
+        println!("Infering on ast type {:?}", &methods_block.typ);
+        let receiver_t = self.ast_type_to_type(&scope, &mut prefex_scope, &methods_block.typ);
+        println!("Invering method on type {:?}", receiver_t);
+        let (receiver_blackboard_t, existentials) = ty_to_blackboard_type(
+            tctx,
+            &receiver_t,
+            &self.blackboard_database,
+            &mut Vec::new(),
+        );
+        let query = classy_blackboard::goal::Goal::Exists(
+            existentials,
+            Box::new(classy_blackboard::goal::Goal::Domain(
+                classy_blackboard::goal::DomainGoal::MethodBlockExists {
+                    on_type: receiver_blackboard_t,
+                },
+            )),
+        );
+        let mut forest = classy_blackboard::slg::Forest::new();
+        let solver =
+            classy_blackboard::slg::SlgSolver::new(&self.blackboard_database, &mut forest, query);
+        println!("Solving for method block {:?}", methods_block);
+        println!(
+            "Receiver t: {:?}, existentials {}",
+            receiver_t, existentials
+        );
+        let matching_blocks = solver.take(101).collect::<Vec<_>>();
+        if matching_blocks.len() == 101 {
+            panic!("Too many matching blocks, the limit is 100");
+        }
+        for classy_blackboard::slg::Answer { subst, origin } in matching_blocks {
+            // TODO:
+            // We need to get origin to retrieve the correct methods block and from that
+            // retrieve all the methods.
+            // Now we need to use subst to get the correct receiver type and correct
+            // method types.
+            // We know what it because if the receiver type of the method block is a Scheme
+            // it has all of the type variables in the prefex.
+            println!("GOT A MATHICNG BLOCK");
+            println!("{:?}", origin);
+            // TODO: Those substitutions don't work, for example if we have
+            // Option(String) and Option(a)
+            // then there is nothing to substitute but we want ot have
+            // a -> String
+            // so we need to do union now with the type of the found method block
+            // on the left and the original receiver on the right and see what
+            // the substitution should be
+            println!("{:?}", subst);
+        }
+        todo!();
     }
 
     fn generate_constrains_for_function(
@@ -362,6 +442,7 @@ impl<'sess> Inference<'sess> {
             session: self.session,
             blackboard_database: self.blackboard_database.clone(),
             definitions: self.definitions.clone(),
+            resolved_method_calls: HashMap::new(),
         };
         let const_actual_type = {
             let const_scope = Scope::new(global_scope.clone());
@@ -401,6 +482,8 @@ impl<'sess> Inference<'sess> {
         self.generalize_after = std::cmp::max(self.generalize_after, other.generalize_after);
         self.typecheck_until_generalization
             .extend(other.typecheck_until_generalization);
+        self.resolved_method_calls
+            .extend(other.resolved_method_calls);
     }
 
     pub fn infer_in_expr(
@@ -811,6 +894,7 @@ impl<'sess> Inference<'sess> {
                     .map(|arg| self.infer_in_expr(arg, prefex_scope, tctx))
                     .collect::<Vec<_>>();
                 self.constraints.push(Constraint::HasMethod {
+                    nodeid: id,
                     receiver: receiver_t,
                     method: method.clone(),
                     args: args_t,
@@ -1007,6 +1091,7 @@ impl<'sess> Inference<'sess> {
             session: self.session,
             blackboard_database: self.blackboard_database.clone(),
             definitions: self.definitions.clone(),
+            resolved_method_calls: HashMap::new(),
         };
         for def in definitions {
             inferer.generate_constrains_for_function(tctx, self.scope.clone(), prefex_scope, def);
@@ -1125,7 +1210,10 @@ impl<'sess> Inference<'sess> {
                 }
                 prefex_scope.with_scope(|prefex_scope| {
                     prefex_scope.add_type_vars(&free_variables);
-                    self.ast_type_to_type(scope, prefex_scope, &typ)
+                    Type::Scheme {
+                        prefex: free_variables.clone(),
+                        typ: Box::new(self.ast_type_to_type(scope, prefex_scope, &typ)),
+                    }
                 })
             }
             ast::Typ::Array(t) => {
@@ -1356,6 +1444,13 @@ fn prepare_blackboard_databse(tctx: &TypCtx) -> (BlackboardDatabase, HashMap<Gen
                 .iter()
                 .map(|(name, tid)| (name.clone(), tctx.definitions.get(tid).unwrap().clone()))
                 .collect::<Vec<_>>();
+            let mut seen_generics = Vec::new();
+            let (on_type, _) = ty_to_blackboard_type(tctx, ty, &database, &mut seen_generics);
+            if let Type::Scheme { prefex, .. } = ty {
+                seen_generics.push(Vec::new());
+                seen_generics[0].extend(prefex.iter().map(|_| false));
+            }
+            println!("SEEN GENERICS {seen_generics:?}");
             let gref = database.add_method_block(database::MethodsBlock {
                 // TODO: Support named method blocks
                 name: None,
@@ -1367,7 +1462,7 @@ fn prepare_blackboard_databse(tctx: &TypCtx) -> (BlackboardDatabase, HashMap<Gen
                             _ => vec![],
                         },
                         name,
-                        ty: ty_to_blackboard_type(tctx, &ty, &database),
+                        ty: ty_to_blackboard_type(tctx, &ty, &database, &mut seen_generics).0,
                     })
                     .collect(),
                 type_params: match ty {
@@ -1375,7 +1470,7 @@ fn prepare_blackboard_databse(tctx: &TypCtx) -> (BlackboardDatabase, HashMap<Gen
                     _ => vec![],
                 },
                 constraints: vec![],
-                on_type: ty_to_blackboard_type(tctx, ty, &database),
+                on_type,
             });
             defnitions.insert(GenericRef::MethodBlock(gref), *def_id);
         }
@@ -1384,56 +1479,125 @@ fn prepare_blackboard_databse(tctx: &TypCtx) -> (BlackboardDatabase, HashMap<Gen
     (database, defnitions)
 }
 
+pub type ExistentialCount = usize;
+
+// TODO: This always returns 0, we would need to have a scope for the generics
+// So that we don't count the same generic twice but yeah, the generics need to
+// be accounted
 pub fn ty_to_blackboard_type(
     tctx: &TypCtx,
     ty: &Type,
     database: &classy_blackboard::database::Database,
-) -> classy_blackboard::ty::Ty {
+    seen_generics: &mut Vec<Vec<bool>>,
+) -> (classy_blackboard::ty::Ty, ExistentialCount) {
+    println!("TY TO BLACKBOARD TYPE {ty:?}");
     match ty {
-        Type::Int => classy_blackboard::ty::Ty::Ref(database.typeref_from_name("Int").unwrap()),
-        Type::UInt => classy_blackboard::ty::Ty::Ref(database.typeref_from_name("UInt").unwrap()),
-        Type::Bool => classy_blackboard::ty::Ty::Ref(database.typeref_from_name("Bool").unwrap()),
-        Type::String => {
-            classy_blackboard::ty::Ty::Ref(database.typeref_from_name("String").unwrap())
-        }
-        Type::Float => classy_blackboard::ty::Ty::Ref(database.typeref_from_name("Float").unwrap()),
-        Type::Unit => classy_blackboard::ty::Ty::Ref(database.typeref_from_name("Unit").unwrap()),
-        Type::Byte => classy_blackboard::ty::Ty::Ref(database.typeref_from_name("Byte").unwrap()),
-        Type::Struct { def, .. } | Type::ADT { def, .. } => classy_blackboard::ty::Ty::Ref(
-            database
-                .typeref_from_name(&tctx.name_by_def_id(*def))
-                .unwrap(),
+        Type::Int => (
+            classy_blackboard::ty::Ty::Ref(database.typeref_from_name("Int").unwrap()),
+            0,
         ),
-        Type::Function { args, ret } => classy_blackboard::ty::Ty::Fn(
-            args.iter()
-                .map(|t| ty_to_blackboard_type(tctx, t, database))
-                .collect(),
-            Box::new(ty_to_blackboard_type(tctx, ret, database)),
+        Type::UInt => (
+            classy_blackboard::ty::Ty::Ref(database.typeref_from_name("UInt").unwrap()),
+            0,
         ),
-        Type::Tuple(args) => classy_blackboard::ty::Ty::Tuple(
-            args.iter()
-                .map(|t| ty_to_blackboard_type(tctx, t, database))
-                .collect(),
+        Type::Bool => (
+            classy_blackboard::ty::Ty::Ref(database.typeref_from_name("Bool").unwrap()),
+            0,
         ),
-        Type::Array(inner) => {
-            classy_blackboard::ty::Ty::Array(Box::new(ty_to_blackboard_type(tctx, inner, database)))
-        }
-        Type::Scheme { typ, .. } => ty_to_blackboard_type(tctx, typ, database),
-        Type::App { typ, args } => {
-            let typ = ty_to_blackboard_type(tctx, typ, database);
-            let args = args
+        Type::String => (
+            classy_blackboard::ty::Ty::Ref(database.typeref_from_name("String").unwrap()),
+            0,
+        ),
+        Type::Float => (
+            classy_blackboard::ty::Ty::Ref(database.typeref_from_name("Float").unwrap()),
+            0,
+        ),
+        Type::Unit => (
+            classy_blackboard::ty::Ty::Ref(database.typeref_from_name("Unit").unwrap()),
+            0,
+        ),
+        Type::Byte => (
+            classy_blackboard::ty::Ty::Ref(database.typeref_from_name("Byte").unwrap()),
+            0,
+        ),
+        Type::Struct { def, .. } | Type::ADT { def, .. } => (
+            classy_blackboard::ty::Ty::Ref(
+                database
+                    .typeref_from_name(&tctx.name_by_def_id(*def))
+                    .unwrap(),
+            ),
+            0,
+        ),
+        Type::Function { args, ret } => {
+            let args_and_count = args
                 .iter()
-                .map(|t| ty_to_blackboard_type(tctx, t, database))
-                .collect();
-            classy_blackboard::ty::Ty::App(Box::new(typ), args)
+                .map(|t| ty_to_blackboard_type(tctx, t, database, seen_generics))
+                .collect::<Vec<_>>();
+            let existentials = args_and_count.iter().fold(0, |acc, (_, c)| acc + c);
+            let args = args_and_count.into_iter().map(|(t, _)| t).collect();
+            let (ret_t, ret_count) = ty_to_blackboard_type(tctx, ret, database, seen_generics);
+            (
+                classy_blackboard::ty::Ty::Fn(args, Box::new(ret_t)),
+                existentials + ret_count,
+            )
         }
-        Type::Generic(shift, index) => classy_blackboard::ty::Ty::Generic {
-            scopes: shift.0 as usize,
-            index: *index,
-        },
+        Type::Tuple(args) => {
+            let args_and_count = args
+                .iter()
+                .map(|t| ty_to_blackboard_type(tctx, t, database, seen_generics))
+                .collect::<Vec<_>>();
+            let existentials = args_and_count.iter().fold(0, |acc, (_, c)| acc + c);
+            let args = args_and_count.into_iter().map(|(t, _)| t).collect();
+            (classy_blackboard::ty::Ty::Tuple(args), existentials)
+        }
+        Type::Array(inner) => {
+            let (inner, count) = ty_to_blackboard_type(tctx, inner, database, seen_generics);
+            (classy_blackboard::ty::Ty::Array(Box::new(inner)), count)
+        }
+        Type::Scheme { typ, .. } => {
+            seen_generics.push(Vec::new());
+            let res = ty_to_blackboard_type(tctx, typ, database, seen_generics);
+            seen_generics.pop();
+            res
+        }
+        Type::App { typ, args } => {
+            let (typ, _) = ty_to_blackboard_type(tctx, typ, database, seen_generics);
+            let args_and_count = args
+                .iter()
+                .map(|t| ty_to_blackboard_type(tctx, t, database, seen_generics))
+                .collect::<Vec<_>>();
+            let existentials = args_and_count.iter().fold(0, |acc, (_, c)| acc + c);
+            let args = args_and_count.into_iter().map(|(t, _)| t).collect();
+            (
+                classy_blackboard::ty::Ty::App(Box::new(typ), args),
+                existentials,
+            )
+        }
+        Type::Generic(shift, index) => {
+            let len = seen_generics.len();
+            println!("Seen generics {seen_generics:?}");
+            println!("Generic {shift:?} {index:?}");
+            let scope = &mut seen_generics[len - shift.0 as usize - 1];
+            if scope.len() <= *index {
+                scope.extend(iter::repeat(false).take(*index - scope.len() + 1))
+            }
+            let account_generic = if scope[*index] {
+                0
+            } else {
+                scope[*index] = true;
+                1
+            };
+            (
+                classy_blackboard::ty::Ty::Generic {
+                    scopes: shift.0 as usize,
+                    index: *index,
+                },
+                account_generic,
+            )
+        }
         Type::Alias(id) => {
             let resolved = tctx.resolve_alias(*id);
-            ty_to_blackboard_type(tctx, &resolved, database)
+            ty_to_blackboard_type(tctx, &resolved, database, seen_generics)
         }
         t => panic!("Unsupported type {t:?}"),
     }

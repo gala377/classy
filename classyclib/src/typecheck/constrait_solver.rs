@@ -2,6 +2,7 @@ use core::panic;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
+use classy_blackboard as blackboard;
 use classy_blackboard::database::GenericRef;
 use classy_blackboard::slg::SlgSolver;
 use classy_blackboard::{goal, slg::Answer};
@@ -47,6 +48,9 @@ pub(super) struct ConstraintSolver<'ctx, 'solver_db> {
     pub blackboard_database: &'solver_db classy_blackboard::database::Database,
     forest: classy_blackboard::slg::Forest,
     definitions: Rc<HashMap<GenericRef, DefId>>,
+    /// Resolved method calls, the key is a method call id and the value is the
+    /// definition id of the method
+    pub resolved_nodes: HashMap<usize, DefId>,
     // TODO: This is how the constraints should look like i think
     // We are going to index into the outer vector to get the clauses
     // to inject into the goal for the blackboard to solve.
@@ -67,6 +71,7 @@ impl<'ctx, 'solver_db> ConstraintSolver<'ctx, 'solver_db> {
             blackboard_database,
             forest: classy_blackboard::slg::Forest::new(),
             definitions,
+            resolved_nodes: HashMap::new(),
         }
     }
 
@@ -369,22 +374,26 @@ impl<'ctx, 'solver_db> ConstraintSolver<'ctx, 'solver_db> {
                 panic!()
             }
             Constraint::HasMethod {
+                nodeid,
                 receiver,
                 method,
                 args,
                 ret,
             } => {
-                let receiver_t =
-                    ty_to_blackboard_type(self.tctx, &receiver, self.blackboard_database);
-                let goal = goal::Goal::Domain(goal::DomainGoal::FindMethod {
-                    name: method.clone(),
-                    on_type: receiver_t.clone(),
-                });
-                let goal = if let classy_blackboard::ty::Ty::App(_, args) = &receiver_t {
-                    goal::Goal::Exists(args.len(), Box::new(goal))
-                } else {
-                    goal
-                };
+                println!("HAS METHOD ON {receiver:?}", receiver = receiver);
+                let (receiver_t, existentials) = ty_to_blackboard_type(
+                    self.tctx,
+                    &receiver,
+                    self.blackboard_database,
+                    &mut Vec::new(),
+                );
+                let mut goal = goal::Goal::Exists(
+                    existentials,
+                    Box::new(goal::Goal::Domain(goal::DomainGoal::FindMethod {
+                        name: method.clone(),
+                        on_type: receiver_t.clone(),
+                    })),
+                );
                 // TODO: If the type is scheme we should do forall? Or instance it with a fresh
                 // variable
                 println!("goal: {:?}", goal);
@@ -422,6 +431,7 @@ impl<'ctx, 'solver_db> ConstraintSolver<'ctx, 'solver_db> {
                 println!("Found candidate: {:?}", result[0]);
                 let resolved = self.tctx.definitions[&method_type].clone();
                 println!("Type of the candidate is {:?}", resolved);
+                self.resolved_nodes.insert(nodeid, *def_id);
                 constraints.push_back(Constraint::Eq(
                     resolved,
                     Type::Function {
@@ -465,11 +475,13 @@ fn replace_in_constraints(id: usize, for_t: Type, cons: &mut VecDeque<Constraint
                 of_type: replacer.fold_type(of_type.clone()).unwrap(),
             },
             Constraint::HasMethod {
+                nodeid,
                 receiver,
                 method,
                 args,
                 ret,
             } => Constraint::HasMethod {
+                nodeid: *nodeid,
                 receiver: replacer.fold_type(receiver.clone()).unwrap(),
                 method: method.clone(),
                 args: args
