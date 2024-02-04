@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    discard_values::DiscardValues,
     id_provider::UniqueId,
+    util::discard_values::DiscardValues,
     v2::knowledge::{Database, QueryError, TypeId},
 };
 use thiserror::Error;

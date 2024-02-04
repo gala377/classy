@@ -2,7 +2,6 @@ use core::panic;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
-use classy_blackboard as blackboard;
 use classy_blackboard::database::GenericRef;
 use classy_blackboard::slg::SlgSolver;
 use classy_blackboard::{goal, slg::Answer};

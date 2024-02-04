@@ -4,7 +4,6 @@ use std::{
     collections::{HashMap, HashSet},
     iter,
     rc::Rc,
-    sync::mpsc::SendError,
 };
 
 use classy_blackboard::database::{self, Database as BlackboardDatabase, GenericRef};
@@ -14,7 +13,6 @@ use crate::{
     id_provider::UniqueId,
     session::{Session, SharedIdProvider},
     typecheck::{
-        ast_to_type,
         constraints::Constraint,
         constrait_solver::{instance, ConstraintSolver, FreshTypeReplacer},
         fix_fresh::{self, generalize_type_above, generalize_types},
@@ -368,7 +366,6 @@ impl<'sess> Inference<'sess> {
             // TODO: Union specialisation_tid with the receiver_tid and get
             // substitutions so that TODO: We can substitute within
             // methods
-            let mut unification_substitutions = HashMap::new();
         }
         todo!();
     }
