@@ -140,13 +140,13 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
     ) -> ExprKind {
         let ast::ExprKind::Name(ast::Name::Unresolved { path, identifier }) = receiver.kind.clone()
         else {
-            return ast::fold::fold_method_call(self, receiver, field, args, kwargs, None);
+            return ast::fold::fold_method_call(self, receiver, field, args, kwargs);
         };
         let Some(t) = self.tctx.get_type(&identifier) else {
-            return ast::fold::fold_method_call(self, receiver, field, args, kwargs, None);
+            return ast::fold::fold_method_call(self, receiver, field, args, kwargs);
         };
         let Some(t) = resolve_case(self.tctx, &field, &t) else {
-            return ast::fold::fold_method_call(self, receiver, field, args, kwargs, None);
+            return ast::fold::fold_method_call(self, receiver, field, args, kwargs);
         };
         match t {
             Type::Struct { fields, .. } => {
@@ -242,7 +242,7 @@ impl<'ctx> PromoteCallToStructLiteral<'ctx> {
                     args,
                 )
             }
-            _ => ast::fold::fold_method_call(self, receiver, field, args, kwargs, None),
+            _ => ast::fold::fold_method_call(self, receiver, field, args, kwargs),
         }
     }
 }
@@ -275,7 +275,6 @@ impl<'ctx> ast::fold::Folder for PromoteCallToStructLiteral<'ctx> {
         method: String,
         args: Vec<ast::Expr>,
         kwargs: std::collections::HashMap<String, ast::Expr>,
-        reslved_definition: Option<usize>,
     ) -> ExprKind {
         self.try_to_resolve_adt(receiver, method, args, kwargs)
     }

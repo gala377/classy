@@ -179,9 +179,8 @@ pub trait Folder: Sized {
         method: String,
         args: Vec<Expr>,
         kwargs: HashMap<String, Expr>,
-        resolved_definition: Option<usize>,
     ) -> ExprKind {
-        fold_method_call(self, receiver, method, args, kwargs, resolved_definition)
+        fold_method_call(self, receiver, method, args, kwargs)
     }
 
     fn fold_anon_type(&mut self, fields: Vec<(String, Expr)>) -> ExprKind {
@@ -555,8 +554,7 @@ pub fn fold_expr_kind(folder: &mut impl Folder, expr: ExprKind) -> ExprKind {
             method,
             args,
             kwargs,
-            resolved_definition,
-        } => folder.fold_methods_call(*receiver, method, args, kwargs, resolved_definition),
+        } => folder.fold_methods_call(*receiver, method, args, kwargs),
         ExprKind::LetRec { definitions } => folder.fold_let_rec(definitions),
     }
 }
@@ -925,7 +923,6 @@ pub fn fold_method_call(
     method: String,
     args: Vec<Expr>,
     kwargs: HashMap<String, Expr>,
-    resolved_definition: Option<usize>,
 ) -> ExprKind {
     ExprKind::MethodCall {
         receiver: Box::new(folder.fold_expr(receiver)),
@@ -935,7 +932,6 @@ pub fn fold_method_call(
             .into_iter()
             .map(|(k, v)| (k, folder.fold_expr(v)))
             .collect(),
-        resolved_definition,
     }
 }
 

@@ -1043,7 +1043,6 @@ impl<'source> Parser<'source> {
                                 method,
                                 args,
                                 kwargs,
-                                resolved_definition: None,
                             });
                         }
                         e => unreachable!("parse_fn_call returned an invalid expression {:?}", e),

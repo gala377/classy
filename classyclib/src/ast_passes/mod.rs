@@ -1,6 +1,6 @@
 use classy_syntax::ast;
 
-use crate::{knowledge::Database, session::Session, typecheck::type_context::TypCtx};
+use crate::{session::Session, typecheck::type_context::TypCtx, v2::knowledge::Database};
 
 pub mod assign_ast_ids;
 pub mod expand_namespace;

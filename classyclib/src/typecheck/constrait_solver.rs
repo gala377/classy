@@ -7,7 +7,6 @@ use classy_blackboard::database::GenericRef;
 use classy_blackboard::slg::SlgSolver;
 use classy_blackboard::{goal, slg::Answer};
 
-use crate::knowledge::DefinitionId;
 use crate::{
     session::SharedIdProvider,
     typecheck::{

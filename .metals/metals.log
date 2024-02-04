@@ -956,3 +956,6 @@ INFO: Unsupported notification method: $/setTrace
 2024.01.29 22:48:47 INFO  Started: Metals version 1.2.0 in folders '/Users/rgalczak/Projects/Rust/classy' for client Visual Studio Code 1.85.2.[0m
 2024.01.29 22:48:50 WARN  Build server is not auto-connectable.[0m
 2024.01.29 22:48:50 WARN  no build tool detected in workspace '/Users/rgalczak/Projects/Rust/classy'. The most common cause for this problem is that the editor was opened in the wrong working directory, for example if you use sbt then the workspace directory should contain build.sbt. [0m
+2024.01.30 00:16:16 INFO  Shutting down server[0m
+2024.01.30 00:16:16 INFO  shutting down Metals[0m
+2024.01.30 00:16:16 INFO  Exiting server[0m

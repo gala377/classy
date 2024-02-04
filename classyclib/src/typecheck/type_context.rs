@@ -319,4 +319,10 @@ impl TypCtx {
             assert!(*id != self.to_infere_id);
         }
     }
+
+    pub fn get_methods_block(&self, def_id: DefId) -> Option<&MethodSet> {
+        let (typ, block) = self.method_blocks_by_def_id.get(&def_id)?;
+        let methods_group = self.methods.get(typ)?;
+        methods_group.get(*block)
+    }
 }

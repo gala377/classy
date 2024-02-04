@@ -1,6 +1,6 @@
 use classy_syntax::ast::{self, Folder, Namespace};
 
-use crate::{compile::CompilationError, knowledge::Database, typecheck::types::Type};
+use crate::{typecheck::types::Type, v2::compile::CompilationError, v2::knowledge::Database};
 
 use super::AstPass;
 
@@ -166,10 +166,9 @@ impl Folder for PromoteCallToStructLiteral<'_> {
         method: String,
         args: Vec<ast::Expr>,
         kwargs: std::collections::HashMap<String, ast::Expr>,
-        resolved_definition: Option<usize>,
     ) -> ast::ExprKind {
         if !kwargs.is_empty() {
-            return ast::fold::fold_method_call(self, receiver, method, args, kwargs, None);
+            return ast::fold::fold_method_call(self, receiver, method, args, kwargs);
         }
         if let Some((name, (constr, typ))) = self.is_adt_constructor(&receiver, &method) {
             match typ {
@@ -197,7 +196,7 @@ impl Folder for PromoteCallToStructLiteral<'_> {
                 }
             }
         }
-        ast::fold::fold_method_call(self, receiver, method, args, kwargs, None)
+        ast::fold::fold_method_call(self, receiver, method, args, kwargs)
     }
 }
 
@@ -209,9 +208,9 @@ mod tests {
 
     use crate::{
         ast_passes::AstPass,
-        knowledge::{Database, DefinitionId, PackageId, PackageInfo, TypeId},
         session::Session,
         typecheck::types::Type,
+        v2::knowledge::{Database, DefinitionId, PackageId, PackageInfo, TypeId},
     };
 
     use super::PromoteCallToStructLiteral;

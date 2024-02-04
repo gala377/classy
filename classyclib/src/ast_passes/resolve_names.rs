@@ -1,8 +1,8 @@
 use classy_syntax::ast::{self, Folder};
 
 use crate::{
-    knowledge::{Database, CURRENT_PACKAGE_ID},
     scope::Scope,
+    v2::knowledge::{Database, CURRENT_PACKAGE_ID},
 };
 
 use super::AstPass;
@@ -304,9 +304,9 @@ mod tests {
 
     use crate::{
         ast_passes::{func_to_struct_literal_db::PromoteCallToStructLiteral, AstPass},
-        knowledge::{Database, DefinitionId, TypeHashMap, TypeId},
         session::Session,
         typecheck::types::Type,
+        v2::knowledge::{Database, DefinitionId, TypeHashMap, TypeId},
     };
     use std::collections::HashMap;
 
@@ -332,7 +332,7 @@ mod tests {
             db.definition_types.insert(DefinitionId(id), TypeId(id));
         }
         for (name, globals) in packages {
-            let package = crate::knowledge::PackageInfo {
+            let package = crate::v2::knowledge::PackageInfo {
                 name,
                 globals: globals
                     .into_iter()

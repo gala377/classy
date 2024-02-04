@@ -12,7 +12,6 @@ use classy_syntax::ast::{self, ExprKind, FunctionDefinition, MethodsBlock, Visit
 
 use crate::{
     id_provider::UniqueId,
-    knowledge::DefinitionId,
     session::{Session, SharedIdProvider},
     typecheck::{
         ast_to_type,
@@ -344,7 +343,7 @@ impl<'sess> Inference<'sess> {
         if matching_blocks.len() == 101 {
             panic!("Too many matching blocks, the limit is 100");
         }
-        for classy_blackboard::slg::Answer { subst, origin } in matching_blocks {
+        for classy_blackboard::slg::Answer { origin, .. } in matching_blocks {
             // TODO:
             // We need to get origin to retrieve the correct methods block and from that
             // retrieve all the methods.
@@ -358,10 +357,18 @@ impl<'sess> Inference<'sess> {
             // Option(String) and Option(a)
             // then there is nothing to substitute but we want ot have
             // a -> String
-            // so we need to do union now with the type of the found method block
-            // on the left and the original receiver on the right and see what
-            // the substitution should be
-            println!("{:?}", subst);
+            // so we need to do union now with the type of the found method
+            // block on the left and the original receiver on the
+            // right and see what the substitution should be
+            let def_id = self.definitions[&origin.expect("empty methods block origin")];
+            let methods_block = tctx
+                .get_methods_block(def_id)
+                .expect("could not find methods block");
+            let specialisation_tid = methods_block.specialisation;
+            // TODO: Union specialisation_tid with the receiver_tid and get
+            // substitutions so that TODO: We can substitute within
+            // methods
+            let mut unification_substitutions = HashMap::new();
         }
         todo!();
     }

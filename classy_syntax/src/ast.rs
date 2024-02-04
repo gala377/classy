@@ -340,7 +340,6 @@ pub enum ExprKind {
         method: String,
         args: Vec<Expr>,
         kwargs: HashMap<String, Expr>,
-        resolved_definition: Option<usize>,
     },
 }
 

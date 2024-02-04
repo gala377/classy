@@ -6,7 +6,6 @@ pub mod constraints;
 pub mod constrait_solver;
 pub mod fix_fresh;
 pub mod inference;
-pub mod instance;
 pub mod scope;
 pub mod type_context;
 pub mod types;

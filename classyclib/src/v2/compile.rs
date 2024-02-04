@@ -10,8 +10,8 @@ use thiserror::Error;
 
 use crate::{
     ast_passes,
-    knowledge::{Database, DefinitionId, PackageId, PackageInfo},
     session::Session,
+    v2::knowledge::{Database, DefinitionId, PackageId, PackageInfo},
 };
 
 #[derive(Error, Debug)]

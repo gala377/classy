@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use crate::{
     discard_values::DiscardValues,
     id_provider::UniqueId,
-    knowledge::{Database, QueryError, TypeId},
+    v2::knowledge::{Database, QueryError, TypeId},
 };
 use thiserror::Error;
 
-use super::types::{DeBruijn, Type, TypeFolder};
+use crate::typecheck::types::{DeBruijn, Type, TypeFolder};
 
 #[derive(Error, Debug)]
 pub enum InstantiationError {
@@ -52,7 +52,7 @@ pub fn instance(
             );
         }
         Type::Alias(id) => {
-            let resolved = db.resolve_alias(crate::knowledge::TypeId(*id))?;
+            let resolved = db.resolve_alias(crate::v2::knowledge::TypeId(*id))?;
             return instance(db, resolved, args);
         }
         t => {
@@ -94,7 +94,7 @@ impl<'ctx> TypeFolder for Instatiator<'ctx> {
 
     fn fold_scheme(
         &mut self,
-        prefex: Vec<super::type_context::Name>,
+        prefex: Vec<crate::typecheck::type_context::Name>,
         typ: Type,
     ) -> Result<Type, Self::Error> {
         println!("Instatiating scheme {prefex:?} {typ:?}");
@@ -132,7 +132,9 @@ impl<'ctx> TypeFolder for Instatiator<'ctx> {
 
     fn fold_alias(&mut self, for_type: usize) -> Result<Type, Self::Error> {
         println!("Resolving alias {for_type}");
-        let resolved = self.db.resolve_alias(crate::knowledge::TypeId(for_type))?;
+        let resolved = self
+            .db
+            .resolve_alias(crate::v2::knowledge::TypeId(for_type))?;
         println!("Resolved alias {resolved:?}");
         self.fold_type(resolved)
     }

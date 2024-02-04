@@ -1,3 +1,5 @@
+/// This is a part of typechecker V2.
+/// This will replace the TypCtx.
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
@@ -6,8 +8,8 @@ use thiserror::Error;
 use classy_syntax::ast;
 
 use crate::id_provider::UniqueId;
-use crate::typecheck::instance::{union, UnificationError};
 use crate::typecheck::types::Type;
+use crate::v2::instance::{union, UnificationError};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DefinitionId(pub UniqueId);
@@ -329,7 +331,9 @@ impl Database {
     /// Returns the un-schemed, un-applied type.
     pub fn base_type(&self, t: Type) -> Result<Type, QueryError> {
         match t {
-            Type::Alias(id) => self.base_type(self.resolve_alias(crate::knowledge::TypeId(id))?),
+            Type::Alias(id) => {
+                self.base_type(self.resolve_alias(crate::v2::knowledge::TypeId(id))?)
+            }
             Type::Scheme { typ, .. } => self.base_type(*typ),
             Type::App { typ, .. } => self.base_type(*typ),
             t => Ok(t),
@@ -350,16 +354,16 @@ impl Database {
                 return Ok(true);
             }
             (&Type::Alias(for_type_1), &Type::Alias(for_type_2)) => {
-                let t1 = self.resolve_alias_ref(crate::knowledge::TypeId(for_type_1))?;
-                let t2 = self.resolve_alias_ref(crate::knowledge::TypeId(for_type_2))?;
+                let t1 = self.resolve_alias_ref(crate::v2::knowledge::TypeId(for_type_1))?;
+                let t2 = self.resolve_alias_ref(crate::v2::knowledge::TypeId(for_type_2))?;
                 (t1, t2)
             }
             (&Type::Alias(for_type), t2) => {
-                let t1 = self.resolve_alias_ref(crate::knowledge::TypeId(for_type))?;
+                let t1 = self.resolve_alias_ref(crate::v2::knowledge::TypeId(for_type))?;
                 (t1, t2)
             }
             (t1, &Type::Alias(for_type)) => {
-                let t2 = self.resolve_alias_ref(crate::knowledge::TypeId(for_type))?;
+                let t2 = self.resolve_alias_ref(crate::v2::knowledge::TypeId(for_type))?;
                 (t1, t2)
             }
             (t1, t2) => (t1, t2),
