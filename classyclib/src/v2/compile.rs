@@ -11,7 +11,7 @@ use thiserror::Error;
 use crate::{
     ast_passes,
     session::Session,
-    v2::knowledge::{Database, DefinitionId, PackageId, PackageInfo},
+    v2::knowledge::{Database, DefinitionId, PackageInfo},
 };
 
 #[derive(Error, Debug)]
@@ -54,7 +54,6 @@ impl Compiler {
         self.parse_source_files()?;
         self.after_parsing_passes();
         self.populate_db_definitions();
-        self.fully_expand_names();
         Ok(())
     }
 
@@ -129,16 +128,6 @@ impl Compiler {
                     t => unimplemented!("{t:?}"),
                 }
             }
-        }
-    }
-
-    pub fn fully_expand_names(&mut self) {
-        // TODO
-        // the pass is wrong as it cannot resolve method names.
-        // What we need to do, before we even typecheck is for each file, resolve its
-        // imports,
-        for ast in &mut self.package_ast {
-            *ast = ast_passes::fully_expand_names(ast.clone(), &self.session, &self.database);
         }
     }
 }

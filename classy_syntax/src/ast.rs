@@ -17,7 +17,7 @@ fn default<T: Default>() -> T {
 }
 
 /// Represents an identifier in source
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Name {
     Unresolved {
         path: Vec<String>,
