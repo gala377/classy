@@ -52,7 +52,7 @@ pub fn instance(
             );
         }
         Type::Alias(id) => {
-            let resolved = db.resolve_alias(crate::v2::knowledge::TypeId(*id))?;
+            let resolved = db.resolve_tid(crate::v2::knowledge::TypeId(*id))?;
             return instance(db, resolved, args);
         }
         t => {
@@ -134,7 +134,7 @@ impl<'ctx> TypeFolder for Instatiator<'ctx> {
         println!("Resolving alias {for_type}");
         let resolved = self
             .db
-            .resolve_alias(crate::v2::knowledge::TypeId(for_type))?;
+            .resolve_tid(crate::v2::knowledge::TypeId(for_type))?;
         println!("Resolved alias {resolved:?}");
         self.fold_type(resolved)
     }
@@ -165,8 +165,8 @@ pub fn union(
     subs: &mut Substitutions,
 ) -> Result<Type, UnificationError> {
     match (a, b) {
-        (Type::Alias(for_t), other) => union(db, db.resolve_alias(TypeId(for_t))?, other, subs),
-        (other, Type::Alias(for_t)) => union(db, other, db.resolve_alias(TypeId(for_t))?, subs),
+        (Type::Alias(for_t), other) => union(db, db.resolve_tid(TypeId(for_t))?, other, subs),
+        (other, Type::Alias(for_t)) => union(db, other, db.resolve_tid(TypeId(for_t))?, subs),
         (Type::Int, Type::Int) => Ok(Type::Int),
         (Type::UInt, Type::UInt) => Ok(Type::UInt),
         (Type::Float, Type::Float) => Ok(Type::Float),

@@ -54,6 +54,7 @@ impl Compiler {
         self.parse_source_files()?;
         self.after_parsing_passes();
         self.populate_db_definitions();
+        self.populate_db_type_info();
         Ok(())
     }
 
@@ -84,7 +85,6 @@ impl Compiler {
     ///     - assigning ids to all nodes
     ///     - verifying lvalues
     ///     - hoisting anonymous types
-    ///     - expanding imports
     ///     - exapnding filly namespaced names for top level defnitions
     pub fn after_parsing_passes(&mut self) {
         for ast in &mut self.package_ast {
@@ -112,22 +112,28 @@ impl Compiler {
                     ConstDefinition(const_def) => self
                         .database
                         .add_const_definition(DefinitionId(*id), const_def.clone()),
-                    MethodsBlock(_) => {
-                        // method blocks can be skipped for now.
-                        // TODO: Note that is not true in the future as in general we will
-                        // want to assign names to method blocks and import them into the scope.
-                        continue;
-                    }
-                    // TODO: We also need to add instance and methods imports here as
-                    // visible but also resolved so that they don't need to be typechecked
-                    // Also anonymous instances and anonymous methods need to have visibility
-                    // figured out. In general, instance or methods that are defined within the
-                    // same file as the type are visible everywhere where the type is imported.
-                    // Named instances and named method blocks are visible within the namespace
-                    // they were defined in but not outside of it unless imported.
+                    MethodsBlock(meths_def) => self
+                        .database
+                        .add_method_block_definition(DefinitionId(*id), meths_def.clone()),
+                    ClassDefinition(class_def) => self
+                        .database
+                        .add_class_definition(DefinitionId(*id), class_def.clone()),
+                    InstanceDefinition(inst_def) => self
+                        .database
+                        .add_instance_definition(DefinitionId(*id), inst_def.clone()),
                     t => unimplemented!("{t:?}"),
                 }
             }
         }
+    }
+
+    fn populate_db_type_info(&mut self) {
+        // go through all type definitions and translate them into actual types
+        // 1. do not resolve any fields, just add the type names to the database
+        // 2. Knowing the names and their ids resolve the fields (potential recursive
+        //    types)
+        // 3. Add all of the functions
+        // 4. Add all of the methods blocks
+        todo!()
     }
 }

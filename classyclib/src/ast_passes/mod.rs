@@ -30,7 +30,6 @@ pub fn run_after_parsing_passes(ast: ast::SourceFile, session: &Session) -> ast:
     let ast = verify_lvalues::VerifyLvalues.run(ast, session);
     let ast = promote_local_types::PromoteAnonTypes::new().run(ast, session);
     let ast = implicit_forall::ImplicitForall::new().run(ast, session);
-    // TODO: Expand imports
     let ast = assign_ast_ids::AssignAstIds::new().run(ast, session);
     let ast = expand_namespace::ExpandNamespace::new().run(ast, session);
     ast

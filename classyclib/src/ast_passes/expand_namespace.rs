@@ -17,6 +17,17 @@ macro_rules! expand_namespace {
             .unwrap_or($on.name.clone());
         $on
     }};
+
+    ($self:ident, $on:ident, optional) => {{
+        $on.name = $on.name.map(|name| {
+            $self
+                .namespace
+                .as_ref()
+                .map(|ns| ns.joined_with(&name))
+                .unwrap_or(name.clone())
+        });
+        $on
+    }};
 }
 
 impl ExpandNamespace {
@@ -36,6 +47,24 @@ impl Folder for ExpandNamespace {
 
     fn fold_const_definition(&mut self, mut def: ast::ConstDefinition) -> ast::ConstDefinition {
         expand_namespace!(self, def)
+    }
+
+    fn fold_class_definition(&mut self, mut def: ast::ClassDefinition) -> ast::ClassDefinition {
+        expand_namespace!(self, def)
+    }
+
+    fn fold_methods_block(
+        &mut self,
+        mut def: ast::MethodsBlock<FunctionDefinition>,
+    ) -> ast::MethodsBlock<FunctionDefinition> {
+        expand_namespace!(self, def, optional)
+    }
+
+    fn fold_instance_definition(
+        &mut self,
+        mut def: ast::InstanceDefinition,
+    ) -> ast::InstanceDefinition {
+        expand_namespace!(self, def, optional)
     }
 }
 

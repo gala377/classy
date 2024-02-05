@@ -27,6 +27,11 @@ pub struct PackageInfo {
     pub globals: HashMap<String, DefinitionId>,
     pub definition_types: HashMap<DefinitionId, TypeId>,
     pub type_aliases: HashMap<TypeId, Type>,
+    // TODO:
+    // What is needed here is information about classes, instances and methods
+    // for instances and methods we need to know which ones are exported implicitly for their type
+    // and which type is associated with them so when we import the type we also import them into
+    // the scope
 }
 
 impl PackageInfo {
@@ -95,6 +100,13 @@ pub struct Database {
     pub function_definitions: HashMap<DefinitionId, ast::FunctionDefinition>,
     /// Type definitions.
     pub type_definitions: HashMap<DefinitionId, ast::TypeDefinition>,
+    /// Method block definitions
+    pub method_blocks_definitions:
+        HashMap<DefinitionId, ast::MethodsBlock<ast::FunctionDefinition>>,
+    /// Class definitions
+    pub class_definitions: HashMap<DefinitionId, ast::ClassDefinition>,
+    /// Instance definitions
+    pub instance_definitions: HashMap<DefinitionId, ast::InstanceDefinition>,
 
     /// A mapping assigning each definition to its respective type.
     pub definition_types: HashMap<DefinitionId, TypeId>,
@@ -112,8 +124,8 @@ pub struct Database {
     /// typechecking, this collision should not effect it.
     pub reverse_type_aliases: TypeHashMap<TypeId>,
 
-    /// Contains mapping between the base type -> specialisation -> methods
-    pub method_blocks: MethodBlocksMappings,
+    /// Contains mapping between the receiver type and method sets
+    pub method_blocks: HashMap<TypeId, Vec<MethodHandle>>,
 }
 
 #[derive(Error, Debug)]
@@ -136,22 +148,10 @@ pub enum QueryError {
     UnificationError(#[from] Box<UnificationError>),
 }
 
-pub struct ResolvedMethod {
-    /// Unified type for the receiver.
-    pub unified_type: Type,
-    /// Definition id pointing to the node with the definition of the method.
-    pub method_defnition: DefinitionId,
-    /// Substitutions that need to be applied to the receiver on its
-    /// meta type variables to be equal to the unified type.
-    /// Those substitutions need to hold for this method to apply.
-    pub substitutions: HashMap<UniqueId, Type>,
-}
-
 pub struct MethodHandle {
     name: String,
     definition: DefinitionId,
 }
-pub type MethodBlocksMappings = HashMap<TypeId, HashMap<TypeId, MethodHandle>>;
 
 impl Database {
     const INITIAL_TYPE_MAP_CAPACITY: u64 = 1000;
@@ -163,6 +163,9 @@ impl Database {
             variable_definitions: HashMap::new(),
             function_definitions: HashMap::new(),
             type_definitions: HashMap::new(),
+            method_blocks_definitions: HashMap::new(),
+            class_definitions: HashMap::new(),
+            instance_definitions: HashMap::new(),
             globals: HashMap::new(),
             definition_types: HashMap::new(),
             type_aliases: HashMap::new(),
@@ -225,6 +228,45 @@ impl Database {
         self.variable_definitions.insert(id, definition);
     }
 
+    pub fn add_method_block_definition(
+        &mut self,
+        id: DefinitionId,
+        definition: ast::MethodsBlock<ast::FunctionDefinition>,
+    ) {
+        assert!(!self.method_blocks_definitions.contains_key(&id));
+        if definition.name.is_some() {
+            assert!(self
+                .globals
+                .insert(definition.name.clone().unwrap(), id.clone())
+                .is_none());
+        }
+        self.method_blocks_definitions.insert(id, definition);
+    }
+
+    pub fn add_class_definition(&mut self, id: DefinitionId, definition: ast::ClassDefinition) {
+        assert!(!self.class_definitions.contains_key(&id));
+        assert!(self
+            .globals
+            .insert(definition.name.clone(), id.clone())
+            .is_none());
+        self.class_definitions.insert(id, definition);
+    }
+
+    pub fn add_instance_definition(
+        &mut self,
+        id: DefinitionId,
+        definition: ast::InstanceDefinition,
+    ) {
+        assert!(!self.instance_definitions.contains_key(&id));
+        if definition.name.is_some() {
+            assert!(self
+                .globals
+                .insert(definition.name.clone().unwrap(), id.clone())
+                .is_none());
+        }
+        self.instance_definitions.insert(id, definition);
+    }
+
     pub fn get_global(&self, name: &str) -> Option<DefinitionId> {
         self.globals.get(name).cloned()
     }
@@ -240,6 +282,7 @@ impl Database {
         }
     }
 
+    /// Get a type of a global name relative to the current namespace.
     pub fn get_type_by_unresolved_name(
         &self,
         current_namespace: &[String],
@@ -268,13 +311,13 @@ impl Database {
         self.get_type(CURRENT_PACKAGE_ID, definition_id.clone())
     }
 
-    // Type aliasing
+    // Resolving Tids
 
-    pub fn resolve_alias(&self, type_id: TypeId) -> Result<Type, QueryError> {
-        self.resolve_alias_ref(type_id).cloned()
+    pub fn resolve_tid(&self, type_id: TypeId) -> Result<Type, QueryError> {
+        self.resolve_tid_ref(type_id).cloned()
     }
 
-    pub fn resolve_alias_ref(&self, type_id: TypeId) -> Result<&Type, QueryError> {
+    pub fn resolve_tid_ref(&self, type_id: TypeId) -> Result<&Type, QueryError> {
         self.type_aliases
             .get(&type_id)
             .ok_or(QueryError::TypeNotFound(type_id))
@@ -290,53 +333,18 @@ impl Database {
             .ok_or(QueryError::DefinitionNotFound(definition_id))
     }
 
-    pub fn resolve_method(
-        &self,
-        receiver: Type,
-        name: &str,
-    ) -> Result<Vec<ResolvedMethod>, QueryError> {
-        // get base type
-        // union with every specialisation
-        // find methods that match the name
-        let base_type = self.base_type(receiver.clone())?;
-        let base_type_id = self
-            .reverse_type_aliases
-            .get(self, &base_type)?
-            .ok_or(QueryError::NoTypeIdForType(base_type.clone()))?;
-        let specialisations = self
-            .method_blocks
-            .get(base_type_id)
-            .ok_or_else(|| QueryError::MethodsUnsupported(receiver.clone()))?;
-        let mut methods: Vec<(Type, DefinitionId)> = Vec::new();
-        for (type_id, method) in specialisations {
-            if method.name == name {
-                let resolved = self.resolve_alias(type_id.clone())?;
-                methods.push((resolved, method.definition.clone()));
-            }
-        }
-        // find matches for specialisations
-        let mut resolved_methods = Vec::new();
-        for (typ, meth_def) in methods {
-            let mut subs = HashMap::new();
-            let unified = union(self, receiver.clone(), typ, &mut subs).map_err(Box::new)?;
-            resolved_methods.push(ResolvedMethod {
-                unified_type: unified,
-                method_defnition: meth_def,
-                substitutions: subs,
-            });
-        }
-        Ok(resolved_methods)
-    }
+    // Resolving aliases
 
-    /// Returns the un-schemed, un-applied type.
-    pub fn base_type(&self, t: Type) -> Result<Type, QueryError> {
-        match t {
-            Type::Alias(id) => {
-                self.base_type(self.resolve_alias(crate::v2::knowledge::TypeId(id))?)
+    /// Given a type id to the alias resolve it recursively until the type is
+    /// concrete.
+    pub fn resolve_alias(&self, mut typ: TypeId) -> Result<TypeId, QueryError> {
+        loop {
+            let resolved = self.resolve_tid_ref(typ)?;
+            if let Type::Alias(for_type) = resolved {
+                typ = TypeId(*for_type);
+            } else {
+                return Ok(typ);
             }
-            Type::Scheme { typ, .. } => self.base_type(*typ),
-            Type::App { typ, .. } => self.base_type(*typ),
-            t => Ok(t),
         }
     }
 
@@ -354,16 +362,16 @@ impl Database {
                 return Ok(true);
             }
             (&Type::Alias(for_type_1), &Type::Alias(for_type_2)) => {
-                let t1 = self.resolve_alias_ref(crate::v2::knowledge::TypeId(for_type_1))?;
-                let t2 = self.resolve_alias_ref(crate::v2::knowledge::TypeId(for_type_2))?;
+                let t1 = self.resolve_tid_ref(crate::v2::knowledge::TypeId(for_type_1))?;
+                let t2 = self.resolve_tid_ref(crate::v2::knowledge::TypeId(for_type_2))?;
                 (t1, t2)
             }
             (&Type::Alias(for_type), t2) => {
-                let t1 = self.resolve_alias_ref(crate::v2::knowledge::TypeId(for_type))?;
+                let t1 = self.resolve_tid_ref(crate::v2::knowledge::TypeId(for_type))?;
                 (t1, t2)
             }
             (t1, &Type::Alias(for_type)) => {
-                let t2 = self.resolve_alias_ref(crate::v2::knowledge::TypeId(for_type))?;
+                let t2 = self.resolve_tid_ref(crate::v2::knowledge::TypeId(for_type))?;
                 (t1, t2)
             }
             (t1, t2) => (t1, t2),
@@ -478,7 +486,7 @@ impl Database {
                 self.hash_type_with_hasher(inner, state)?;
             }
             Type::Alias(for_type) => {
-                let resolved = self.resolve_alias(TypeId(*for_type))?.assert_resolved();
+                let resolved = self.resolve_tid(TypeId(*for_type))?.assert_resolved();
                 self.hash_type_with_hasher(&resolved, state)?;
             }
             Type::ToInfere => return Err(QueryError::InvalidHash(Type::ToInfere)),
