@@ -397,14 +397,9 @@ impl<'source> Parser<'source> {
         let beg = self.curr_pos();
         let attributes = self.parse_attributes();
         let name = self.parse_identifier()?;
-        let typ = match self.match_token(TokenType::Colon) {
-            Ok(_) => {
-                let typ = self.parse_type()?;
-                let _ = self.expect_token(TokenType::Semicolon);
-                typ
-            }
-            Err(_) => ast::Typ::ToInfere,
-        };
+        self.expect_token(TokenType::Colon)?;
+        let typ = self.parse_type()?;
+        let _ = self.expect_token(TokenType::Semicolon);
         if attributes.contains(&"empty".to_owned()) {
             return Ok(ast::FunctionDefinition {
                 name,
@@ -414,18 +409,16 @@ impl<'source> Parser<'source> {
                 attributes,
             });
         }
-        if typ != ast::Typ::ToInfere {
-            let name_repeated = self.parse_identifier().error(
-                self,
-                beg,
-                "Expected a function definition following its declaration",
-            )?;
-            if name != name_repeated {
-                return Err(self.error(
-                    beg..self.curr_pos(),
-                    "The name in the function's declaration and definition have to be the same",
-                ));
-            }
+        let name_repeated = self.parse_identifier().error(
+            self,
+            beg,
+            "Expected a function definition following its declaration",
+        )?;
+        if name != name_repeated {
+            return Err(self.error(
+                beg..self.curr_pos(),
+                "The name in the function's declaration and definition have to be the same",
+            ));
         }
         let parameters = self.parse_argument_list()?;
         let body = if self.lexer.current().typ != TokenType::LBrace {
@@ -2124,32 +2117,11 @@ mod tests {
     }
 
     ptest! {
-        function_definition_without_header_infers_type,
-        "foo (a, b, c) = 10",
-        sexpr!((
-            (fn {}
-                (type (fn (infere infere infere) infere))
-                foo (a b c) 10)
-        ))
-    }
-
-    ptest! {
-        empty_function_definition_without_header,
-        "foo { 10 }",
-        sexpr!((
-            (fn {}
-                (type (fn () infere))
-                foo () {
-                    10
-            })
-        ))
-    }
-    ptest! {
         parsing_chaining_with_trailing_lambdas,
-        "foo = foo.a { 1 }.b 1",
+        "foo: () -> ();foo = foo.a { 1 }.b 1",
         sexpr!((
             (fn {}
-                (type  (fn () infere))
+                (type  (fn () (poly [] {} (fn () (poly [] {} unit)))))
                 foo () {
                     method (
                         method foo a ((lambda () { 1 })) {}
@@ -2160,12 +2132,12 @@ mod tests {
 
     ptest! {
         parsing_trailing_lambda_splitted_chain_call,
-        r"foo = foo.a b => {
+        r"foo: () -> ();foo = foo.a b => {
             1
         }.b 1",
         sexpr!((
             (fn {}
-                (type (fn () infere))
+                (type (fn () (poly [] {} (fn () (poly [] {} unit)))))
                 foo () {
                     method (
                         method foo a (
@@ -2178,10 +2150,10 @@ mod tests {
 
     ptest! {
         match_works_on_weird_function_calls,
-        r"foo = foo b match {}",
+        r"foo: () -> ();foo = foo b match {}",
         sexpr!((
             (fn {}
-                (type (fn () infere))
+                (type (fn () (poly [] {} (fn () (poly [] {} unit)))))
                 foo () {
                     match (call foo (b) {}) {}
                 })
@@ -2190,10 +2162,10 @@ mod tests {
 
     ptest! {
         match_with_trailing_lambda,
-        r"foo = foo b {} match {}",
+        r"foo: () -> ();foo = foo b {} match {}",
         sexpr!((
             (fn {}
-                (type (fn () infere))
+                (type (fn () (poly [] {} (fn () (poly [] {} unit)))))
                 foo () {
                     match (call foo (b (lambda () {})) {}) {}
                 })
@@ -2202,13 +2174,13 @@ mod tests {
 
     ptest! {
         match_a_match,
-        r"foo = a match {
+        r"foo: () -> ();foo = a match {
         } match {
         }
         ",
         sexpr!((
             (fn {}
-                (type (fn () infere))
+                (type (fn () (poly [] {} (fn () (poly [] {} unit)))))
                 foo () {
                     match (match a {}) {}
                 })
@@ -2217,7 +2189,7 @@ mod tests {
 
     ptest! {
         basic_patterns,
-        r#"foo = a match {
+        r#"foo: () -> ();foo = a match {
             Foo{} => 1
             foo => 2
             A(a, b) => 3
@@ -2233,7 +2205,7 @@ mod tests {
         }"#,
         sexpr!((
             (fn {}
-                (type (fn () infere))
+                (type (fn () (poly [] {} (fn () (poly [] {} unit)))))
                 foo () {
                     match a {
                         ([struct Foo ()] 1)
@@ -2255,10 +2227,10 @@ mod tests {
 
     ptest! {
         parsing_paths,
-        r#"foo { a::b::c }"#,
+        r#"foo: () -> ();foo { a::b::c }"#,
         sexpr!((
             (fn {}
-                (type (fn () infere))
+                (type (fn () (poly [] {} (fn () (poly [] {} unit)))))
                 foo () {
                     a::b::c
                 })
@@ -2268,18 +2240,18 @@ mod tests {
     ptest! {
         parsing_namespace,
         r#" namespace foo::bar
-            foo a = () "#,
+            foo: () -> ();foo a = () "#,
         sexpr!((
             (namespace foo::bar)
             (fn {}
-                (type (fn (infere) infere))
+                (type (fn () (poly [] {} (fn () (poly [] {} unit)))))
                 foo (a) ())
         ))
     }
 
     ptest! {
         semicolon_insertion_allows_for_method_chains,
-        r#"foo {
+        r#"foo: () -> ();foo {
             foo
               .a()
               .b()
@@ -2287,7 +2259,7 @@ mod tests {
         }"#,
         sexpr!((
             (fn {}
-                (type (fn () infere))
+                (type (fn () (poly [] {} (fn () (poly [] {} unit)))))
                 foo () {
                     (method (
                         method (
@@ -2300,12 +2272,12 @@ mod tests {
 
     ptest! {
         trailing_lambda_on_method,
-        r#"foo {
+        r#"foo: () -> ();foo {
             foo.a{}
         }"#,
         sexpr!((
             (fn {}
-                (type (fn () infere))
+                (type (fn () (poly [] {} (fn () (poly [] {} unit)))))
                 foo () {
                     (method foo a ((lambda () {})) {})
                 })
@@ -2316,16 +2288,16 @@ mod tests {
         parse_simple_methods,
         r#"
             methods for foo {
-                a() {}
-                b() {}
-                c() {}
+                a: ()->();a() {}
+                b: ()->();b() {}
+                c: ()->();c() {}
             }
         "#,
         sexpr!((
             (methods (poly [] {} foo) {
-                (fn {} (type (fn () infere)) a () {})
-                (fn {} (type (fn () infere)) b () {})
-                (fn {} (type (fn () infere)) c () {})
+                (fn {} (type (fn () (poly [] {} (fn () (poly [] {} unit))))) a () {})
+                (fn {} (type (fn () (poly [] {} (fn () (poly [] {} unit))))) b () {})
+                (fn {} (type (fn () (poly [] {} (fn () (poly [] {} unit))))) c () {})
             })
         ))
     }
@@ -2334,16 +2306,16 @@ mod tests {
         parse_named_methods,
         r#"
             methods fooExt for foo {
-                a() {}
-                b() {}
-                c() {}
+                a:()->();a() {}
+                b:()->();b() {}
+                c:()->();c() {}
             }
         "#,
         sexpr!((
             (methods fooExt (poly [] {} foo) {
-                (fn {} (type (fn () infere)) a () {})
-                (fn {} (type (fn () infere)) b () {})
-                (fn {} (type (fn () infere)) c () {})
+                (fn {} (type (fn () (poly [] {} (fn () (poly [] {} unit))))) a () {})
+                (fn {} (type (fn () (poly [] {} (fn () (poly [] {} unit))))) b () {})
+                (fn {} (type (fn () (poly [] {} (fn () (poly [] {} unit))))) c () {})
             })
         ))
     }
@@ -2438,9 +2410,11 @@ mod tests {
         parse_instance_definition_without_bounds,
         r#"
             instance for Foo(Bar(a)) {
+                foo:()->()
                 foo(a) = ()
 
                 methods for a {
+                    bar:()->()
                     bar() = ()
                 }
             }
@@ -2450,9 +2424,9 @@ mod tests {
             (instance for [] {}
                 (Foo (poly {} [] (Bar ((poly {} [] a)))))
             {
-                (fn {} (type (fn (infere) infere)) foo (a) ())
+                (fn {} (type (fn () (poly [] {} (fn () (poly [] {} unit))))) foo (a) ())
                 (methods (poly [] {} a) {
-                    (fn {} (type (fn () infere)) bar () ())
+                    (fn {} (type (fn () (poly [] {} (fn () (poly [] {} unit))))) bar () ())
                 })
             })
         ))
@@ -2462,9 +2436,11 @@ mod tests {
         parse_named_instance_definition_with_bounds,
         r#"
             instance my_instance for { Show(a) } => Foo(Bar(a)) {
+                foo:()->()
                 foo(a) = ()
 
                 methods for a {
+                    bar:()->()
                     bar() = ()
                 }
             }
@@ -2474,9 +2450,9 @@ mod tests {
             (instance my_instance for [] { (Show (poly {} [] a)) }
                 (Foo (poly {} [] (Bar ((poly {} [] a)))))
             {
-                (fn {} (type (fn (infere) infere)) foo (a) ())
+                (fn {} (type (fn (infere) (poly [] {} (fn () (poly [] {} unit))))) foo (a) ())
                 (methods (poly [] {} a) {
-                    (fn {} (type (fn () infere)) bar () ())
+                    (fn {} (type (fn () (poly [] {} (fn () (poly [] {} unit))))) bar () ())
                 })
             })
         ))
