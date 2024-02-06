@@ -277,7 +277,7 @@ fn resolve_name(
             let package = database.get_package(package_id.clone());
             path.push(identifier);
             let full_name = path[1..].join("::");
-            let definition = package.get_definition(&full_name).unwrap();
+            let definition = package.get_global(&full_name).unwrap();
             ast::Name::Global {
                 package: package_id.0,
                 definition: definition.0,
@@ -322,13 +322,13 @@ mod tests {
             type_definitions: HashMap::new(),
             globals: HashMap::new(),
             definition_types: HashMap::new(),
-            type_aliases: HashMap::new(),
+            typeid_to_type: HashMap::new(),
             reverse_type_aliases: TypeHashMap::new(100),
             method_blocks: HashMap::new(),
         };
         for (name, (id, typ)) in definitions {
             db.globals.insert(name, DefinitionId(id));
-            db.type_aliases.insert(TypeId(id), typ);
+            db.typeid_to_type.insert(TypeId(id), typ);
             db.definition_types.insert(DefinitionId(id), TypeId(id));
         }
         for (name, globals) in packages {
@@ -339,7 +339,7 @@ mod tests {
                     .map(|(name, id)| (name, DefinitionId(id)))
                     .collect(),
                 definition_types: HashMap::new(),
-                type_aliases: HashMap::new(),
+                typeid_to_type: HashMap::new(),
             };
             db.add_package(package);
         }

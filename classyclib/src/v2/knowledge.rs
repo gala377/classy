@@ -8,30 +8,128 @@ use thiserror::Error;
 use classy_syntax::ast;
 
 use crate::id_provider::UniqueId;
-use crate::typecheck::types::Type;
-use crate::v2::instance::{union, UnificationError};
+use crate::v2::instance::UnificationError;
+use crate::v2::ty::Type;
 
+/// Id of some item, can either be a local reference meaning current package
+/// or a global one meaning it references a definition from another package.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Id<T> {
+    Global { package: PackageId, id: T },
+    Local(LocalId<T>),
+}
+
+/// Id referencing current package
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
+pub struct LocalId<T>(T);
+
+impl<T> LocalId<T> {
+    pub fn new(id: T) -> Self {
+        Self(id)
+    }
+
+    pub fn into_id(self) -> Id<T> {
+        Id::Local(self)
+    }
+}
+
+impl<T> Into<Id<T>> for LocalId<T> {
+    fn into(self) -> Id<T> {
+        Id::Local(self)
+    }
+}
+
+/// Id that identifies a definition within a package
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DefinitionId(pub UniqueId);
 
+/// Id that identifies a type
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TypeId(pub UniqueId);
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// Id that identifies a package
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub struct PackageId(pub UniqueId);
 
 pub const CURRENT_PACKAGE_ID: PackageId = PackageId(0);
 
-pub struct PackageInfo {
+/// Information about a method blocks defined within a class
+pub struct ClassMethodBlock {
+    /// Receiver type for the methods block
+    pub receiver: Id<TypeId>,
+    /// Collection of all the methods defined within the block with their types
+    pub methods: Vec<(String, LocalId<TypeId>)>,
+}
+
+/// Information about a class definition
+pub struct ClassInfo {
     pub name: String,
-    pub globals: HashMap<String, DefinitionId>,
-    pub definition_types: HashMap<DefinitionId, TypeId>,
-    pub type_aliases: HashMap<TypeId, Type>,
-    // TODO:
-    // What is needed here is information about classes, instances and methods
-    // for instances and methods we need to know which ones are exported implicitly for their type
-    // and which type is associated with them so when we import the type we also import them into
-    // the scope
+    // Collection of all the static methods defined within the class
+    // and their types
+    pub static_methods: Vec<(String, LocalId<TypeId>)>,
+    /// Method blocks defined within the class
+    pub method_blocks: Vec<ClassMethodBlock>,
+}
+
+/// Information about a method blocks within an instance
+pub struct InstanceMethodBlock {
+    /// Receiver type for the methods block
+    pub receiver: Id<TypeId>,
+    /// Collection of all the methods defined within the block with their
+    /// definitions
+    pub methods: Vec<(String, LocalId<DefinitionId>)>,
+}
+
+pub struct InstanceInfo {
+    /// Optional name of the instance
+    pub name: Option<String>,
+    /// Type of the reeiver the instance is defined for
+    pub receiver: Id<TypeId>,
+    /// Static methods implementations defined within the instance
+    pub static_methods: Vec<(String, LocalId<DefinitionId>)>,
+    pub method_blocks: Vec<InstanceMethodBlock>,
+    /// Should be autoimported if the given definition is autoimported
+    /// if none it should not be autoimported
+    pub autoimported: Option<LocalId<DefinitionId>>,
+}
+
+pub struct MethodBlockInfo {
+    pub name: Option<String>,
+    /// Receiver type for the methods block
+    pub receiver: Id<TypeId>,
+    /// Methods definitions
+    pub methods: Vec<(String, LocalId<DefinitionId>)>,
+}
+
+pub struct MethodInfo {
+    pub name: String,
+    pub ty: LocalId<TypeId>,
+}
+
+pub struct PackageInfo {
+    /// Name of the package
+    pub name: String,
+    /// All the globaly visible definitions within the package
+    pub globals: HashMap<String, LocalId<DefinitionId>>,
+    /// Used to lookup type of a given definition
+    pub definition_types: HashMap<LocalId<DefinitionId>, LocalId<TypeId>>,
+    /// Used to lookup type id into a type
+    pub typeid_to_type: HashMap<LocalId<TypeId>, Type>,
+    /// When importing item with definition id Key, all the following
+    /// definitions should be imported as well. This comes into play when we
+    /// import a type, we also want to import implicit instances and method
+    /// blocks.
+    pub implicit_imports: HashMap<LocalId<DefinitionId>, Vec<LocalId<DefinitionId>>>,
+    /// Method blocks defined within the package
+    pub method_blocks: HashMap<LocalId<DefinitionId>, MethodBlockInfo>,
+    /// Classes defined within the package
+    pub classes: HashMap<LocalId<DefinitionId>, ClassInfo>,
+    /// Instances defined within the package
+    pub instances: HashMap<LocalId<DefinitionId>, InstanceInfo>,
+    /// All the methods from instances and method blocks defined within the
+    /// package. The context of their definition should be known for the type to
+    /// be properly substituted.
+    pub methods: HashMap<LocalId<DefinitionId>, MethodInfo>,
 }
 
 impl PackageInfo {
@@ -40,47 +138,14 @@ impl PackageInfo {
             name: name.to_string(),
             globals: HashMap::new(),
             definition_types: HashMap::new(),
-            type_aliases: HashMap::new(),
+            typeid_to_type: HashMap::new(),
+            implicit_imports: HashMap::new(),
+            method_blocks: HashMap::new(),
+            classes: HashMap::new(),
+            instances: HashMap::new(),
+            methods: HashMap::new(),
         }
     }
-}
-
-impl PackageInfo {
-    pub fn get_definition(&self, name: &str) -> Option<DefinitionId> {
-        self.globals.get(name).cloned()
-    }
-}
-
-pub enum ImplVisibility {
-    /// Imported alongside the type. As well as visible withing the same
-    /// namespace as the type.
-    ///
-    /// This visibility is assigned to exported anonymous implementations
-    /// defined within the same namespace as the type they refer to.
-    /// In particular during unification it only applies to cases where the most
-    /// outer type does not require any substitutions.
-    /// Example:
-    ///     export methods Option(a) // this is fine as Option does not require
-    ///                              // firther substitutions, it is a matcher
-    ///                             // already.     
-    ///     export methods a { id = this } // this is not fine as `a` is a
-    ///                                    // generic type and as such requires
-    ///                                    // immediate unification.    
-    ///     export methods Int // this is also fine but not possible as every
-    ///                        // package is in a different namespace than Int.
-    ///
-    /// The same applies to instances.      
-    ImplicitExport,
-    /// By default visible within given namespace but can be imported by name.
-    /// This is for unexported anonymous implementations as well as named
-    /// implementations.
-    InNamespace,
-}
-
-pub struct Visibility {
-    pub package: PackageId,
-    pub namespace: ast::Namespace,
-    pub visibility: ImplVisibility,
 }
 
 /// A complete representation of a program that allows for easy quering.
@@ -92,28 +157,28 @@ pub struct Database {
 
     /// Global names, as global names in every package need to be unique
     /// we can map them to their definition id.§
-    pub globals: HashMap<String, DefinitionId>,
+    pub globals: HashMap<String, LocalId<DefinitionId>>,
 
     /// Global variable definitions.
-    pub variable_definitions: HashMap<DefinitionId, ast::ConstDefinition>,
+    pub variable_definitions: HashMap<LocalId<DefinitionId>, ast::ConstDefinition>,
     /// Function and method definitions.
-    pub function_definitions: HashMap<DefinitionId, ast::FunctionDefinition>,
+    pub function_definitions: HashMap<LocalId<DefinitionId>, ast::FunctionDefinition>,
     /// Type definitions.
-    pub type_definitions: HashMap<DefinitionId, ast::TypeDefinition>,
+    pub type_definitions: HashMap<LocalId<DefinitionId>, ast::TypeDefinition>,
     /// Method block definitions
     pub method_blocks_definitions:
-        HashMap<DefinitionId, ast::MethodsBlock<ast::FunctionDefinition>>,
+        HashMap<LocalId<DefinitionId>, ast::MethodsBlock<ast::FunctionDefinition>>,
     /// Class definitions
-    pub class_definitions: HashMap<DefinitionId, ast::ClassDefinition>,
+    pub class_definitions: HashMap<LocalId<DefinitionId>, ast::ClassDefinition>,
     /// Instance definitions
-    pub instance_definitions: HashMap<DefinitionId, ast::InstanceDefinition>,
+    pub instance_definitions: HashMap<LocalId<DefinitionId>, ast::InstanceDefinition>,
 
     /// A mapping assigning each definition to its respective type.
-    pub definition_types: HashMap<DefinitionId, TypeId>,
+    pub definition_types: HashMap<LocalId<DefinitionId>, LocalId<TypeId>>,
 
     /// All the type values generated during typechecking.
     /// Maps their respective handle to the value of the type.
-    pub type_aliases: HashMap<TypeId, Type>,
+    pub typeid_to_type: HashMap<LocalId<TypeId>, Type>,
 
     /// Maps a type to its type id.
     ///
@@ -124,16 +189,26 @@ pub struct Database {
     /// typechecking, this collision should not effect it.
     pub reverse_type_aliases: TypeHashMap<TypeId>,
 
-    /// Contains mapping between the receiver type and method sets
-    pub method_blocks: HashMap<TypeId, Vec<MethodHandle>>,
+    /// Method blocks within the package in more digestable form.
+    pub method_blocks: HashMap<LocalId<DefinitionId>, MethodBlockInfo>,
+
+    /// Class info within the package in more digestable form.
+    pub classes: HashMap<LocalId<DefinitionId>, ClassInfo>,
+
+    /// Instances within the package in more digestable form.
+    pub instances: HashMap<LocalId<DefinitionId>, InstanceInfo>,
+
+    /// All the methods from instances and method blocks defined within this
+    /// package
+    pub methods: HashMap<LocalId<DefinitionId>, MethodInfo>,
 }
 
 #[derive(Error, Debug)]
 pub enum QueryError {
     #[error("Definition {0:?} not found")]
-    DefinitionNotFound(DefinitionId),
+    DefinitionNotFound(Id<DefinitionId>),
     #[error("Type {0:?} not found")]
-    TypeNotFound(TypeId),
+    TypeNotFound(Id<TypeId>),
 
     #[error("Methods unnsopported for type {0:?}")]
     MethodsUnsupported(Type),
@@ -168,9 +243,12 @@ impl Database {
             instance_definitions: HashMap::new(),
             globals: HashMap::new(),
             definition_types: HashMap::new(),
-            type_aliases: HashMap::new(),
+            typeid_to_type: HashMap::new(),
             reverse_type_aliases: TypeHashMap::new(Self::INITIAL_TYPE_MAP_CAPACITY as u64),
             method_blocks: HashMap::new(),
+            classes: HashMap::new(),
+            instances: HashMap::new(),
+            methods: HashMap::new(),
         }
     }
 
@@ -198,6 +276,7 @@ impl Database {
     // Definitions
 
     pub fn add_type_definition(&mut self, id: DefinitionId, definition: ast::TypeDefinition) {
+        let id = LocalId::new(id);
         assert!(!self.type_definitions.contains_key(&id));
         assert!(self
             .globals
@@ -211,6 +290,7 @@ impl Database {
         id: DefinitionId,
         definition: ast::FunctionDefinition,
     ) {
+        let id = LocalId::new(id);
         assert!(!self.function_definitions.contains_key(&id));
         assert!(self
             .globals
@@ -220,6 +300,7 @@ impl Database {
     }
 
     pub fn add_const_definition(&mut self, id: DefinitionId, definition: ast::ConstDefinition) {
+        let id = LocalId::new(id);
         assert!(!self.variable_definitions.contains_key(&id));
         assert!(self
             .globals
@@ -233,6 +314,7 @@ impl Database {
         id: DefinitionId,
         definition: ast::MethodsBlock<ast::FunctionDefinition>,
     ) {
+        let id = LocalId::new(id);
         assert!(!self.method_blocks_definitions.contains_key(&id));
         if definition.name.is_some() {
             assert!(self
@@ -244,6 +326,7 @@ impl Database {
     }
 
     pub fn add_class_definition(&mut self, id: DefinitionId, definition: ast::ClassDefinition) {
+        let id = LocalId::new(id);
         assert!(!self.class_definitions.contains_key(&id));
         assert!(self
             .globals
@@ -257,6 +340,7 @@ impl Database {
         id: DefinitionId,
         definition: ast::InstanceDefinition,
     ) {
+        let id = LocalId::new(id);
         assert!(!self.instance_definitions.contains_key(&id));
         if definition.name.is_some() {
             assert!(self
@@ -267,18 +351,27 @@ impl Database {
         self.instance_definitions.insert(id, definition);
     }
 
-    pub fn get_global(&self, name: &str) -> Option<DefinitionId> {
+    pub fn get_global(&self, name: &str) -> Option<LocalId<DefinitionId>> {
         self.globals.get(name).cloned()
     }
 
-    pub fn get_type(&self, package: PackageId, id: DefinitionId) -> Option<&Type> {
-        if package == CURRENT_PACKAGE_ID {
-            let tid = self.definition_types.get(&id)?;
-            self.type_aliases.get(tid)
-        } else {
-            let package_info = self.get_package(package);
-            let tid = package_info.definition_types.get(&id)?;
-            package_info.type_aliases.get(tid)
+    pub fn get_type(&self, id: Id<DefinitionId>) -> Option<&Type> {
+        match id {
+            Id::Global { package, id } if package == CURRENT_PACKAGE_ID => {
+                let id = LocalId::new(id);
+                let tid = self.definition_types.get(&id)?;
+                self.typeid_to_type.get(&tid)
+            }
+            Id::Global { package, id } => {
+                let id = LocalId::new(id);
+                let package_info = self.get_package(package);
+                let tid = package_info.definition_types.get(&id)?;
+                package_info.typeid_to_type.get(tid)
+            }
+            Id::Local(id) => {
+                let tid = self.definition_types.get(&id)?;
+                self.typeid_to_type.get(tid)
+            }
         }
     }
 
@@ -296,7 +389,7 @@ impl Database {
                 expanded_name.push(name.to_string());
                 let expanded_name = expanded_name.join("::");
                 if let Some(definition_id) = package_info.globals.get(&expanded_name) {
-                    return self.get_type(package_id, definition_id.clone());
+                    return self.get_type(definition_id.clone().into());
                 }
                 return None;
             }
@@ -308,40 +401,57 @@ impl Database {
         let Some(definition_id) = self.globals.get(&expand_name) else {
             return None;
         };
-        self.get_type(CURRENT_PACKAGE_ID, definition_id.clone())
+        self.get_type(definition_id.clone().into())
     }
 
     // Resolving Tids
 
-    pub fn resolve_tid(&self, type_id: TypeId) -> Result<Type, QueryError> {
+    pub fn resolve_tid(&self, type_id: Id<TypeId>) -> Result<Type, QueryError> {
         self.resolve_tid_ref(type_id).cloned()
     }
 
-    pub fn resolve_tid_ref(&self, type_id: TypeId) -> Result<&Type, QueryError> {
-        self.type_aliases
-            .get(&type_id)
-            .ok_or(QueryError::TypeNotFound(type_id))
+    pub fn resolve_tid_ref(&self, type_id: Id<TypeId>) -> Result<&Type, QueryError> {
+        match type_id {
+            Id::Global { package, id } if package == CURRENT_PACKAGE_ID => {
+                let id = LocalId::new(id);
+                self.typeid_to_type
+                    .get(&id)
+                    .ok_or(QueryError::TypeNotFound(id.into()))
+            }
+            Id::Global { package, id } => {
+                let id = LocalId::new(id);
+                let package_info = self.get_package(package);
+                package_info
+                    .typeid_to_type
+                    .get(&id)
+                    .ok_or(QueryError::TypeNotFound(id.into()))
+            }
+            Id::Local(id) => self
+                .typeid_to_type
+                .get(&id)
+                .ok_or(QueryError::TypeNotFound(id.into())),
+        }
     }
 
     pub fn type_id_from_definition(
         &self,
-        definition_id: DefinitionId,
-    ) -> Result<TypeId, QueryError> {
+        definition_id: LocalId<DefinitionId>,
+    ) -> Result<LocalId<TypeId>, QueryError> {
         self.definition_types
             .get(&definition_id)
             .cloned()
-            .ok_or(QueryError::DefinitionNotFound(definition_id))
+            .ok_or(QueryError::DefinitionNotFound(definition_id.into()))
     }
 
     // Resolving aliases
 
     /// Given a type id to the alias resolve it recursively until the type is
     /// concrete.
-    pub fn resolve_alias(&self, mut typ: TypeId) -> Result<TypeId, QueryError> {
+    pub fn resolve_alias(&self, mut typ: Id<TypeId>) -> Result<Id<TypeId>, QueryError> {
         loop {
             let resolved = self.resolve_tid_ref(typ)?;
             if let Type::Alias(for_type) = resolved {
-                typ = TypeId(*for_type);
+                typ = *for_type;
             } else {
                 return Ok(typ);
             }
@@ -362,16 +472,16 @@ impl Database {
                 return Ok(true);
             }
             (&Type::Alias(for_type_1), &Type::Alias(for_type_2)) => {
-                let t1 = self.resolve_tid_ref(crate::v2::knowledge::TypeId(for_type_1))?;
-                let t2 = self.resolve_tid_ref(crate::v2::knowledge::TypeId(for_type_2))?;
+                let t1 = self.resolve_tid_ref(for_type_1)?;
+                let t2 = self.resolve_tid_ref(for_type_2)?;
                 (t1, t2)
             }
             (&Type::Alias(for_type), t2) => {
-                let t1 = self.resolve_tid_ref(crate::v2::knowledge::TypeId(for_type))?;
+                let t1 = self.resolve_tid_ref(for_type)?;
                 (t1, t2)
             }
             (t1, &Type::Alias(for_type)) => {
-                let t2 = self.resolve_tid_ref(crate::v2::knowledge::TypeId(for_type))?;
+                let t2 = self.resolve_tid_ref(for_type)?;
                 (t1, t2)
             }
             (t1, t2) => (t1, t2),
@@ -463,8 +573,8 @@ impl Database {
     ) -> Result<(), QueryError> {
         std::mem::discriminant(typ).hash(state);
         match typ {
-            Type::Struct { def, .. } => state.write_usize(*def),
-            Type::ADT { def, .. } => state.write_usize(*def),
+            Type::Struct { def, .. } => def.hash(state),
+            Type::ADT { def, .. } => def.hash(state),
             Type::Function { args, ret } => {
                 // write length so that tuples and functions with the same number of arguments
                 // hash differently
@@ -486,7 +596,8 @@ impl Database {
                 self.hash_type_with_hasher(inner, state)?;
             }
             Type::Alias(for_type) => {
-                let resolved = self.resolve_tid(TypeId(*for_type))?.assert_resolved();
+                let resolved = self.resolve_alias(*for_type)?;
+                let resolved = self.resolve_tid_ref(resolved)?;
                 self.hash_type_with_hasher(&resolved, state)?;
             }
             Type::ToInfere => return Err(QueryError::InvalidHash(Type::ToInfere)),

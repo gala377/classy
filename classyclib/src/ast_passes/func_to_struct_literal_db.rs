@@ -234,12 +234,12 @@ mod tests {
         for (pid, did, name, typ) in db_info.types {
             if pid == PackageId(0) {
                 db.globals.insert(name.clone(), did.clone());
-                db.type_aliases.insert(TypeId(did.0), typ);
+                db.typeid_to_type.insert(TypeId(did.0), typ);
                 db.definition_types.insert(did.clone(), TypeId(did.0));
             } else {
                 let package = db.packages.get_mut(pid.0 - 1).unwrap();
                 package.globals.insert(name.clone(), did.clone());
-                package.type_aliases.insert(TypeId(did.0), typ);
+                package.typeid_to_type.insert(TypeId(did.0), typ);
                 package.definition_types.insert(did.clone(), TypeId(did.0));
             }
         }

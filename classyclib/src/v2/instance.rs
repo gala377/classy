@@ -2,12 +2,14 @@ use std::collections::HashMap;
 
 use crate::{
     id_provider::UniqueId,
-    util::discard_values::DiscardValues,
     v2::knowledge::{Database, QueryError, TypeId},
+    v2::ty::{Type, TypeFolder},
 };
 use thiserror::Error;
 
-use crate::typecheck::types::{DeBruijn, Type, TypeFolder};
+use crate::typecheck::types::DeBruijn;
+
+use super::knowledge::Id;
 
 #[derive(Error, Debug)]
 pub enum InstantiationError {
@@ -26,19 +28,6 @@ pub fn instance(
     scheme_t: Type,
     args: Vec<Type>,
 ) -> Result<Type, InstantiationError> {
-    args.iter()
-        .map(|t| {
-            t.is_ref()
-                .ok_or(InstantiationError::NonRefType(t.clone()))
-                .map(|is_ref| {
-                    if is_ref {
-                        Ok(())
-                    } else {
-                        Err(InstantiationError::NonRefType(t.clone()))
-                    }
-                })
-        })
-        .collect::<Result<DiscardValues, _>>()?;
     match &scheme_t {
         // Special case when we just need to unpack a scheme
         Type::Scheme { prefex, typ } if args.is_empty() && prefex.is_empty() => {
@@ -52,7 +41,7 @@ pub fn instance(
             );
         }
         Type::Alias(id) => {
-            let resolved = db.resolve_tid(crate::v2::knowledge::TypeId(*id))?;
+            let resolved = db.resolve_tid(id.clone())?;
             return instance(db, resolved, args);
         }
         t => {
@@ -130,11 +119,9 @@ impl<'ctx> TypeFolder for Instatiator<'ctx> {
         }
     }
 
-    fn fold_alias(&mut self, for_type: usize) -> Result<Type, Self::Error> {
-        println!("Resolving alias {for_type}");
-        let resolved = self
-            .db
-            .resolve_tid(crate::v2::knowledge::TypeId(for_type))?;
+    fn fold_alias(&mut self, for_type: Id<TypeId>) -> Result<Type, Self::Error> {
+        println!("Resolving alias {for_type:?}");
+        let resolved = self.db.resolve_tid(for_type)?;
         println!("Resolved alias {resolved:?}");
         self.fold_type(resolved)
     }
@@ -165,8 +152,8 @@ pub fn union(
     subs: &mut Substitutions,
 ) -> Result<Type, UnificationError> {
     match (a, b) {
-        (Type::Alias(for_t), other) => union(db, db.resolve_tid(TypeId(for_t))?, other, subs),
-        (other, Type::Alias(for_t)) => union(db, other, db.resolve_tid(TypeId(for_t))?, subs),
+        (Type::Alias(for_t), other) => union(db, db.resolve_tid(for_t)?, other, subs),
+        (other, Type::Alias(for_t)) => union(db, other, db.resolve_tid(for_t)?, subs),
         (Type::Int, Type::Int) => Ok(Type::Int),
         (Type::UInt, Type::UInt) => Ok(Type::UInt),
         (Type::Float, Type::Float) => Ok(Type::Float),
