@@ -30,7 +30,7 @@ impl CompilationError {
 
 pub struct Compiler {
     sources: Vec<(PathBuf, String)>,
-    package_ast: Vec<ast::SourceFile>,
+    package_ast: Vec<(PathBuf, ast::SourceFile)>,
 
     session: Session,
     database: Database,
@@ -74,7 +74,7 @@ impl Compiler {
                     continue;
                 }
             };
-            self.package_ast.push(ast);
+            self.package_ast.push((path.clone(), ast));
         }
         if !errors.is_empty() {
             return Err(CompilationError::SyntaxError(errors));
@@ -89,14 +89,14 @@ impl Compiler {
     ///     - hoisting anonymous types
     ///     - exapnding filly namespaced names for top level defnitions
     pub fn after_parsing_passes(&mut self) {
-        for ast in &mut self.package_ast {
+        for (_, ast) in &mut self.package_ast {
             *ast = ast_passes::run_after_parsing_passes(ast.clone(), &self.session);
         }
     }
 
     /// Add all defintions from the parsed AST to the database.
     pub fn populate_db_definitions(&mut self) {
-        for ast in &mut self.package_ast {
+        for (path, ast) in &mut self.package_ast {
             for ast::TopLevelItem {
                 id,
                 kind,
@@ -114,31 +114,37 @@ impl Compiler {
                         DefinitionId(*id),
                         type_def.clone(),
                         &namespace,
+                        path.clone(),
                     ),
                     FunctionDefinition(fn_def) => self.database.add_function_definition(
                         DefinitionId(*id),
                         fn_def.clone(),
                         &namespace,
+                        path.clone(),
                     ),
                     ConstDefinition(const_def) => self.database.add_const_definition(
                         DefinitionId(*id),
                         const_def.clone(),
                         &namespace,
+                        path.clone(),
                     ),
                     MethodsBlock(meths_def) => self.database.add_method_block_definition(
                         DefinitionId(*id),
                         meths_def.clone(),
                         &namespace,
+                        path.clone(),
                     ),
                     ClassDefinition(class_def) => self.database.add_class_definition(
                         DefinitionId(*id),
                         class_def.clone(),
                         &namespace,
+                        path.clone(),
                     ),
                     InstanceDefinition(inst_def) => self.database.add_instance_definition(
                         DefinitionId(*id),
                         inst_def.clone(),
                         &namespace,
+                        path.clone(),
                     ),
                     t => unimplemented!("{:?}", t),
                 }

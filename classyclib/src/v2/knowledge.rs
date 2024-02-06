@@ -4,6 +4,7 @@ use std::cell::RefCell;
 /// This will replace the TypCtx.
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use thiserror::Error;
@@ -237,6 +238,10 @@ pub struct Database {
 
     /// Namespaces that the definitions has been defined in
     pub namespaces: HashMap<LocalId<DefinitionId>, Vec<String>>,
+    /// Mapping from a definition item to a file it has been defined in
+    pub files: HashMap<LocalId<DefinitionId>, PathBuf>,
+    /// Imports for each given file
+    pub imports: HashMap<PathBuf, ()>,
 }
 
 #[derive(Error, Debug)]
@@ -289,6 +294,8 @@ impl Database {
             methods: HashMap::new(),
             constraints: HashMap::new(),
             namespaces: HashMap::new(),
+            files: Default::default(),
+            imports: Default::default(),
         }
     }
 
@@ -320,6 +327,7 @@ impl Database {
         id: DefinitionId,
         definition: ast::TypeDefinition,
         namespace: &[String],
+        file: PathBuf,
     ) {
         let id = LocalId::new(id);
         assert!(!self.type_definitions.contains_key(&id));
@@ -329,6 +337,7 @@ impl Database {
             .is_none());
         self.type_definitions.insert(id, definition);
         self.namespaces.insert(id, namespace.to_vec());
+        self.files.insert(id, file);
     }
 
     pub fn add_function_definition(
@@ -336,6 +345,7 @@ impl Database {
         id: DefinitionId,
         definition: ast::FunctionDefinition,
         namespace: &[String],
+        file: PathBuf,
     ) {
         let id = LocalId::new(id);
         assert!(!self.function_definitions.contains_key(&id));
@@ -345,6 +355,7 @@ impl Database {
             .is_none());
         self.function_definitions.insert(id, definition);
         self.namespaces.insert(id, namespace.to_vec());
+        self.files.insert(id, file);
     }
 
     pub fn add_const_definition(
@@ -352,6 +363,7 @@ impl Database {
         id: DefinitionId,
         definition: ast::ConstDefinition,
         namespace: &[String],
+        file: PathBuf,
     ) {
         let id = LocalId::new(id);
         assert!(!self.variable_definitions.contains_key(&id));
@@ -361,6 +373,7 @@ impl Database {
             .is_none());
         self.variable_definitions.insert(id, definition);
         self.namespaces.insert(id, namespace.to_vec());
+        self.files.insert(id, file);
     }
 
     pub fn add_method_block_definition(
@@ -368,6 +381,7 @@ impl Database {
         id: DefinitionId,
         definition: ast::MethodsBlock<ast::FunctionDefinition>,
         namespace: &[String],
+        file: PathBuf,
     ) {
         let id = LocalId::new(id);
         assert!(!self.method_blocks_definitions.contains_key(&id));
@@ -379,6 +393,7 @@ impl Database {
         }
         self.method_blocks_definitions.insert(id, definition);
         self.namespaces.insert(id, namespace.to_vec());
+        self.files.insert(id, file);
     }
 
     pub fn add_class_definition(
@@ -386,6 +401,7 @@ impl Database {
         id: DefinitionId,
         definition: ast::ClassDefinition,
         namespace: &[String],
+        file: PathBuf,
     ) {
         let id = LocalId::new(id);
         assert!(!self.class_definitions.contains_key(&id));
@@ -395,6 +411,7 @@ impl Database {
             .is_none());
         self.class_definitions.insert(id, definition);
         self.namespaces.insert(id, namespace.to_vec());
+        self.files.insert(id, file);
     }
 
     pub fn add_instance_definition(
@@ -402,6 +419,7 @@ impl Database {
         id: DefinitionId,
         definition: ast::InstanceDefinition,
         namespace: &[String],
+        file: PathBuf,
     ) {
         let id = LocalId::new(id);
         assert!(!self.instance_definitions.contains_key(&id));
@@ -413,6 +431,7 @@ impl Database {
         }
         self.instance_definitions.insert(id, definition);
         self.namespaces.insert(id, namespace.to_vec());
+        self.files.insert(id, file);
     }
 
     pub fn get_global(&self, name: &str) -> Option<LocalId<DefinitionId>> {
