@@ -267,7 +267,7 @@ fn resolve_name(
         ));
         return ast::Name::Global {
             package: CURRENT_PACKAGE_ID.0,
-            definition: definition.0,
+            definition: definition.0 .0,
         };
     }
     let possible_package = path.first().clone().unwrap();
@@ -277,10 +277,10 @@ fn resolve_name(
             let package = database.get_package(package_id.clone());
             path.push(identifier);
             let full_name = path[1..].join("::");
-            let definition = package.get_global(&full_name).unwrap();
+            let definition = package.globals.get(&full_name).unwrap();
             ast::Name::Global {
                 package: package_id.0,
-                definition: definition.0,
+                definition: definition.0 .0,
             }
         }
         None => {
@@ -290,7 +290,7 @@ fn resolve_name(
             let definition = database.get_global(&full_name).unwrap();
             ast::Name::Global {
                 package: CURRENT_PACKAGE_ID.0,
-                definition: definition.0,
+                definition: definition.0 .0,
             }
         }
     }
@@ -305,10 +305,10 @@ mod tests {
     use crate::{
         ast_passes::{func_to_struct_literal_db::PromoteCallToStructLiteral, AstPass},
         session::Session,
-        typecheck::types::Type,
-        v2::knowledge::{Database, DefinitionId, TypeHashMap, TypeId},
+        v2::knowledge::{Database, DefinitionId, Id, LocalId, PackageId, TypeHashMap, TypeId},
+        v2::ty::Type,
     };
-    use std::collections::HashMap;
+    use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
     fn test_db(
         packages: HashMap<String, HashMap<String, usize>>,
@@ -323,23 +323,38 @@ mod tests {
             globals: HashMap::new(),
             definition_types: HashMap::new(),
             typeid_to_type: HashMap::new(),
-            reverse_type_aliases: TypeHashMap::new(100),
+            reverse_type_aliases: Rc::new(RefCell::new(TypeHashMap::new(100))),
             method_blocks: HashMap::new(),
+            method_blocks_definitions: Default::default(),
+            class_definitions: Default::default(),
+            instance_definitions: Default::default(),
+            classes: Default::default(),
+            instances: Default::default(),
+            methods: Default::default(),
+            constraints: Default::default(),
+            namespaces: Default::default(),
         };
         for (name, (id, typ)) in definitions {
-            db.globals.insert(name, DefinitionId(id));
-            db.typeid_to_type.insert(TypeId(id), typ);
-            db.definition_types.insert(DefinitionId(id), TypeId(id));
+            db.globals.insert(name, LocalId(DefinitionId(id)));
+            db.typeid_to_type.insert(LocalId(TypeId(id)), typ);
+            db.definition_types
+                .insert(LocalId(DefinitionId(id)), LocalId(TypeId(id)));
         }
         for (name, globals) in packages {
             let package = crate::v2::knowledge::PackageInfo {
                 name,
                 globals: globals
                     .into_iter()
-                    .map(|(name, id)| (name, DefinitionId(id)))
+                    .map(|(name, id)| (name, LocalId(DefinitionId(id))))
                     .collect(),
                 definition_types: HashMap::new(),
                 typeid_to_type: HashMap::new(),
+                implicit_imports: Default::default(),
+                method_blocks: Default::default(),
+                classes: Default::default(),
+                instances: Default::default(),
+                methods: Default::default(),
+                constraints: Default::default(),
             };
             db.add_package(package);
         }
@@ -385,6 +400,7 @@ mod tests {
     fn resolves_globals_without_namespace_correctly() {
         run_test(
             r"
+                foo: () -> ()
                 foo = x
             ",
             sexpr!((
@@ -402,6 +418,7 @@ mod tests {
     fn resolves_globals_within_other_packages() {
         run_test(
             r"
+                foo: () -> ()
                 foo = foo::x
             ",
             sexpr!((
@@ -425,6 +442,7 @@ mod tests {
             r"
                 namespace a::b
 
+                foo: () -> ()
                 foo = x
             ",
             sexpr!((
@@ -447,6 +465,7 @@ mod tests {
             r"
                 namespace a::b
 
+                foo: () -> ()
                 foo = c::d::x
             ",
             sexpr!((
@@ -468,6 +487,7 @@ mod tests {
     fn resolves_names_in_namespaces_of_packages() {
         run_test(
             r"
+                foo: () -> ()
                 foo = foo::a::b::x
             ",
             sexpr!((
@@ -492,6 +512,7 @@ mod tests {
             r"
                 namespace a::b
 
+                foo: () -> ()
                 foo = foo::a::b::x
             ",
             sexpr!((
@@ -514,6 +535,7 @@ mod tests {
     fn resolves_local_names() {
         run_test(
             r"
+                foo: () -> ()
                 foo a {
                     foo()
                     let x = 10
@@ -711,6 +733,7 @@ mod tests {
     fn resolve_name_in_struct_creation() {
         run_test(
             r#"
+            foo: () -> ()
             foo x = Foo { x = x }
             "#,
             sexpr!((
@@ -725,7 +748,7 @@ mod tests {
                 "Foo" -> (
                     10,
                     Type::Struct{
-                        def: 0,
+                        def: Id::Global { package: PackageId(0), id: DefinitionId(0) },
                         fields: vec![]
                     }
                 )
@@ -738,6 +761,7 @@ mod tests {
     fn no_resolution_for_qualified_patterns() {
         run_test(
             r#"
+            foo: () -> ()
             foo =
                 () match {
                     foo::Foo.A => ()
@@ -767,6 +791,8 @@ mod tests {
         run_test(
             r#"
             namespace foo
+
+            foo: () -> ()
             foo =
                 () match {
                     Foo {} => ()
@@ -784,7 +810,7 @@ mod tests {
                     })
             )),
             map! {
-                "foo::Foo" -> (10, Type::Struct { def: 0, fields: vec![] })
+                "foo::Foo" -> (10, Type::Struct { def: Id::Global { package: PackageId(0), id: DefinitionId(0) }, fields: vec![] })
             },
             map! {},
         )
@@ -794,6 +820,8 @@ mod tests {
     fn resolution_for_omitted_type_in_case() {
         run_test(
             r#"
+
+            foo: () -> ()
             foo =
                 () match {
                     A  => ()
@@ -814,7 +842,7 @@ mod tests {
                     })
             )),
             map! {
-                "A" -> (10, Type::Struct { def: 0, fields: vec![] })
+                "A" -> (10, Type::Struct { def: Id::Global { package: PackageId(0), id: DefinitionId(0) }, fields: vec![] })
             },
             map! {},
         )

@@ -1,0 +1,10 @@
+
+
+type Foo {
+    bar: std::String
+    baz: std::Int
+}
+
+type Bar {
+    foo: Foo
+}

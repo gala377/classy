@@ -54,7 +54,9 @@ impl Compiler {
         self.parse_source_files()?;
         self.after_parsing_passes();
         self.populate_db_definitions();
-        self.populate_db_type_info();
+        self.database.create_type_and_class_stumps(&self.session);
+        self.database.lower_type_definitions(&self.session);
+        self.database.dump_types();
         Ok(())
     }
 
@@ -101,39 +103,46 @@ impl Compiler {
                 export: _export,
             } in &mut ast.items
             {
+                let namespace = ast
+                    .namespace
+                    .as_ref()
+                    .map(|ns| ns.as_segments())
+                    .unwrap_or_default();
                 use ast::TopLevelItemKind::*;
                 match kind {
-                    TypeDefinition(type_def) => self
-                        .database
-                        .add_type_definition(DefinitionId(*id), type_def.clone()),
-                    FunctionDefinition(fn_def) => self
-                        .database
-                        .add_function_definition(DefinitionId(*id), fn_def.clone()),
-                    ConstDefinition(const_def) => self
-                        .database
-                        .add_const_definition(DefinitionId(*id), const_def.clone()),
-                    MethodsBlock(meths_def) => self
-                        .database
-                        .add_method_block_definition(DefinitionId(*id), meths_def.clone()),
-                    ClassDefinition(class_def) => self
-                        .database
-                        .add_class_definition(DefinitionId(*id), class_def.clone()),
-                    InstanceDefinition(inst_def) => self
-                        .database
-                        .add_instance_definition(DefinitionId(*id), inst_def.clone()),
-                    t => unimplemented!("{t:?}"),
+                    TypeDefinition(type_def) => self.database.add_type_definition(
+                        DefinitionId(*id),
+                        type_def.clone(),
+                        &namespace,
+                    ),
+                    FunctionDefinition(fn_def) => self.database.add_function_definition(
+                        DefinitionId(*id),
+                        fn_def.clone(),
+                        &namespace,
+                    ),
+                    ConstDefinition(const_def) => self.database.add_const_definition(
+                        DefinitionId(*id),
+                        const_def.clone(),
+                        &namespace,
+                    ),
+                    MethodsBlock(meths_def) => self.database.add_method_block_definition(
+                        DefinitionId(*id),
+                        meths_def.clone(),
+                        &namespace,
+                    ),
+                    ClassDefinition(class_def) => self.database.add_class_definition(
+                        DefinitionId(*id),
+                        class_def.clone(),
+                        &namespace,
+                    ),
+                    InstanceDefinition(inst_def) => self.database.add_instance_definition(
+                        DefinitionId(*id),
+                        inst_def.clone(),
+                        &namespace,
+                    ),
+                    t => unimplemented!("{:?}", t),
                 }
             }
         }
-    }
-
-    fn populate_db_type_info(&mut self) {
-        // go through all type definitions and translate them into actual types
-        // 1. do not resolve any fields, just add the type names to the database
-        // 2. Knowing the names and their ids resolve the fields (potential recursive
-        //    types)
-        // 3. Add all of the functions
-        // 4. Add all of the methods blocks
-        todo!()
     }
 }

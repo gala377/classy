@@ -8,6 +8,7 @@ pub mod func_to_struct_literal;
 pub mod func_to_struct_literal_db;
 pub mod gather_runtime_functions;
 pub mod implicit_forall;
+pub mod import_prelude;
 pub mod move_const_init;
 pub mod promote_local_types;
 pub mod resolve_names;
@@ -27,6 +28,7 @@ pub fn fully_expand_names(
 }
 
 pub fn run_after_parsing_passes(ast: ast::SourceFile, session: &Session) -> ast::SourceFile {
+    //let ast = import_prelude::ImportPrelude.run(ast, session);
     let ast = verify_lvalues::VerifyLvalues.run(ast, session);
     let ast = promote_local_types::PromoteAnonTypes::new().run(ast, session);
     let ast = implicit_forall::ImplicitForall::new().run(ast, session);

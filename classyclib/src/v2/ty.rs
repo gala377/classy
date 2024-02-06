@@ -1,6 +1,6 @@
 use crate::typecheck::{type_context::Name, types::DeBruijn};
 
-use super::knowledge::{Id, TypeId};
+use super::knowledge::{DefinitionId, Id, TypeId};
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub enum Type {
@@ -12,12 +12,12 @@ pub enum Type {
     Unit,
     Byte,
     Struct {
-        def: Id<TypeId>,
+        def: Id<DefinitionId>,
         // maps fields to the TypeId of the type
         fields: Vec<(Name, Type)>,
     },
     ADT {
-        def: Id<TypeId>,
+        def: Id<DefinitionId>,
         // maps constructors to the TypeId of the type
         // can be a tuple type
         constructors: Vec<(Name, Type)>,
@@ -114,7 +114,7 @@ pub trait TypeFolder: Sized {
 
     fn fold_struct(
         &mut self,
-        def: Id<TypeId>,
+        def: Id<DefinitionId>,
         fields: Vec<(String, Type)>,
     ) -> Result<Type, Self::Error> {
         fold_struct(self, def, fields)
@@ -133,7 +133,7 @@ pub trait TypeFolder: Sized {
     }
     fn fold_adt(
         &mut self,
-        def: Id<TypeId>,
+        def: Id<DefinitionId>,
         constructors: Vec<(String, Type)>,
     ) -> Result<Type, Self::Error> {
         fold_adt(self, def, constructors)
@@ -201,7 +201,7 @@ pub fn fold_function<T: TypeFolder>(
 
 pub fn fold_struct<T: TypeFolder>(
     folder: &mut T,
-    def: Id<TypeId>,
+    def: Id<DefinitionId>,
     fields: Vec<(String, Type)>,
 ) -> Result<Type, T::Error> {
     let fields = fields
@@ -232,7 +232,7 @@ pub fn fold_application<T: TypeFolder>(
 
 fn fold_adt<T: TypeFolder>(
     folder: &mut T,
-    def: Id<TypeId>,
+    def: Id<DefinitionId>,
     constructors: Vec<(String, Type)>,
 ) -> Result<Type, T::Error> {
     let constructors = constructors
@@ -240,4 +240,83 @@ fn fold_adt<T: TypeFolder>(
         .map(|(name, t)| folder.fold_type(t).map(|t| (name, t)))
         .collect::<Result<_, _>>()?;
     Ok(Type::ADT { def, constructors })
+}
+
+impl Type {
+    pub fn pretty(&self) -> String {
+        match self {
+            Type::Int => "Int".to_string(),
+            Type::UInt => "UInt".to_string(),
+            Type::Bool => "Bool".to_string(),
+            Type::String => "String".to_string(),
+            Type::Float => "Float".to_string(),
+            Type::Unit => "Unit".to_string(),
+            Type::Byte => "Byte".to_string(),
+            Type::Struct { def, fields } => {
+                let fields = fields
+                    .iter()
+                    .map(|(name, t)| format!("{}: {}", name, t.pretty()))
+                    .collect::<Vec<_>>()
+                    .join(",\n\t\t");
+                format!(
+                    "struct {{ \n\tid: {:?}\n\tfields: {{\n\t\t{}\n\t}} \n}}",
+                    def, fields
+                )
+            }
+            Type::ADT { def, constructors } => {
+                let constructors = constructors
+                    .iter()
+                    .map(|(name, t)| format!("{}: {}", name, t.pretty()))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{:?} {{ {} }}", def, constructors)
+            }
+            Type::Function { args, ret } => {
+                let args = args
+                    .iter()
+                    .map(|t| t.pretty())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("({}) -> {}", args, ret.pretty())
+            }
+            Type::Tuple(args) => {
+                let args = args
+                    .iter()
+                    .map(|t| t.pretty())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("({})", args)
+            }
+            Type::Array(inner) => {
+                format!("[{}]", inner.pretty())
+            }
+            Type::Alias(for_t) => {
+                format!("&({:?})", for_t)
+            }
+            Type::Divergent => "!".to_string(),
+            Type::ToInfere => "_".to_string(),
+            Type::Scheme { prefex, typ } => {
+                let prefex = prefex
+                    .iter()
+                    .map(|n| n.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("∀[{}] {}", prefex, typ.pretty())
+            }
+            Type::App { typ, args } => {
+                let args = args
+                    .iter()
+                    .map(|t| t.pretty())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{}[{}]", typ.pretty(), args)
+            }
+            Type::Generic(shift, index) => {
+                format!("@({}, {})", shift.0, index)
+            }
+            Type::Fresh(id) => {
+                format!("?{}", id)
+            }
+        }
+    }
 }

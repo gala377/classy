@@ -1,6 +1,6 @@
 use classy_syntax::ast::{self, Folder, Namespace};
 
-use crate::{typecheck::types::Type, v2::compile::CompilationError, v2::knowledge::Database};
+use crate::{v2::compile::CompilationError, v2::knowledge::Database, v2::ty::Type};
 
 use super::AstPass;
 
@@ -209,8 +209,8 @@ mod tests {
     use crate::{
         ast_passes::AstPass,
         session::Session,
-        typecheck::types::Type,
-        v2::knowledge::{Database, DefinitionId, PackageId, PackageInfo, TypeId},
+        v2::knowledge::{Database, DefinitionId, Id, LocalId, PackageId, PackageInfo, TypeId},
+        v2::ty::Type,
     };
 
     use super::PromoteCallToStructLiteral;
@@ -233,14 +233,17 @@ mod tests {
         }
         for (pid, did, name, typ) in db_info.types {
             if pid == PackageId(0) {
-                db.globals.insert(name.clone(), did.clone());
-                db.typeid_to_type.insert(TypeId(did.0), typ);
-                db.definition_types.insert(did.clone(), TypeId(did.0));
+                db.globals.insert(name.clone(), LocalId(did.clone()));
+                db.typeid_to_type.insert(LocalId(TypeId(did.0)), typ);
+                db.definition_types
+                    .insert(LocalId(did.clone()), LocalId(TypeId(did.0)));
             } else {
                 let package = db.packages.get_mut(pid.0 - 1).unwrap();
-                package.globals.insert(name.clone(), did.clone());
-                package.typeid_to_type.insert(TypeId(did.0), typ);
-                package.definition_types.insert(did.clone(), TypeId(did.0));
+                package.globals.insert(name.clone(), LocalId(did.clone()));
+                package.typeid_to_type.insert(LocalId(TypeId(did.0)), typ);
+                package
+                    .definition_types
+                    .insert(LocalId(did.clone()), LocalId(TypeId(did.0)));
             }
         }
 
@@ -307,7 +310,10 @@ mod tests {
                     did(1),
                     "Foo".into(),
                     Type::Struct {
-                        def: 0,
+                        def: Id::Global {
+                            package: pid(0),
+                            id: did(1),
+                        },
                         fields: vec![],
                     },
                 )],
@@ -339,11 +345,17 @@ mod tests {
                     did(1),
                     "Foo".into(),
                     Type::ADT {
-                        def: 0,
+                        def: Id::Global {
+                            package: pid(0),
+                            id: did(0),
+                        },
                         constructors: vec![(
                             "A".into(),
                             Type::Struct {
-                                def: 0,
+                                def: Id::Global {
+                                    package: pid(0),
+                                    id: did(0),
+                                },
                                 fields: vec![],
                             },
                         )],
@@ -376,7 +388,10 @@ mod tests {
                     did(1),
                     "Foo".into(),
                     Type::ADT {
-                        def: 0,
+                        def: Id::Global {
+                            package: pid(0),
+                            id: did(0),
+                        },
                         constructors: vec![("A".into(), Type::Tuple(vec![]))],
                     },
                 )],
@@ -407,7 +422,10 @@ mod tests {
                     did(1),
                     "Foo".into(),
                     Type::ADT {
-                        def: 0,
+                        def: Id::Global {
+                            package: pid(0),
+                            id: did(0),
+                        },
                         constructors: vec![("A".into(), Type::Unit)],
                     },
                 )],
@@ -441,7 +459,10 @@ mod tests {
                     did(1),
                     "inner::foo::Foo".into(),
                     Type::Struct {
-                        def: 0,
+                        def: Id::Global {
+                            package: pid(0),
+                            id: did(0),
+                        },
                         fields: vec![],
                     },
                 )],
@@ -475,7 +496,10 @@ mod tests {
                     did(1),
                     "inner::foo::bar::Foo".into(),
                     Type::Struct {
-                        def: 0,
+                        def: Id::Global {
+                            package: pid(0),
+                            id: did(0),
+                        },
                         fields: vec![],
                     },
                 )],
@@ -507,7 +531,10 @@ mod tests {
                     did(1),
                     "Foo".into(),
                     Type::Struct {
-                        def: 0,
+                        def: Id::Global {
+                            package: pid(0),
+                            id: did(0),
+                        },
                         fields: vec![],
                     },
                 )],
@@ -540,7 +567,10 @@ mod tests {
                     did(1),
                     "inner::Foo".into(),
                     Type::Struct {
-                        def: 0,
+                        def: Id::Global {
+                            package: pid(0),
+                            id: did(0),
+                        },
                         fields: vec![],
                     },
                 )],

@@ -1,27 +1,42 @@
+use core::panic;
+use std::cell::RefCell;
 /// This is a part of typechecker V2.
 /// This will replace the TypCtx.
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+use std::rc::Rc;
 
 use thiserror::Error;
 
 use classy_syntax::ast;
 
 use crate::id_provider::UniqueId;
+use crate::session::Session;
+use crate::typecheck::ast_to_type::PrefexScope;
+use crate::typecheck::types::DeBruijn;
 use crate::v2::instance::UnificationError;
 use crate::v2::ty::Type;
+
+pub struct GenericConstraint {
+    /// Class used for the constraint
+    pub class: Id<DefinitionId>,
+    /// Arguments used for the constraint
+    pub args: Vec<Type>,
+}
 
 /// Id of some item, can either be a local reference meaning current package
 /// or a global one meaning it references a definition from another package.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Id<T> {
+    /// Might reference a definition from another package or the current one
     Global { package: PackageId, id: T },
+    /// References a definition within the current package
     Local(LocalId<T>),
 }
 
 /// Id referencing current package
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
-pub struct LocalId<T>(T);
+pub struct LocalId<T>(pub T);
 
 impl<T> LocalId<T> {
     pub fn new(id: T) -> Self {
@@ -30,6 +45,13 @@ impl<T> LocalId<T> {
 
     pub fn into_id(self) -> Id<T> {
         Id::Local(self)
+    }
+
+    pub fn as_global(self, package: PackageId) -> Id<T> {
+        Id::Global {
+            package,
+            id: self.0,
+        }
     }
 }
 
@@ -40,11 +62,11 @@ impl<T> Into<Id<T>> for LocalId<T> {
 }
 
 /// Id that identifies a definition within a package
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub struct DefinitionId(pub UniqueId);
 
 /// Id that identifies a type
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub struct TypeId(pub UniqueId);
 
 /// Id that identifies a package
@@ -130,6 +152,8 @@ pub struct PackageInfo {
     /// package. The context of their definition should be known for the type to
     /// be properly substituted.
     pub methods: HashMap<LocalId<DefinitionId>, MethodInfo>,
+    /// Type constraints for any definition within the package
+    pub constraints: HashMap<LocalId<DefinitionId>, Vec<GenericConstraint>>,
 }
 
 impl PackageInfo {
@@ -144,6 +168,7 @@ impl PackageInfo {
             classes: HashMap::new(),
             instances: HashMap::new(),
             methods: HashMap::new(),
+            constraints: HashMap::new(),
         }
     }
 }
@@ -187,7 +212,12 @@ pub struct Database {
     /// reverse. In this case this map will recognize such types as equal.
     /// However, as the types are checked using structural equality throughout
     /// typechecking, this collision should not effect it.
-    pub reverse_type_aliases: TypeHashMap<TypeId>,
+    ///
+    ///
+    /// Because the DB owns the type map but at the same time is needed
+    /// to calculate the hash and type equality for the type we need to use a
+    /// RefCell to store the type map.
+    pub reverse_type_aliases: Rc<RefCell<TypeHashMap<LocalId<TypeId>>>>,
 
     /// Method blocks within the package in more digestable form.
     pub method_blocks: HashMap<LocalId<DefinitionId>, MethodBlockInfo>,
@@ -201,6 +231,12 @@ pub struct Database {
     /// All the methods from instances and method blocks defined within this
     /// package
     pub methods: HashMap<LocalId<DefinitionId>, MethodInfo>,
+
+    /// All the type constraints for any definition within the package
+    pub constraints: HashMap<LocalId<DefinitionId>, Vec<GenericConstraint>>,
+
+    /// Namespaces that the definitions has been defined in
+    pub namespaces: HashMap<LocalId<DefinitionId>, Vec<String>>,
 }
 
 #[derive(Error, Debug)]
@@ -244,11 +280,15 @@ impl Database {
             globals: HashMap::new(),
             definition_types: HashMap::new(),
             typeid_to_type: HashMap::new(),
-            reverse_type_aliases: TypeHashMap::new(Self::INITIAL_TYPE_MAP_CAPACITY as u64),
+            reverse_type_aliases: Rc::new(RefCell::new(TypeHashMap::new(
+                Self::INITIAL_TYPE_MAP_CAPACITY as u64,
+            ))),
             method_blocks: HashMap::new(),
             classes: HashMap::new(),
             instances: HashMap::new(),
             methods: HashMap::new(),
+            constraints: HashMap::new(),
+            namespaces: HashMap::new(),
         }
     }
 
@@ -275,7 +315,12 @@ impl Database {
     }
     // Definitions
 
-    pub fn add_type_definition(&mut self, id: DefinitionId, definition: ast::TypeDefinition) {
+    pub fn add_type_definition(
+        &mut self,
+        id: DefinitionId,
+        definition: ast::TypeDefinition,
+        namespace: &[String],
+    ) {
         let id = LocalId::new(id);
         assert!(!self.type_definitions.contains_key(&id));
         assert!(self
@@ -283,12 +328,14 @@ impl Database {
             .insert(definition.name.clone(), id.clone())
             .is_none());
         self.type_definitions.insert(id, definition);
+        self.namespaces.insert(id, namespace.to_vec());
     }
 
     pub fn add_function_definition(
         &mut self,
         id: DefinitionId,
         definition: ast::FunctionDefinition,
+        namespace: &[String],
     ) {
         let id = LocalId::new(id);
         assert!(!self.function_definitions.contains_key(&id));
@@ -297,9 +344,15 @@ impl Database {
             .insert(definition.name.clone(), id.clone())
             .is_none());
         self.function_definitions.insert(id, definition);
+        self.namespaces.insert(id, namespace.to_vec());
     }
 
-    pub fn add_const_definition(&mut self, id: DefinitionId, definition: ast::ConstDefinition) {
+    pub fn add_const_definition(
+        &mut self,
+        id: DefinitionId,
+        definition: ast::ConstDefinition,
+        namespace: &[String],
+    ) {
         let id = LocalId::new(id);
         assert!(!self.variable_definitions.contains_key(&id));
         assert!(self
@@ -307,12 +360,14 @@ impl Database {
             .insert(definition.name.clone(), id.clone())
             .is_none());
         self.variable_definitions.insert(id, definition);
+        self.namespaces.insert(id, namespace.to_vec());
     }
 
     pub fn add_method_block_definition(
         &mut self,
         id: DefinitionId,
         definition: ast::MethodsBlock<ast::FunctionDefinition>,
+        namespace: &[String],
     ) {
         let id = LocalId::new(id);
         assert!(!self.method_blocks_definitions.contains_key(&id));
@@ -323,9 +378,15 @@ impl Database {
                 .is_none());
         }
         self.method_blocks_definitions.insert(id, definition);
+        self.namespaces.insert(id, namespace.to_vec());
     }
 
-    pub fn add_class_definition(&mut self, id: DefinitionId, definition: ast::ClassDefinition) {
+    pub fn add_class_definition(
+        &mut self,
+        id: DefinitionId,
+        definition: ast::ClassDefinition,
+        namespace: &[String],
+    ) {
         let id = LocalId::new(id);
         assert!(!self.class_definitions.contains_key(&id));
         assert!(self
@@ -333,12 +394,14 @@ impl Database {
             .insert(definition.name.clone(), id.clone())
             .is_none());
         self.class_definitions.insert(id, definition);
+        self.namespaces.insert(id, namespace.to_vec());
     }
 
     pub fn add_instance_definition(
         &mut self,
         id: DefinitionId,
         definition: ast::InstanceDefinition,
+        namespace: &[String],
     ) {
         let id = LocalId::new(id);
         assert!(!self.instance_definitions.contains_key(&id));
@@ -349,6 +412,7 @@ impl Database {
                 .is_none());
         }
         self.instance_definitions.insert(id, definition);
+        self.namespaces.insert(id, namespace.to_vec());
     }
 
     pub fn get_global(&self, name: &str) -> Option<LocalId<DefinitionId>> {
@@ -404,6 +468,35 @@ impl Database {
         self.get_type(definition_id.clone().into())
     }
 
+    pub fn get_definition_id_by_unresolved_name(
+        &self,
+        current_namespace: &[String],
+        path: &[String],
+        name: &str,
+    ) -> Option<Id<DefinitionId>> {
+        if let Some(potential_package) = path.first() {
+            if let Some(package_id) = self.package_id(potential_package) {
+                let package_info = self.get_package(package_id.clone());
+                let mut expanded_name = path[1..].to_vec();
+                expanded_name.push(name.to_string());
+                let expanded_name = expanded_name.join("::");
+                return package_info
+                    .globals
+                    .get(&expanded_name)
+                    .cloned()
+                    .map(|id| id.as_global(package_id));
+            }
+        }
+        let mut expanded_name = current_namespace.to_vec();
+        expanded_name.extend(path.iter().cloned());
+        expanded_name.push(name.to_string());
+        let expand_name = expanded_name.join("::");
+        self.globals
+            .get(&expand_name)
+            .cloned()
+            .map(|id| id.as_global(CURRENT_PACKAGE_ID))
+    }
+
     // Resolving Tids
 
     pub fn resolve_tid(&self, type_id: Id<TypeId>) -> Result<Type, QueryError> {
@@ -451,7 +544,7 @@ impl Database {
         loop {
             let resolved = self.resolve_tid_ref(typ)?;
             if let Type::Alias(for_type) = resolved {
-                typ = *for_type;
+                typ = for_type.clone();
             } else {
                 return Ok(typ);
             }
@@ -622,6 +715,376 @@ impl Database {
         };
         Ok(())
     }
+
+    /// Creates ids for all of the type definitions and classes with the dummy
+    /// info.
+    ///
+    /// This is useful to be able to reference the types and classes for
+    /// recursive definitions.
+    pub fn create_type_and_class_stumps(&mut self, session: &Session) {
+        // create ids for all type definitions
+        // for now insert a bogus type there
+        for (id, ast_node) in &self.type_definitions {
+            let type_id = session.id_provider().next();
+            let type_id = LocalId::new(TypeId(type_id));
+            self.definition_types.insert(id.clone(), type_id);
+            self.typeid_to_type.insert(type_id, Type::Unit);
+        }
+        // Same for class definitions if we need to look them up
+        for (id, ast_node) in &self.class_definitions {
+            self.classes.insert(
+                id.clone(),
+                ClassInfo {
+                    name: ast_node.name.clone(),
+                    static_methods: Vec::new(),
+                    method_blocks: Vec::new(),
+                },
+            );
+        }
+    }
+
+    /// Go through all of the type definitions as ast nodes and
+    /// lower them into the types used for the typechecking.
+    ///
+    /// Also puts everything into the correct hashmaps for easy quering.
+    pub fn lower_type_definitions(&mut self, session: &Session) {
+        let type_definitions = self.type_definitions.clone();
+        for (
+            id,
+            ast::TypeDefinition {
+                name,
+                definition,
+                type_variables,
+                span,
+            },
+        ) in type_definitions
+        {
+            let namespace = self.namespaces.get(&id).unwrap().clone();
+            let mut prefex_scope = PrefexScope::new();
+            for var in type_variables.iter() {
+                prefex_scope.add_type_var(&var.name);
+            }
+            let mut t = match definition {
+                ast::DefinedType::Record(ast::Record { fields }) => {
+                    let fields = fields
+                        .iter()
+                        .map(|ast::TypedIdentifier { name, typ }| {
+                            let t = self.ast_type_to_type_shallow(
+                                session,
+                                &mut prefex_scope,
+                                &namespace,
+                                typ,
+                            );
+                            (name.clone(), t)
+                        })
+                        .collect();
+                    Type::Struct {
+                        def: id.as_global(CURRENT_PACKAGE_ID),
+                        fields,
+                    }
+                }
+                ast::DefinedType::ADT(ast::ADT { discriminants }) => {
+                    let constructors = discriminants
+                        .iter()
+                        .map(
+                            |ast::Discriminant {
+                                 constructor,
+                                 arguments,
+                             }| {
+                                (
+                                    constructor.clone(),
+                                    match arguments {
+                                        ast::DiscriminantKind::Empty => Type::Unit,
+                                        ast::DiscriminantKind::Tuple(args) => Type::Tuple(
+                                            args.iter()
+                                                .map(|t| {
+                                                    self.ast_type_to_type_shallow(
+                                                        session,
+                                                        &mut prefex_scope,
+                                                        &namespace,
+                                                        t,
+                                                    )
+                                                })
+                                                .collect(),
+                                        ),
+                                        ast::DiscriminantKind::Record(fields) => Type::Struct {
+                                            def: Id::Global {
+                                                package: CURRENT_PACKAGE_ID,
+                                                // Bogus id for the struct, ideally we will never
+                                                // try to
+                                                // resovle it
+                                                id: DefinitionId(session.id_provider().next()),
+                                            },
+                                            fields: fields
+                                                .iter()
+                                                .map(|(name, ty)| {
+                                                    (
+                                                        name.clone(),
+                                                        self.ast_type_to_type_shallow(
+                                                            session,
+                                                            &mut prefex_scope,
+                                                            &namespace,
+                                                            ty,
+                                                        ),
+                                                    )
+                                                })
+                                                .collect(),
+                                        },
+                                    },
+                                )
+                            },
+                        )
+                        .collect();
+                    Type::ADT {
+                        def: id.as_global(CURRENT_PACKAGE_ID),
+                        constructors,
+                    }
+                }
+                ast::DefinedType::Alias(ast::Alias { for_type }) => {
+                    self.ast_type_to_type_shallow(session, &mut prefex_scope, &namespace, &for_type)
+                }
+            };
+            if !prefex_scope.is_empty() {
+                t = Type::Scheme {
+                    prefex: type_variables.iter().map(|v| v.name.clone()).collect(),
+                    typ: Box::new(t),
+                };
+            }
+            let tid = self.definition_types.get(&id).unwrap();
+            self.typeid_to_type.insert(tid.clone(), t);
+        }
+    }
+
+    /// Translate ast type to ty::Type.
+    ///
+    /// Any type references are resolved to their type ids.
+    /// Any builtin composite types are created fresh
+    fn ast_type_to_type_shallow(
+        &mut self,
+        session: &Session,
+        prefex_scope: &mut PrefexScope,
+        namespace: &[String],
+        ty: &ast::Typ,
+    ) -> Type {
+        match ty {
+            ast::Typ::Unit => Type::Unit,
+            ast::Typ::Name(name) => match name {
+                ast::Name::Global {
+                    package,
+                    definition,
+                } => {
+                    let package_info = self.get_package(PackageId(*package));
+                    let LocalId(typeid) = package_info
+                        .definition_types
+                        .get(&LocalId::new(DefinitionId(*definition)))
+                        .cloned()
+                        .unwrap();
+                    Type::Alias(Id::Global {
+                        package: PackageId(*package),
+                        id: typeid,
+                    })
+                }
+                ast::Name::Local(name) => {
+                    let def = self.get_global(name).unwrap();
+                    let typeid = self.definition_types.get(&def).unwrap();
+                    Type::Alias(Id::Local(typeid.clone()))
+                }
+                ast::Name::Unresolved { path, identifier }
+                    if path.is_empty() && prefex_scope.contains(identifier) =>
+                {
+                    let (shift, position) = prefex_scope.get_with_position(identifier).unwrap();
+                    Type::Generic(DeBruijn(shift.try_into().unwrap()), *position)
+                }
+                ast::Name::Unresolved { path, identifier } => {
+                    let id = self
+                        .get_definition_id_by_unresolved_name(namespace, path, identifier)
+                        .expect(&format!(
+                            "expected definition to be found, {:?} {:?}",
+                            path, identifier
+                        ));
+                    match id {
+                        Id::Global { package, id } if package == CURRENT_PACKAGE_ID => {
+                            let id = LocalId::new(id);
+                            assert!(self.type_definitions.contains_key(&id));
+                            let tid = self.definition_types.get(&id).unwrap();
+                            Type::Alias(tid.as_global(CURRENT_PACKAGE_ID))
+                        }
+                        Id::Global { package, id } => {
+                            let package_info = self.get_package(package);
+                            let id = LocalId::new(id);
+                            let tid = package_info.definition_types.get(&id).unwrap();
+                            Type::Alias(tid.as_global(package))
+                        }
+                        Id::Local(id) => {
+                            assert!(self.type_definitions.contains_key(&id));
+                            let tid = self.definition_types.get(&id).unwrap();
+                            Type::Alias(tid.as_global(CURRENT_PACKAGE_ID))
+                        }
+                    }
+                }
+            },
+            ast::Typ::Application { callee, args } => {
+                let callee =
+                    self.ast_type_to_type_shallow(session, prefex_scope, namespace, callee);
+                let args = args
+                    .iter()
+                    .map(|t| self.ast_type_to_type_shallow(session, prefex_scope, namespace, t))
+                    .collect();
+                let tid = self.create_type(
+                    session,
+                    Type::App {
+                        typ: Box::new(callee),
+                        args,
+                    },
+                );
+                Type::Alias(Id::Local(tid))
+            }
+            ast::Typ::Array(inner) => {
+                let ty = Type::Array(Box::new(self.ast_type_to_type_shallow(
+                    session,
+                    prefex_scope,
+                    namespace,
+                    inner,
+                )));
+                let tid = self.create_type(session, ty);
+                Type::Alias(Id::Local(tid))
+            }
+
+            ast::Typ::Function { args, ret } => {
+                let args = args
+                    .iter()
+                    .map(|t| self.ast_type_to_type_shallow(session, prefex_scope, namespace, t))
+                    .collect();
+                let ret =
+                    Box::new(self.ast_type_to_type_shallow(session, prefex_scope, namespace, ret));
+                let tid = self.create_type(session, Type::Function { args, ret });
+                Type::Alias(Id::Local(tid))
+            }
+            ast::Typ::Tuple(inner) => {
+                let inner = inner
+                    .iter()
+                    .map(|t| self.ast_type_to_type_shallow(session, prefex_scope, namespace, t))
+                    .collect();
+                let tid = self.create_type(session, Type::Tuple(inner));
+                Type::Alias(Id::Local(tid))
+            }
+            ast::Typ::Poly {
+                free_variables,
+                bounds,
+                typ,
+            } if free_variables.is_empty() => {
+                self.ast_type_to_type_shallow(session, prefex_scope, namespace, typ)
+            }
+            ast::Typ::Poly {
+                free_variables,
+                bounds,
+                typ,
+            } => {
+                panic!(
+                    "poly types as arguments and fields are not supported yet {:?} => {:?}",
+                    free_variables, typ
+                );
+            }
+            ast::Typ::ToInfere => Type::ToInfere,
+        }
+    }
+
+    fn ast_type_bound_to_generic_constraint_shallow(
+        &mut self,
+        session: &Session,
+        prefex_scope: &mut PrefexScope,
+        bound: &ast::Typ,
+        current_namespace: &[String],
+    ) -> GenericConstraint {
+        match bound {
+            ast::Typ::Application {
+                callee: box ast::Typ::Name(name),
+                args,
+            } => {
+                let class: Id<DefinitionId> = match name {
+                    ast::Name::Unresolved { path, identifier } => {
+                        let id = self
+                            .get_definition_id_by_unresolved_name(
+                                current_namespace,
+                                path,
+                                identifier,
+                            )
+                            .unwrap();
+                        match id {
+                            Id::Global { package, id } => {
+                                let package_info = self.get_package(package);
+                                let id = LocalId::new(id);
+                                assert!(package_info.classes.contains_key(&id));
+                                id.as_global(package)
+                            }
+                            Id::Local(id) => {
+                                assert!(self.classes.contains_key(&id));
+                                id.as_global(CURRENT_PACKAGE_ID)
+                            }
+                        }
+                    }
+                    ast::Name::Global {
+                        package,
+                        definition,
+                    } => {
+                        let package = PackageId(*package);
+                        let id = LocalId::new(DefinitionId(*definition));
+                        let package_info = self.get_package(package);
+                        assert!(package_info.classes.contains_key(&id));
+                        id.as_global(package)
+                    }
+                    ast::Name::Local(id) => {
+                        let id = self.globals.get(id).unwrap();
+                        assert!(self.classes.contains_key(id));
+                        id.as_global(CURRENT_PACKAGE_ID)
+                    }
+                };
+                let args = args
+                    .iter()
+                    .map(|t| {
+                        self.ast_type_to_type_shallow(session, prefex_scope, current_namespace, t)
+                    })
+                    .collect();
+                GenericConstraint { class, args }
+            }
+            _ => panic!("Type bound needs to be an application of a class"),
+        }
+    }
+    /// Lookups type into the reverse hash to get its type id.
+    /// If the type is not present in the hash it is added with a fresh type id.
+    pub fn create_type(&mut self, session: &Session, ty: Type) -> LocalId<TypeId> {
+        let lookup = self
+            .reverse_type_aliases
+            .borrow()
+            .get(&self, &ty)
+            .unwrap()
+            .cloned();
+        match lookup {
+            Some(tid) => tid,
+            None => {
+                let id = session.id_provider().next();
+                let id = LocalId::new(TypeId(id));
+                self.typeid_to_type.insert(id.clone(), ty.clone());
+                self.insert_into_type_map(ty, id.clone());
+                id
+            }
+        }
+    }
+
+    /// Inserts value into the type map.
+    ///
+    /// Because the DB owns the type map but at the same time is needed
+    /// to calculate the hash for the type we need to use a RefCell to store the
+    /// type map.
+    ///
+    /// This is a helper method that makes the user skip the manual borrowing.
+    pub fn insert_into_type_map(&mut self, ty: Type, tid: LocalId<TypeId>) {
+        let reverse_type_aliases = self.reverse_type_aliases.clone();
+        reverse_type_aliases
+            .borrow_mut()
+            .insert(&self, ty, tid)
+            .unwrap();
+    }
 }
 
 pub struct TypeHashMap<V> {
@@ -659,5 +1122,18 @@ impl<V: Clone> TypeHashMap<V> {
             }
         }
         Ok(None)
+    }
+}
+
+pub struct PopulateDbTypeDefinitions<'a, 's> {
+    pub session: &'s Session,
+    pub db: &'a mut Database,
+}
+
+impl Database {
+    pub fn dump_types(&self) {
+        for (id, t) in &self.typeid_to_type {
+            println!("{:?} => {}", id.0, t.pretty());
+        }
     }
 }
