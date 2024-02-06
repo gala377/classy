@@ -1011,6 +1011,11 @@ impl Database {
                             )
                             .unwrap();
                         match id {
+                            Id::Global { package, id } if package == CURRENT_PACKAGE_ID => {
+                                let id = LocalId::new(id);
+                                assert!(self.classes.contains_key(&id));
+                                id.as_global(CURRENT_PACKAGE_ID)
+                            }
                             Id::Global { package, id } => {
                                 let package_info = self.get_package(package);
                                 let id = LocalId::new(id);
