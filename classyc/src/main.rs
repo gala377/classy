@@ -13,7 +13,7 @@ use classyclib::{
     ast_passes::run_before_typechecking_passes,
     code::constant_pool::ConstantPool,
     typecheck::{self, add_types::AddTypes, type_context::TypCtx},
-    v2::knowledge::{DefinitionId, LocalId, PackageInfo, TypeId},
+    v2::knowledge::{Definition, DefinitionId, DefinitionKind, LocalId, PackageInfo, TypeId},
 };
 use classyvm::{
     mem::{page::Page, ptr::NonNullPtr},
@@ -136,48 +136,59 @@ pub fn prepare_type_ctx(mut tctx: TypCtx, ast: &ast::SourceFile) -> TypCtx {
 }
 
 pub fn compile_with_v2(args: Args) {
-    let core = PackageInfo {
-        name: "std".to_string(),
-        globals: {
-            let mut globals = HashMap::new();
-            globals.insert("String".to_string(), LocalId(DefinitionId(0)));
-            globals.insert("Int".to_string(), LocalId(DefinitionId(1)));
-            globals.insert("Bool".to_string(), LocalId(DefinitionId(2)));
-            globals.insert("Float".to_string(), LocalId(DefinitionId(4)));
-            globals.insert("Byte".to_string(), LocalId(DefinitionId(5)));
-            globals.insert("UInt".to_string(), LocalId(DefinitionId(6)));
-            globals
-        },
-        definition_types: {
-            let mut map = HashMap::new();
-            map.insert(LocalId(DefinitionId(0)), LocalId(TypeId(0)));
-            map.insert(LocalId(DefinitionId(1)), LocalId(TypeId(1)));
-            map.insert(LocalId(DefinitionId(2)), LocalId(TypeId(2)));
-            map.insert(LocalId(DefinitionId(4)), LocalId(TypeId(4)));
-            map.insert(LocalId(DefinitionId(5)), LocalId(TypeId(5)));
-            map.insert(LocalId(DefinitionId(6)), LocalId(TypeId(6)));
-            map
-        },
-        typeid_to_type: {
-            let mut map = HashMap::new();
-            map.insert(LocalId(TypeId(0)), classyclib::v2::ty::Type::String);
-            map.insert(LocalId(TypeId(1)), classyclib::v2::ty::Type::Int);
-            map.insert(LocalId(TypeId(2)), classyclib::v2::ty::Type::Bool);
-            map.insert(LocalId(TypeId(4)), classyclib::v2::ty::Type::Float);
-            map.insert(LocalId(TypeId(5)), classyclib::v2::ty::Type::Byte);
-            map.insert(LocalId(TypeId(6)), classyclib::v2::ty::Type::UInt);
-            map
-        },
-        implicit_imports: Default::default(),
-        method_blocks: Default::default(),
-        classes: Default::default(),
-        instances: Default::default(),
-        methods: Default::default(),
-        constraints: Default::default(),
-    };
+    let core = prepare_std_package();
     let file = args.file.expect("file path has to be provided");
     let source = std::fs::read_to_string(Path::new(&file)).unwrap();
     let mut compiler =
         classyclib::v2::compile::Compiler::new("test", vec![(file.into(), source)], vec![core]);
     compiler.compile_package();
+}
+
+fn prepare_std_package() -> PackageInfo {
+    let types = vec![
+        ("String", classyclib::v2::ty::Type::String),
+        ("Int", classyclib::v2::ty::Type::Int),
+        ("Bool", classyclib::v2::ty::Type::Bool),
+        ("Float", classyclib::v2::ty::Type::Float),
+        ("Byte", classyclib::v2::ty::Type::Byte),
+        ("UInt", classyclib::v2::ty::Type::UInt),
+    ];
+    PackageInfo {
+        name: "std".to_string(),
+        globals: {
+            let mut globals = HashMap::new();
+            for (i, (name, _)) in types.iter().enumerate() {
+                globals.insert(name.to_string(), LocalId(DefinitionId(i)));
+            }
+            globals
+        },
+        definition: {
+            let mut map = HashMap::new();
+            for (i, (name, _)) in types.iter().enumerate() {
+                map.insert(
+                    LocalId(DefinitionId(i)),
+                    Definition {
+                        name: name.to_string(),
+                        kind: DefinitionKind::Type,
+                        constrainst: vec![],
+                        ty: LocalId(TypeId(i)),
+                        file: LocalId(DefinitionId(0)),
+                        implicit_imports: vec![],
+                    },
+                );
+            }
+            map
+        },
+        typeid_to_type: {
+            let mut map = HashMap::new();
+            for (i, (_, ty)) in types.iter().enumerate() {
+                map.insert(LocalId(TypeId(i)), ty.clone());
+            }
+            map
+        },
+        method_blocks: Default::default(),
+        classes: Default::default(),
+        instances: Default::default(),
+        methods: Default::default(),
+    }
 }

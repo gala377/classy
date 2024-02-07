@@ -108,43 +108,37 @@ impl Compiler {
                     .as_ref()
                     .map(|ns| ns.as_segments())
                     .unwrap_or_default();
+                let file = self.database.add_file(&self.session, &path, &namespace);
                 use ast::TopLevelItemKind::*;
                 match kind {
-                    TypeDefinition(type_def) => self.database.add_type_definition(
-                        DefinitionId(*id),
-                        type_def.clone(),
-                        &namespace,
-                        path.clone(),
-                    ),
+                    TypeDefinition(type_def) => {
+                        self.database
+                            .add_type_definition(DefinitionId(*id), type_def.clone(), file)
+                    }
                     FunctionDefinition(fn_def) => self.database.add_function_definition(
                         DefinitionId(*id),
                         fn_def.clone(),
-                        &namespace,
-                        path.clone(),
+                        file,
                     ),
                     ConstDefinition(const_def) => self.database.add_const_definition(
                         DefinitionId(*id),
                         const_def.clone(),
-                        &namespace,
-                        path.clone(),
+                        file,
                     ),
                     MethodsBlock(meths_def) => self.database.add_method_block_definition(
                         DefinitionId(*id),
                         meths_def.clone(),
-                        &namespace,
-                        path.clone(),
+                        file,
                     ),
                     ClassDefinition(class_def) => self.database.add_class_definition(
                         DefinitionId(*id),
                         class_def.clone(),
-                        &namespace,
-                        path.clone(),
+                        file,
                     ),
                     InstanceDefinition(inst_def) => self.database.add_instance_definition(
                         DefinitionId(*id),
                         inst_def.clone(),
-                        &namespace,
-                        path.clone(),
+                        file,
                     ),
                     t => unimplemented!("{:?}", t),
                 }

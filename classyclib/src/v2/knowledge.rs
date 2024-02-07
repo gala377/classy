@@ -4,7 +4,7 @@ use std::cell::RefCell;
 /// This will replace the TypCtx.
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use thiserror::Error;
@@ -24,6 +24,8 @@ pub struct GenericConstraint {
     /// Arguments used for the constraint
     pub args: Vec<Type>,
 }
+
+const DUMMY_TYPE_ID: LocalId<TypeId> = LocalId(TypeId(0));
 
 /// Id of some item, can either be a local reference meaning current package
 /// or a global one meaning it references a definition from another package.
@@ -129,20 +131,43 @@ pub struct MethodInfo {
     pub ty: LocalId<TypeId>,
 }
 
+pub struct FileInfo {
+    pub path: PathBuf,
+    pub namespace: Vec<String>,
+}
+
+pub enum DefinitionKind {
+    ConstVar,
+    Method,
+    MethodBlock,
+    Class,
+    Instance,
+    Type,
+    Function,
+}
+
+pub struct Definition {
+    /// Name of the item, if the name has not been provided then its empty
+    pub name: String,
+    /// Kind of the definition
+    pub kind: DefinitionKind,
+    /// Generic constraints associated with the definition
+    pub constrainst: Vec<GenericConstraint>,
+    /// Type associated with the definition
+    pub ty: LocalId<TypeId>,
+    /// File in which the defnition is in
+    pub file: LocalId<DefinitionId>,
+    /// Items that should be imported whenever this defintion is
+    pub implicit_imports: Vec<LocalId<DefinitionId>>,
+}
+
 pub struct PackageInfo {
     /// Name of the package
     pub name: String,
     /// All the globaly visible definitions within the package
     pub globals: HashMap<String, LocalId<DefinitionId>>,
-    /// Used to lookup type of a given definition
-    pub definition_types: HashMap<LocalId<DefinitionId>, LocalId<TypeId>>,
     /// Used to lookup type id into a type
     pub typeid_to_type: HashMap<LocalId<TypeId>, Type>,
-    /// When importing item with definition id Key, all the following
-    /// definitions should be imported as well. This comes into play when we
-    /// import a type, we also want to import implicit instances and method
-    /// blocks.
-    pub implicit_imports: HashMap<LocalId<DefinitionId>, Vec<LocalId<DefinitionId>>>,
     /// Method blocks defined within the package
     pub method_blocks: HashMap<LocalId<DefinitionId>, MethodBlockInfo>,
     /// Classes defined within the package
@@ -153,8 +178,8 @@ pub struct PackageInfo {
     /// package. The context of their definition should be known for the type to
     /// be properly substituted.
     pub methods: HashMap<LocalId<DefinitionId>, MethodInfo>,
-    /// Type constraints for any definition within the package
-    pub constraints: HashMap<LocalId<DefinitionId>, Vec<GenericConstraint>>,
+    /// All the defnitions within the package, functions, methods, instances,
+    pub definition: HashMap<LocalId<DefinitionId>, Definition>,
 }
 
 impl PackageInfo {
@@ -162,14 +187,12 @@ impl PackageInfo {
         Self {
             name: name.to_string(),
             globals: HashMap::new(),
-            definition_types: HashMap::new(),
             typeid_to_type: HashMap::new(),
-            implicit_imports: HashMap::new(),
             method_blocks: HashMap::new(),
             classes: HashMap::new(),
             instances: HashMap::new(),
             methods: HashMap::new(),
-            constraints: HashMap::new(),
+            definition: Default::default(),
         }
     }
 }
@@ -198,9 +221,6 @@ pub struct Database {
     pub class_definitions: HashMap<LocalId<DefinitionId>, ast::ClassDefinition>,
     /// Instance definitions
     pub instance_definitions: HashMap<LocalId<DefinitionId>, ast::InstanceDefinition>,
-
-    /// A mapping assigning each definition to its respective type.
-    pub definition_types: HashMap<LocalId<DefinitionId>, LocalId<TypeId>>,
 
     /// All the type values generated during typechecking.
     /// Maps their respective handle to the value of the type.
@@ -233,15 +253,12 @@ pub struct Database {
     /// package
     pub methods: HashMap<LocalId<DefinitionId>, MethodInfo>,
 
-    /// All the type constraints for any definition within the package
-    pub constraints: HashMap<LocalId<DefinitionId>, Vec<GenericConstraint>>,
+    /// Information about the files
+    pub file_info: HashMap<LocalId<DefinitionId>, FileInfo>,
 
-    /// Namespaces that the definitions has been defined in
-    pub namespaces: HashMap<LocalId<DefinitionId>, Vec<String>>,
-    /// Mapping from a definition item to a file it has been defined in
-    pub files: HashMap<LocalId<DefinitionId>, PathBuf>,
-    /// Imports for each given file
-    pub imports: HashMap<PathBuf, ()>,
+    /// All the defnitions within the package, functions, methods, instances,
+    /// classes, method blocks, types and so on.
+    pub definitions: HashMap<LocalId<DefinitionId>, Definition>,
 }
 
 #[derive(Error, Debug)]
@@ -283,7 +300,6 @@ impl Database {
             class_definitions: HashMap::new(),
             instance_definitions: HashMap::new(),
             globals: HashMap::new(),
-            definition_types: HashMap::new(),
             typeid_to_type: HashMap::new(),
             reverse_type_aliases: Rc::new(RefCell::new(TypeHashMap::new(
                 Self::INITIAL_TYPE_MAP_CAPACITY as u64,
@@ -292,10 +308,8 @@ impl Database {
             classes: HashMap::new(),
             instances: HashMap::new(),
             methods: HashMap::new(),
-            constraints: HashMap::new(),
-            namespaces: HashMap::new(),
-            files: Default::default(),
-            imports: Default::default(),
+            file_info: Default::default(),
+            definitions: Default::default(),
         }
     }
 
@@ -322,12 +336,28 @@ impl Database {
     }
     // Definitions
 
+    pub fn add_file(
+        &mut self,
+        session: &Session,
+        file: impl Into<PathBuf>,
+        namespace: &[String],
+    ) -> LocalId<DefinitionId> {
+        let id = LocalId::new(DefinitionId(session.id_provider().next()));
+        self.file_info.insert(
+            id,
+            FileInfo {
+                path: file.into(),
+                namespace: namespace.to_vec(),
+            },
+        );
+        id
+    }
+
     pub fn add_type_definition(
         &mut self,
         id: DefinitionId,
         definition: ast::TypeDefinition,
-        namespace: &[String],
-        file: PathBuf,
+        file: LocalId<DefinitionId>,
     ) {
         let id = LocalId::new(id);
         assert!(!self.type_definitions.contains_key(&id));
@@ -335,17 +365,25 @@ impl Database {
             .globals
             .insert(definition.name.clone(), id.clone())
             .is_none());
+        self.definitions.insert(
+            id,
+            Definition {
+                name: definition.name.clone(),
+                kind: DefinitionKind::Type,
+                constrainst: Vec::new(),
+                implicit_imports: Default::default(),
+                ty: DUMMY_TYPE_ID,
+                file,
+            },
+        );
         self.type_definitions.insert(id, definition);
-        self.namespaces.insert(id, namespace.to_vec());
-        self.files.insert(id, file);
     }
 
     pub fn add_function_definition(
         &mut self,
         id: DefinitionId,
         definition: ast::FunctionDefinition,
-        namespace: &[String],
-        file: PathBuf,
+        file: LocalId<DefinitionId>,
     ) {
         let id = LocalId::new(id);
         assert!(!self.function_definitions.contains_key(&id));
@@ -353,17 +391,26 @@ impl Database {
             .globals
             .insert(definition.name.clone(), id.clone())
             .is_none());
+
+        self.definitions.insert(
+            id,
+            Definition {
+                name: definition.name.clone(),
+                kind: DefinitionKind::Function,
+                implicit_imports: Default::default(),
+                constrainst: Vec::new(),
+                ty: DUMMY_TYPE_ID,
+                file,
+            },
+        );
         self.function_definitions.insert(id, definition);
-        self.namespaces.insert(id, namespace.to_vec());
-        self.files.insert(id, file);
     }
 
     pub fn add_const_definition(
         &mut self,
         id: DefinitionId,
         definition: ast::ConstDefinition,
-        namespace: &[String],
-        file: PathBuf,
+        file: LocalId<DefinitionId>,
     ) {
         let id = LocalId::new(id);
         assert!(!self.variable_definitions.contains_key(&id));
@@ -371,17 +418,26 @@ impl Database {
             .globals
             .insert(definition.name.clone(), id.clone())
             .is_none());
+
+        self.definitions.insert(
+            id,
+            Definition {
+                name: definition.name.clone(),
+                kind: DefinitionKind::ConstVar,
+                implicit_imports: Default::default(),
+                constrainst: Vec::new(),
+                ty: DUMMY_TYPE_ID,
+                file,
+            },
+        );
         self.variable_definitions.insert(id, definition);
-        self.namespaces.insert(id, namespace.to_vec());
-        self.files.insert(id, file);
     }
 
     pub fn add_method_block_definition(
         &mut self,
         id: DefinitionId,
         definition: ast::MethodsBlock<ast::FunctionDefinition>,
-        namespace: &[String],
-        file: PathBuf,
+        file: LocalId<DefinitionId>,
     ) {
         let id = LocalId::new(id);
         assert!(!self.method_blocks_definitions.contains_key(&id));
@@ -391,17 +447,26 @@ impl Database {
                 .insert(definition.name.clone().unwrap(), id.clone())
                 .is_none());
         }
+
+        self.definitions.insert(
+            id,
+            Definition {
+                name: definition.name.clone().unwrap_or_default(),
+                kind: DefinitionKind::MethodBlock,
+                implicit_imports: Default::default(),
+                constrainst: Vec::new(),
+                ty: DUMMY_TYPE_ID,
+                file,
+            },
+        );
         self.method_blocks_definitions.insert(id, definition);
-        self.namespaces.insert(id, namespace.to_vec());
-        self.files.insert(id, file);
     }
 
     pub fn add_class_definition(
         &mut self,
         id: DefinitionId,
         definition: ast::ClassDefinition,
-        namespace: &[String],
-        file: PathBuf,
+        file: LocalId<DefinitionId>,
     ) {
         let id = LocalId::new(id);
         assert!(!self.class_definitions.contains_key(&id));
@@ -409,17 +474,25 @@ impl Database {
             .globals
             .insert(definition.name.clone(), id.clone())
             .is_none());
+        self.definitions.insert(
+            id,
+            Definition {
+                name: definition.name.clone(),
+                implicit_imports: Default::default(),
+                kind: DefinitionKind::Class,
+                constrainst: Vec::new(),
+                ty: DUMMY_TYPE_ID,
+                file,
+            },
+        );
         self.class_definitions.insert(id, definition);
-        self.namespaces.insert(id, namespace.to_vec());
-        self.files.insert(id, file);
     }
 
     pub fn add_instance_definition(
         &mut self,
         id: DefinitionId,
         definition: ast::InstanceDefinition,
-        namespace: &[String],
-        file: PathBuf,
+        file: LocalId<DefinitionId>,
     ) {
         let id = LocalId::new(id);
         assert!(!self.instance_definitions.contains_key(&id));
@@ -429,9 +502,18 @@ impl Database {
                 .insert(definition.name.clone().unwrap(), id.clone())
                 .is_none());
         }
+        self.definitions.insert(
+            id,
+            Definition {
+                name: definition.name.clone().unwrap_or_default(),
+                kind: DefinitionKind::Instance,
+                implicit_imports: Default::default(),
+                constrainst: Vec::new(),
+                ty: DUMMY_TYPE_ID,
+                file,
+            },
+        );
         self.instance_definitions.insert(id, definition);
-        self.namespaces.insert(id, namespace.to_vec());
-        self.files.insert(id, file);
     }
 
     pub fn get_global(&self, name: &str) -> Option<LocalId<DefinitionId>> {
@@ -442,18 +524,18 @@ impl Database {
         match id {
             Id::Global { package, id } if package == CURRENT_PACKAGE_ID => {
                 let id = LocalId::new(id);
-                let tid = self.definition_types.get(&id)?;
+                let tid = self.type_id_from_definition(id).unwrap();
                 self.typeid_to_type.get(&tid)
             }
             Id::Global { package, id } => {
                 let id = LocalId::new(id);
                 let package_info = self.get_package(package);
-                let tid = package_info.definition_types.get(&id)?;
-                package_info.typeid_to_type.get(tid)
+                let tid = package_info.definition.get(&id)?.ty;
+                package_info.typeid_to_type.get(&tid)
             }
             Id::Local(id) => {
-                let tid = self.definition_types.get(&id)?;
-                self.typeid_to_type.get(tid)
+                let tid = self.type_id_from_definition(id).unwrap();
+                self.typeid_to_type.get(&tid)
             }
         }
     }
@@ -549,10 +631,10 @@ impl Database {
         &self,
         definition_id: LocalId<DefinitionId>,
     ) -> Result<LocalId<TypeId>, QueryError> {
-        self.definition_types
+        self.definitions
             .get(&definition_id)
-            .cloned()
-            .ok_or(QueryError::DefinitionNotFound(definition_id.into()))
+            .ok_or_else(|| QueryError::DefinitionNotFound(definition_id.into()))
+            .map(|x| x.ty)
     }
 
     // Resolving aliases
@@ -746,7 +828,9 @@ impl Database {
         for (id, ast_node) in &self.type_definitions {
             let type_id = session.id_provider().next();
             let type_id = LocalId::new(TypeId(type_id));
-            self.definition_types.insert(id.clone(), type_id);
+            self.definitions
+                .entry(id.clone())
+                .and_modify(|def| def.ty = type_id);
             self.typeid_to_type.insert(type_id, Type::Unit);
         }
         // Same for class definitions if we need to look them up
@@ -762,6 +846,10 @@ impl Database {
         }
     }
 
+    pub fn get_namespace(&self, id: LocalId<DefinitionId>) -> &[String] {
+        let file_id = self.definitions.get(&id).unwrap().file;
+        self.file_info.get(&file_id).unwrap().namespace.as_slice()
+    }
     /// Go through all of the type definitions as ast nodes and
     /// lower them into the types used for the typechecking.
     ///
@@ -778,7 +866,7 @@ impl Database {
             },
         ) in type_definitions
         {
-            let namespace = self.namespaces.get(&id).unwrap().clone();
+            let namespace = self.get_namespace(id).to_vec();
             let mut prefex_scope = PrefexScope::new();
             for var in type_variables.iter() {
                 prefex_scope.add_type_var(&var.name);
@@ -869,7 +957,7 @@ impl Database {
                     typ: Box::new(t),
                 };
             }
-            let tid = self.definition_types.get(&id).unwrap();
+            let tid = self.type_id_from_definition(id).unwrap();
             self.typeid_to_type.insert(tid.clone(), t);
         }
     }
@@ -894,9 +982,9 @@ impl Database {
                 } => {
                     let package_info = self.get_package(PackageId(*package));
                     let LocalId(typeid) = package_info
-                        .definition_types
+                        .definition
                         .get(&LocalId::new(DefinitionId(*definition)))
-                        .cloned()
+                        .map(|def| def.ty)
                         .unwrap();
                     Type::Alias(Id::Global {
                         package: PackageId(*package),
@@ -905,7 +993,7 @@ impl Database {
                 }
                 ast::Name::Local(name) => {
                     let def = self.get_global(name).unwrap();
-                    let typeid = self.definition_types.get(&def).unwrap();
+                    let typeid = self.type_id_from_definition(def).unwrap();
                     Type::Alias(Id::Local(typeid.clone()))
                 }
                 ast::Name::Unresolved { path, identifier }
@@ -925,18 +1013,18 @@ impl Database {
                         Id::Global { package, id } if package == CURRENT_PACKAGE_ID => {
                             let id = LocalId::new(id);
                             assert!(self.type_definitions.contains_key(&id));
-                            let tid = self.definition_types.get(&id).unwrap();
+                            let tid = self.type_id_from_definition(id).unwrap();
                             Type::Alias(tid.as_global(CURRENT_PACKAGE_ID))
                         }
                         Id::Global { package, id } => {
                             let package_info = self.get_package(package);
                             let id = LocalId::new(id);
-                            let tid = package_info.definition_types.get(&id).unwrap();
+                            let tid = package_info.definition.get(&id).map(|def| def.ty).unwrap();
                             Type::Alias(tid.as_global(package))
                         }
                         Id::Local(id) => {
                             assert!(self.type_definitions.contains_key(&id));
-                            let tid = self.definition_types.get(&id).unwrap();
+                            let tid = self.type_id_from_definition(id).unwrap();
                             Type::Alias(tid.as_global(CURRENT_PACKAGE_ID))
                         }
                     }
