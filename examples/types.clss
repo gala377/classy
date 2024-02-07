@@ -5,6 +5,10 @@ type Foo {
     baz: std::Int
 }
 
-type Bar {
+type Bar(a) {
     foo: Foo
+    bar: (std::Int, std::Int)
+    baz: a
 }
+
+type Baz = (std::Int, std::Int)
