@@ -112,6 +112,7 @@ pub struct InstanceInfo {
     pub receiver: Id<TypeId>,
     /// Static methods implementations defined within the instance
     pub static_methods: Vec<(String, LocalId<DefinitionId>)>,
+    /// Method blocks implemented within the instance
     pub method_blocks: Vec<InstanceMethodBlock>,
     /// Should be autoimported if the given definition is autoimported
     /// if none it should not be autoimported
