@@ -135,13 +135,13 @@ pub fn prepare_type_ctx(mut tctx: TypCtx, ast: &ast::SourceFile) -> TypCtx {
     tctx
 }
 
-pub fn compile_with_v2(args: Args) {
+fn compile_with_v2(args: Args) {
     let core = prepare_std_package();
     let file = args.file.expect("file path has to be provided");
     let source = std::fs::read_to_string(Path::new(&file)).unwrap();
     let mut compiler =
         classyclib::v2::compile::Compiler::new("test", vec![(file.into(), source)], vec![core]);
-    compiler.compile_package();
+    compiler.compile_package().unwrap();
 }
 
 fn prepare_std_package() -> PackageInfo {

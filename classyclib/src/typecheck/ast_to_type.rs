@@ -40,7 +40,7 @@ pub fn resolve_top_level_type(
     name: &String,
     definition: &ast::DefinedType,
     def_id: &usize,
-    type_variables: &Vec<ast::TypeVariable>,
+    type_variables: &Vec<String>,
     updates: &mut HashMap<usize, Type>,
 ) {
     let type_id = *ctx
@@ -48,10 +48,8 @@ pub fn resolve_top_level_type(
         .get(name)
         .expect(&(format!("the types should have been prepopulated: {name}")));
     let mut scope = PrefexScope::new();
-    for generic in type_variables {
-        scope.add_type_var(generic.name.clone());
-    }
-    let prefex = type_variables.iter().map(|x| x.name.clone()).collect();
+    scope.add_type_vars(type_variables);
+    let prefex = type_variables.clone();
     let mut resolver = TypeResolver::new(ctx);
     let resolved_type = match definition {
         ast::DefinedType::Alias(ast::Alias { for_type: inner }) => {

@@ -491,8 +491,9 @@ pub fn fold_type_definition<F: Folder>(folder: &mut F, def: TypeDefinition) -> T
     TypeDefinition {
         name: folder.fold_type_name(def.name),
         definition: folder.fold_defined_type(def.definition),
-        type_variables: folder.fold_type_variables(def.type_variables),
+        type_variables: def.type_variables,
         span: def.span,
+        constraints: def.constraints,
     }
 }
 

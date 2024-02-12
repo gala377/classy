@@ -56,7 +56,7 @@ impl Compiler {
         self.populate_db_definitions();
         self.database.create_type_and_class_stumps(&self.session);
         self.database.lower_type_definitions(&self.session);
-        self.database.dump_types();
+        self.database.dump_all();
         Ok(())
     }
 

@@ -242,14 +242,11 @@ impl<'source> Parser<'source> {
     fn parse_type_definition(&mut self) -> ParseRes<ast::TypeDefinition> {
         let beg = self.curr_pos();
         self.match_token(TokenType::Type)?;
+        let constraints = self.parse_type_bounds();
         let name =
             self.parse_identifier()
                 .error(self, beg, "Expected a name after a type keyword")?;
-        let type_variables = self.parse_optional_type_variables().error(
-            self,
-            beg,
-            "Expected type variables list",
-        )?;
+        let type_variables = self.parse_optional_type_variables()?;
         if self.match_token(TokenType::LBrace).is_ok() {
             let possibly_adt = self.in_scope(|p| p.parse_variants_definition());
             let definition = if let Ok(adt) = possibly_adt {
@@ -266,6 +263,7 @@ impl<'source> Parser<'source> {
                 type_variables,
                 definition,
                 span: beg..self.curr_pos(),
+                constraints,
             })
         } else if self.match_token(TokenType::EqualSign).is_ok() {
             let for_type =
@@ -277,6 +275,7 @@ impl<'source> Parser<'source> {
                 type_variables,
                 definition: ast::DefinedType::Alias(ast::Alias { for_type }),
                 span: beg..self.curr_pos(),
+                constraints,
             })
         } else {
             Err(self.error(
@@ -368,15 +367,11 @@ impl<'source> Parser<'source> {
             Ok(ast::DefinedType::ADT(ast::ADT { discriminants }))
         }
     }
-    fn parse_optional_type_variables(&mut self) -> ParseRes<Vec<ast::TypeVariable>> {
+    fn parse_optional_type_variables(&mut self) -> ParseRes<Vec<String>> {
         if self.match_token(TokenType::LParen).is_err() {
             return Ok(Vec::new());
         }
-        let type_vars = self
-            .parse_delimited(Self::parse_identifier, TokenType::Comma)
-            .into_iter()
-            .map(|name| ast::TypeVariable { name })
-            .collect();
+        let type_vars = self.parse_delimited(Self::parse_identifier, TokenType::Comma);
         let _ = self.expect_token(TokenType::RParen);
         Ok(type_vars)
     }

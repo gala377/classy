@@ -385,7 +385,7 @@ impl<'ctx, 'solver_db> ConstraintSolver<'ctx, 'solver_db> {
                     self.blackboard_database,
                     &mut Vec::new(),
                 );
-                let mut goal = goal::Goal::Exists(
+                let goal = goal::Goal::Exists(
                     existentials,
                     Box::new(goal::Goal::Domain(goal::DomainGoal::FindMethod {
                         name: method.clone(),

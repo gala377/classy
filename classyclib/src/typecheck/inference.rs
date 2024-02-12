@@ -362,7 +362,7 @@ impl<'sess> Inference<'sess> {
             let methods_block = tctx
                 .get_methods_block(def_id)
                 .expect("could not find methods block");
-            let specialisation_tid = methods_block.specialisation;
+            let _specialisation_tid = methods_block.specialisation;
             // TODO: Union specialisation_tid with the receiver_tid and get
             // substitutions so that TODO: We can substitute within
             // methods

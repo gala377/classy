@@ -7,16 +7,40 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'classy_vm'",
+            "name": "Debug v2 typechecking on types example",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=classyc",
+                    "--package=classyc",
+                ],
+                "filter": {
+                    "name": "classyc",
+                    "kind": "bin"
+                },
+            },
+            "args": [
+                "--use-v2",
+                "--file=./examples/types.clss"
+            ],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "RUST_BACKTRACE": "1"
+            }
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'classyvm'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
                     "--lib",
-                    "--package=classy_vm"
+                    "--package=classyvm"
                 ],
                 "filter": {
-                    "name": "classy_vm",
+                    "name": "classyvm",
                     "kind": "lib"
                 }
             },
@@ -45,15 +69,15 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'classy_c'",
+            "name": "Debug executable 'classyc'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=classy_c",
-                    "--package=classy_c"
+                    "--bin=classyc",
+                    "--package=classyc"
                 ],
                 "filter": {
-                    "name": "classy_c",
+                    "name": "classyc",
                     "kind": "bin"
                 }
             },
@@ -63,16 +87,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'classy_c'",
+            "name": "Debug unit tests in executable 'classyc'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=classy_c",
-                    "--package=classy_c"
+                    "--bin=classc",
+                    "--package=classyc"
                 ],
                 "filter": {
-                    "name": "classy_c",
+                    "name": "classyc",
                     "kind": "bin"
                 }
             },

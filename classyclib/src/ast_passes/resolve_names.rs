@@ -63,7 +63,7 @@ impl<'db> Folder for NameResolver<'db> {
     fn fold_type_definition(&mut self, def: ast::TypeDefinition) -> ast::TypeDefinition {
         self.type_scope.new_scope();
         for var in def.type_variables.iter() {
-            self.type_scope.add(var.name.clone(), ());
+            self.type_scope.add(var.clone(), ());
         }
         let res = ast::fold::fold_type_definition(self, def);
         self.type_scope.pop_scope();

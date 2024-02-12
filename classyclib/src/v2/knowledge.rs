@@ -4,7 +4,7 @@ use std::cell::RefCell;
 /// This will replace the TypCtx.
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use thiserror::Error;
@@ -18,6 +18,7 @@ use crate::typecheck::types::DeBruijn;
 use crate::v2::instance::UnificationError;
 use crate::v2::ty::Type;
 
+#[derive(Debug)]
 pub struct GenericConstraint {
     /// Class used for the constraint
     pub class: Id<DefinitionId>,
@@ -69,6 +70,7 @@ pub struct PackageId(pub UniqueId);
 pub const CURRENT_PACKAGE_ID: PackageId = PackageId(0);
 
 /// Information about a method blocks defined within a class
+#[derive(Debug)]
 pub struct ClassMethodBlock {
     /// Receiver type for the methods block
     pub receiver: Id<TypeId>,
@@ -77,6 +79,7 @@ pub struct ClassMethodBlock {
 }
 
 /// Information about a class definition
+#[derive(Debug)]
 pub struct ClassInfo {
     pub name: String,
     // Collection of all the static methods defined within the class
@@ -127,6 +130,7 @@ pub struct FileInfo {
     pub namespace: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, Hash)]
 pub enum DefinitionKind {
     ConstVar,
     Method,
@@ -141,6 +145,7 @@ pub enum DefinitionKind {
 ///
 /// Depending on the kind of the definition it will have different fields
 /// filled.
+#[derive(Debug)]
 pub struct Definition {
     /// Name of the item, if the name has not been provided then its empty
     pub name: String,
@@ -277,8 +282,8 @@ pub enum QueryError {
 }
 
 pub struct MethodHandle {
-    name: String,
-    definition: DefinitionId,
+    pub name: String,
+    pub definition: DefinitionId,
 }
 
 impl Database {
@@ -817,7 +822,7 @@ impl Database {
     pub fn create_type_and_class_stumps(&mut self, session: &Session) {
         // create ids for all type definitions
         // for now insert a bogus type there
-        for (id, ast_node) in &self.type_definitions {
+        for (id, _ast_node) in &self.type_definitions {
             let type_id = session.id_provider().next();
             let type_id = LocalId::new(TypeId(type_id));
             self.definitions
@@ -851,18 +856,17 @@ impl Database {
         for (
             id,
             ast::TypeDefinition {
-                name,
+                name: _,
                 definition,
                 type_variables,
-                span,
+                span: _,
+                constraints: _,
             },
         ) in type_definitions
         {
             let namespace = self.get_namespace(id).to_vec();
             let mut prefex_scope = PrefexScope::new();
-            for var in type_variables.iter() {
-                prefex_scope.add_type_var(&var.name);
-            }
+            prefex_scope.add_type_vars(&type_variables);
             let mut t = match definition {
                 ast::DefinedType::Record(ast::Record { fields }) => {
                     let fields = fields
@@ -945,7 +949,7 @@ impl Database {
             };
             if !prefex_scope.is_empty() {
                 t = Type::Scheme {
-                    prefex: type_variables.iter().map(|v| v.name.clone()).collect(),
+                    prefex: type_variables.clone(),
                     typ: Box::new(t),
                 };
             }
@@ -959,10 +963,10 @@ impl Database {
         for (
             id,
             ast::ClassDefinition {
-                name,
+                name: _,
                 bounds,
                 args,
-                body,
+                body: _,
                 ..
             },
         ) in class_definitions
@@ -970,7 +974,7 @@ impl Database {
             let namespace = self.get_namespace(id).to_vec();
             let mut prefex_scope = PrefexScope::new();
             prefex_scope.add_type_vars(&args);
-            let constrains = bounds
+            let _constrains = bounds
                 .iter()
                 .map(|bound| {
                     self.ast_type_bound_to_generic_constraint_shallow(
@@ -1103,14 +1107,14 @@ impl Database {
             }
             ast::Typ::Poly {
                 free_variables,
-                bounds,
+                bounds: _,
                 typ,
             } if free_variables.is_empty() => {
                 self.ast_type_to_type_shallow(session, prefex_scope, namespace, typ)
             }
             ast::Typ::Poly {
                 free_variables,
-                bounds,
+                bounds: _bounds,
                 typ,
             } => {
                 panic!(
@@ -1251,9 +1255,30 @@ pub struct PopulateDbTypeDefinitions<'a, 's> {
 }
 
 impl Database {
+    pub fn dump_all(&self) {
+        self.dump_types();
+        self.dump_classes();
+        self.dump_definitions();
+    }
+
     pub fn dump_types(&self) {
+        println!("Types:\n");
         for (id, t) in &self.typeid_to_type {
             println!("{:?} => {}", id.0, t.pretty());
+        }
+    }
+
+    pub fn dump_classes(&self) {
+        println!("\nClasses:\n");
+        for (id, t) in &self.classes {
+            println!("{:?} => {:?}", id.0, t);
+        }
+    }
+
+    pub fn dump_definitions(&self) {
+        println!("\nDefinitions:\n");
+        for (id, t) in &self.definitions {
+            println!("{:?} => {:?}", id.0, t);
         }
     }
 }

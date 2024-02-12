@@ -150,7 +150,8 @@ pub struct ConstDefinition {
 pub struct TypeDefinition {
     pub name: String,
     pub definition: DefinedType,
-    pub type_variables: Vec<TypeVariable>,
+    pub type_variables: Vec<String>,
+    pub constraints: Vec<TypeBound>,
     pub span: Range<usize>,
 }
 

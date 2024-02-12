@@ -46,6 +46,7 @@ impl Folder for PromoteAnonTypes {
                     type_variables: Vec::new(),
                     definition: ast::DefinedType::Record(record.clone()),
                     span: 0..0,
+                    constraints: Vec::new(),
                 }),
             };
             program.items.push(typ);

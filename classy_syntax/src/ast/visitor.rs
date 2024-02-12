@@ -296,7 +296,8 @@ pub fn walk_top_level_item_kind<'ast, V: Visitor<'ast>>(
         ast::TopLevelItemKind::NameImport(def) => v.visit_name_import(def),
         ast::TopLevelItemKind::InstanceImport(def) => v.visit_instance_import(def),
         ast::TopLevelItemKind::MethodsImport(def) => v.visit_methods_import(def),
-        t => todo!("{t:?}"),
+        ast::TopLevelItemKind::ClassDefinition(def) => v.visit_class_definition(def),
+        ast::TopLevelItemKind::InstanceDefinition(def) => v.visit_instance_definition(def),
     }
 }
 
