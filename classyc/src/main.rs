@@ -170,7 +170,7 @@ fn prepare_std_package() -> PackageInfo {
                     Definition {
                         name: name.to_string(),
                         kind: DefinitionKind::Type,
-                        constrainst: vec![],
+                        constraints: vec![],
                         ty: LocalId(TypeId(i)),
                         file: LocalId(DefinitionId(0)),
                         implicit_imports: vec![],

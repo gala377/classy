@@ -84,7 +84,7 @@ pub struct ClassInfo {
     pub name: String,
     // Collection of all the static methods defined within the class
     // and their types
-    pub static_methods: Vec<(String, LocalId<TypeId>)>,
+    pub static_methods: Vec<MethodHandle>,
     /// Method blocks defined within the class
     pub method_blocks: Vec<ClassMethodBlock>,
 }
@@ -152,7 +152,7 @@ pub struct Definition {
     /// Kind of the definition
     pub kind: DefinitionKind,
     /// Generic constraints associated with the definition
-    pub constrainst: Vec<GenericConstraint>,
+    pub constraints: Vec<GenericConstraint>,
     /// Type associated with the definition
     pub ty: LocalId<TypeId>,
     /// File in which the defnition is in
@@ -281,9 +281,10 @@ pub enum QueryError {
     UnificationError(#[from] Box<UnificationError>),
 }
 
+#[derive(Debug, Clone)]
 pub struct MethodHandle {
     pub name: String,
-    pub definition: DefinitionId,
+    pub definition: LocalId<DefinitionId>,
 }
 
 impl Database {
@@ -373,7 +374,7 @@ impl Database {
             Definition {
                 name: definition.name.clone(),
                 kind: DefinitionKind::Type,
-                constrainst: Vec::new(),
+                constraints: Vec::new(),
                 implicit_imports: Default::default(),
                 ty: DUMMY_TYPE_ID,
                 file,
@@ -401,7 +402,7 @@ impl Database {
                 name: definition.name.clone(),
                 kind: DefinitionKind::Function,
                 implicit_imports: Default::default(),
-                constrainst: Vec::new(),
+                constraints: Vec::new(),
                 ty: DUMMY_TYPE_ID,
                 file,
             },
@@ -428,7 +429,7 @@ impl Database {
                 name: definition.name.clone(),
                 kind: DefinitionKind::ConstVar,
                 implicit_imports: Default::default(),
-                constrainst: Vec::new(),
+                constraints: Vec::new(),
                 ty: DUMMY_TYPE_ID,
                 file,
             },
@@ -457,7 +458,7 @@ impl Database {
                 name: definition.name.clone().unwrap_or_default(),
                 kind: DefinitionKind::MethodBlock,
                 implicit_imports: Default::default(),
-                constrainst: Vec::new(),
+                constraints: Vec::new(),
                 ty: DUMMY_TYPE_ID,
                 file,
             },
@@ -483,7 +484,7 @@ impl Database {
                 name: definition.name.clone(),
                 implicit_imports: Default::default(),
                 kind: DefinitionKind::Class,
-                constrainst: Vec::new(),
+                constraints: Vec::new(),
                 ty: DUMMY_TYPE_ID,
                 file,
             },
@@ -511,7 +512,7 @@ impl Database {
                 name: definition.name.clone().unwrap_or_default(),
                 kind: DefinitionKind::Instance,
                 implicit_imports: Default::default(),
-                constrainst: Vec::new(),
+                constraints: Vec::new(),
                 ty: DUMMY_TYPE_ID,
                 file,
             },
@@ -860,13 +861,24 @@ impl Database {
                 definition,
                 type_variables,
                 span: _,
-                constraints: _,
+                constraints,
             },
         ) in type_definitions
         {
             let namespace = self.get_namespace(id).to_vec();
             let mut prefex_scope = PrefexScope::new();
             prefex_scope.add_type_vars(&type_variables);
+            let constraints = constraints
+                .iter()
+                .map(|c| {
+                    self.ast_type_bound_to_generic_constraint_shallow(
+                        session,
+                        &mut prefex_scope,
+                        c,
+                        &namespace,
+                    )
+                })
+                .collect();
             let mut t = match definition {
                 ast::DefinedType::Record(ast::Record { fields }) => {
                     let fields = fields
@@ -955,6 +967,7 @@ impl Database {
             }
             let tid = self.type_id_from_definition(id).unwrap();
             self.typeid_to_type.insert(tid.clone(), t);
+            self.definitions.get_mut(&id).unwrap().constraints = constraints;
         }
     }
 
@@ -966,15 +979,16 @@ impl Database {
                 name: _,
                 bounds,
                 args,
-                body: _,
+                body,
                 ..
             },
         ) in class_definitions
         {
             let namespace = self.get_namespace(id).to_vec();
+            let file = self.definitions.get(&id).unwrap().file;
             let mut prefex_scope = PrefexScope::new();
             prefex_scope.add_type_vars(&args);
-            let _constrains = bounds
+            let constrains = bounds
                 .iter()
                 .map(|bound| {
                     self.ast_type_bound_to_generic_constraint_shallow(
@@ -985,7 +999,71 @@ impl Database {
                     )
                 })
                 .collect::<Vec<_>>();
-        }
+            let mut static_methods = Vec::new();
+            for bitem in &body {
+                match bitem {
+                    ast::ClassDefinitionItem::MethodBlock(mblock) => {
+                        todo!("Resolve method blocks in classes")
+                    }
+                    ast::ClassDefinitionItem::Function(ast::FuncDecl { name, typ }) => {
+                        let mut f_bounds = Vec::new();
+                        let mut f_free_vars = Vec::new();
+                        let mut f_typ = typ.clone();
+                        if let ast::Typ::Poly {
+                            bounds,
+                            free_variables,
+                            typ,
+                        } = typ
+                        {
+                            f_bounds = bounds.clone();
+                            f_free_vars = free_variables.clone();
+                            f_typ = *typ.clone();
+                        }
+                        if !f_free_vars.is_empty() {
+                            prefex_scope.new_scope();
+                            prefex_scope.add_type_vars(&f_free_vars);
+                        }
+                        let f_typ = self.ast_type_to_type_shallow(
+                            session,
+                            &mut prefex_scope,
+                            &namespace,
+                            &f_typ,
+                        );
+                        let f_constraints = f_bounds
+                            .iter()
+                            .map(|bound| {
+                                self.ast_type_bound_to_generic_constraint_shallow(
+                                    session,
+                                    &mut prefex_scope,
+                                    bound,
+                                    &namespace,
+                                )
+                            })
+                            .collect::<Vec<_>>();
+                        if !f_free_vars.is_empty() {
+                            prefex_scope.pop_scope();
+                        }
+
+                        let definition = Definition {
+                            name: name.clone(),
+                            // todo: I guess? We don't have an item for class declaration
+                            kind: DefinitionKind::Method,
+                            constraints: f_constraints,
+                            ty: self.create_type(session, f_typ),
+                            file,
+                            implicit_imports: Vec::new(),
+                        };
+                        let func_id = self.add_definition(session, definition);
+                        static_methods.push(MethodHandle {
+                            name: name.clone(),
+                            definition: func_id,
+                        });
+                    }
+                } // end match bitem
+            } // end for bitem in body
+            self.classes.get_mut(&id).unwrap().static_methods = static_methods;
+            self.definitions.get_mut(&id).unwrap().constraints = constrains;
+        } // end for def in class_definitions
     }
 
     /// Translate ast type to ty::Type.
@@ -1209,6 +1287,16 @@ impl Database {
             .insert(&self, ty, tid)
             .unwrap();
     }
+
+    pub fn add_definition(
+        &mut self,
+        session: &Session,
+        definition: Definition,
+    ) -> LocalId<DefinitionId> {
+        let id = LocalId::new(DefinitionId(session.id_provider().next()));
+        self.definitions.insert(id, definition);
+        id
+    }
 }
 
 pub struct TypeHashMap<V> {
@@ -1271,14 +1359,14 @@ impl Database {
     pub fn dump_classes(&self) {
         println!("\nClasses:\n");
         for (id, t) in &self.classes {
-            println!("{:?} => {:?}", id.0, t);
+            println!("{:?} => {:#?}", id.0, t);
         }
     }
 
     pub fn dump_definitions(&self) {
         println!("\nDefinitions:\n");
         for (id, t) in &self.definitions {
-            println!("{:?} => {:?}", id.0, t);
+            println!("{:?} => {:#?}", id.0, t);
         }
     }
 }
