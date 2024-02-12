@@ -368,10 +368,9 @@ pub trait Folder: Sized {
             bounds,
             args,
             body,
-            prefex,
         }: ClassDefinition,
     ) -> ClassDefinition {
-        fold_class_definition(self, name, args, bounds, body, prefex)
+        fold_class_definition(self, name, args, bounds, body)
     }
 
     fn fold_class_definition_item(&mut self, item: ClassDefinitionItem) -> ClassDefinitionItem {
@@ -1090,7 +1089,6 @@ pub fn fold_class_definition(
     args: Vec<String>,
     bounds: Vec<TypeBound>,
     body: Vec<ClassDefinitionItem>,
-    prefex: Vec<String>,
 ) -> ClassDefinition {
     ClassDefinition {
         name: folder.fold_identifier(name),
@@ -1103,7 +1101,6 @@ pub fn fold_class_definition(
             .into_iter()
             .map(|item| folder.fold_class_definition_item(item))
             .collect(),
-        prefex,
     }
 }
 

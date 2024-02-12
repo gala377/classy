@@ -86,7 +86,6 @@ pub struct ClassDefinition {
     /// Always generic types
     pub args: Vec<String>,
     pub body: Vec<ClassDefinitionItem>,
-    pub prefex: Vec<String>,
 }
 
 #[derive(Clone, Debug)]
