@@ -246,9 +246,10 @@ pub trait Visitor<'ast>: Sized {
             bounds,
             args,
             body,
+            prefex,
         }: &'ast ast::ClassDefinition,
     ) {
-        walk_class_definition(self, name, args, bounds, body)
+        walk_class_definition(self, name, args, bounds, body, prefex)
     }
 
     fn visit_class_definition_item(&mut self, item: &'ast ast::ClassDefinitionItem) {
@@ -757,6 +758,7 @@ pub fn walk_class_definition<'ast, V: Visitor<'ast>>(
     _args: &'ast [String],
     bounds: &'ast [ast::TypeBound],
     body: &'ast [ast::ClassDefinitionItem],
+    _prefex: &'ast [String],
 ) {
     visitor.visit_identifier(name);
     for ast::TypeBound { head, args } in bounds {

@@ -3,6 +3,7 @@
 type Foo {
     bar: std::String
     baz: std::Int
+    qux: Bar(std::String)
 }
 
 type Bar(a) {

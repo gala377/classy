@@ -147,6 +147,10 @@ pub enum DefinitionKind {
     Function,
 }
 
+/// Description of the defnition.
+///
+/// Depending on the kind of the definition it will have different fields
+/// filled.
 pub struct Definition {
     /// Name of the item, if the name has not been provided then its empty
     pub name: String,
@@ -963,6 +967,36 @@ impl Database {
         }
     }
 
+    pub fn lower_class_definitions(&mut self, session: &Session) {
+        let class_definitions = self.class_definitions.clone();
+        for (
+            id,
+            ast::ClassDefinition {
+                name,
+                bounds,
+                args,
+                body,
+                ..
+            },
+        ) in class_definitions
+        {
+            let namespace = self.get_namespace(id).to_vec();
+            let mut prefex_scope = PrefexScope::new();
+            prefex_scope.add_type_vars(&args);
+            let constrains = bounds
+                .iter()
+                .map(|bound| {
+                    self.ast_type_bound_to_generic_constraint_shallow(
+                        session,
+                        &mut prefex_scope,
+                        bound,
+                        &namespace,
+                    )
+                })
+                .collect::<Vec<_>>();
+        }
+    }
+
     /// Translate ast type to ty::Type.
     ///
     /// Any type references are resolved to their type ids.
@@ -1101,67 +1135,53 @@ impl Database {
         &mut self,
         session: &Session,
         prefex_scope: &mut PrefexScope,
-        bound: &ast::Typ,
+        ast::TypeBound { head: name, args }: &ast::TypeBound,
         current_namespace: &[String],
     ) -> GenericConstraint {
-        match bound {
-            ast::Typ::Application {
-                callee: box ast::Typ::Name(name),
-                args,
-            } => {
-                let class: Id<DefinitionId> = match name {
-                    ast::Name::Unresolved { path, identifier } => {
-                        let id = self
-                            .get_definition_id_by_unresolved_name(
-                                current_namespace,
-                                path,
-                                identifier,
-                            )
-                            .unwrap();
-                        match id {
-                            Id::Global { package, id } if package == CURRENT_PACKAGE_ID => {
-                                let id = LocalId::new(id);
-                                assert!(self.classes.contains_key(&id));
-                                id.as_global(CURRENT_PACKAGE_ID)
-                            }
-                            Id::Global { package, id } => {
-                                let package_info = self.get_package(package);
-                                let id = LocalId::new(id);
-                                assert!(package_info.classes.contains_key(&id));
-                                id.as_global(package)
-                            }
-                            Id::Local(id) => {
-                                assert!(self.classes.contains_key(&id));
-                                id.as_global(CURRENT_PACKAGE_ID)
-                            }
-                        }
+        let class: Id<DefinitionId> = match name {
+            ast::Name::Unresolved { path, identifier } => {
+                let id = self
+                    .get_definition_id_by_unresolved_name(current_namespace, path, identifier)
+                    .unwrap();
+                match id {
+                    Id::Global { package, id } if package == CURRENT_PACKAGE_ID => {
+                        let id = LocalId::new(id);
+                        assert!(self.classes.contains_key(&id));
+                        id.as_global(CURRENT_PACKAGE_ID)
                     }
-                    ast::Name::Global {
-                        package,
-                        definition,
-                    } => {
-                        let package = PackageId(*package);
-                        let id = LocalId::new(DefinitionId(*definition));
+                    Id::Global { package, id } => {
                         let package_info = self.get_package(package);
+                        let id = LocalId::new(id);
                         assert!(package_info.classes.contains_key(&id));
                         id.as_global(package)
                     }
-                    ast::Name::Local(id) => {
-                        let id = self.globals.get(id).unwrap();
-                        assert!(self.classes.contains_key(id));
+                    Id::Local(id) => {
+                        assert!(self.classes.contains_key(&id));
                         id.as_global(CURRENT_PACKAGE_ID)
                     }
-                };
-                let args = args
-                    .iter()
-                    .map(|t| {
-                        self.ast_type_to_type_shallow(session, prefex_scope, current_namespace, t)
-                    })
-                    .collect();
-                GenericConstraint { class, args }
+                }
             }
-            _ => panic!("Type bound needs to be an application of a class"),
-        }
+            ast::Name::Global {
+                package,
+                definition,
+            } => {
+                let package = PackageId(*package);
+                let id = LocalId::new(DefinitionId(*definition));
+                let package_info = self.get_package(package);
+                assert!(package_info.classes.contains_key(&id));
+                id.as_global(package)
+            }
+            ast::Name::Local(id) => {
+                let id = self.globals.get(id).unwrap();
+                assert!(self.classes.contains_key(id));
+                id.as_global(CURRENT_PACKAGE_ID)
+            }
+        };
+        let args = args
+            .iter()
+            .map(|t| self.ast_type_to_type_shallow(session, prefex_scope, current_namespace, t))
+            .collect();
+        GenericConstraint { class, args }
     }
     /// Lookups type into the reverse hash to get its type id.
     /// If the type is not present in the hash it is added with a fresh type id.

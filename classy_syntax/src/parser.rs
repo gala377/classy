@@ -299,6 +299,7 @@ impl<'source> Parser<'source> {
             name,
             args,
             body,
+            prefex: Vec::new(),
         })
     }
 

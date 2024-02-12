@@ -86,6 +86,7 @@ pub struct ClassDefinition {
     /// Always generic types
     pub args: Vec<String>,
     pub body: Vec<ClassDefinitionItem>,
+    pub prefex: Vec<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -947,6 +948,7 @@ impl ToSExpr for ClassDefinition {
             bounds,
             args,
             body,
+            ..
         } = self;
         let args = args.into_iter().map(|s| sexpr!(#s)).collect::<Vec<_>>();
         sexpr!((class #name @args $bounds $body))
