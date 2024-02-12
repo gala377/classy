@@ -27,14 +27,14 @@ pub struct GenericConstraint {
 
 const DUMMY_TYPE_ID: LocalId<TypeId> = LocalId(TypeId(0));
 
-/// Id of some item, can either be a local reference meaning current package
-/// or a global one meaning it references a definition from another package.
+/// Might reference a definition from another package or the current one.
+///
+/// If the package is equal to CURRENT_PACKAGE_ID then the id is local to the
+/// currently compiled package.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Id<T> {
-    /// Might reference a definition from another package or the current one
-    Global { package: PackageId, id: T },
-    /// References a definition within the current package
-    Local(LocalId<T>),
+pub struct Id<T> {
+    package: PackageId,
+    id: T,
 }
 
 /// Id referencing current package
@@ -46,21 +46,11 @@ impl<T> LocalId<T> {
         Self(id)
     }
 
-    pub fn into_id(self) -> Id<T> {
-        Id::Local(self)
-    }
-
     pub fn as_global(self, package: PackageId) -> Id<T> {
-        Id::Global {
+        Id {
             package,
             id: self.0,
         }
-    }
-}
-
-impl<T> Into<Id<T>> for LocalId<T> {
-    fn into(self) -> Id<T> {
-        Id::Local(self)
     }
 }
 
@@ -326,6 +316,9 @@ impl Database {
     }
 
     pub fn get_package(&self, id: PackageId) -> &PackageInfo {
+        if id == CURRENT_PACKAGE_ID {
+            panic!("Cannot get current package info, use db instead")
+        }
         // this is important as the current package id is 0
         // so we need to subtract 1 to get the correct index
         // into the dependencies vector
@@ -527,20 +520,16 @@ impl Database {
 
     pub fn get_type(&self, id: Id<DefinitionId>) -> Option<&Type> {
         match id {
-            Id::Global { package, id } if package == CURRENT_PACKAGE_ID => {
+            Id { package, id } if package == CURRENT_PACKAGE_ID => {
                 let id = LocalId::new(id);
                 let tid = self.type_id_from_definition(id).unwrap();
                 self.typeid_to_type.get(&tid)
             }
-            Id::Global { package, id } => {
+            Id { package, id } => {
                 let id = LocalId::new(id);
                 let package_info = self.get_package(package);
                 let tid = package_info.definition.get(&id)?.ty;
                 package_info.typeid_to_type.get(&tid)
-            }
-            Id::Local(id) => {
-                let tid = self.type_id_from_definition(id).unwrap();
-                self.typeid_to_type.get(&tid)
             }
         }
     }
@@ -559,7 +548,7 @@ impl Database {
                 expanded_name.push(name.to_string());
                 let expanded_name = expanded_name.join("::");
                 if let Some(definition_id) = package_info.globals.get(&expanded_name) {
-                    return self.get_type(definition_id.clone().into());
+                    return self.get_type(definition_id.clone().as_global(package_id));
                 }
                 return None;
             }
@@ -571,7 +560,7 @@ impl Database {
         let Some(definition_id) = self.globals.get(&expand_name) else {
             return None;
         };
-        self.get_type(definition_id.clone().into())
+        self.get_type(definition_id.clone().as_global(CURRENT_PACKAGE_ID))
     }
 
     pub fn get_definition_id_by_unresolved_name(
@@ -611,24 +600,20 @@ impl Database {
 
     pub fn resolve_tid_ref(&self, type_id: Id<TypeId>) -> Result<&Type, QueryError> {
         match type_id {
-            Id::Global { package, id } if package == CURRENT_PACKAGE_ID => {
+            Id { package, id } if package == CURRENT_PACKAGE_ID => {
                 let id = LocalId::new(id);
                 self.typeid_to_type
                     .get(&id)
-                    .ok_or(QueryError::TypeNotFound(id.into()))
+                    .ok_or(QueryError::TypeNotFound(id.as_global(package)))
             }
-            Id::Global { package, id } => {
+            Id { package, id } => {
                 let id = LocalId::new(id);
                 let package_info = self.get_package(package);
                 package_info
                     .typeid_to_type
                     .get(&id)
-                    .ok_or(QueryError::TypeNotFound(id.into()))
+                    .ok_or(QueryError::TypeNotFound(id.as_global(package)))
             }
-            Id::Local(id) => self
-                .typeid_to_type
-                .get(&id)
-                .ok_or(QueryError::TypeNotFound(id.into())),
         }
     }
 
@@ -638,7 +623,9 @@ impl Database {
     ) -> Result<LocalId<TypeId>, QueryError> {
         self.definitions
             .get(&definition_id)
-            .ok_or_else(|| QueryError::DefinitionNotFound(definition_id.into()))
+            .ok_or_else(|| {
+                QueryError::DefinitionNotFound(definition_id.as_global(CURRENT_PACKAGE_ID))
+            })
             .map(|x| x.ty)
     }
 
@@ -920,7 +907,7 @@ impl Database {
                                                 .collect(),
                                         ),
                                         ast::DiscriminantKind::Record(fields) => Type::Struct {
-                                            def: Id::Global {
+                                            def: Id {
                                                 package: CURRENT_PACKAGE_ID,
                                                 // Bogus id for the struct, ideally we will never
                                                 // try to
@@ -1014,6 +1001,14 @@ impl Database {
                 ast::Name::Global {
                     package,
                     definition,
+                } if PackageId(*package) == CURRENT_PACKAGE_ID => {
+                    let def = LocalId::new(DefinitionId(*definition));
+                    let typeid = self.type_id_from_definition(def).unwrap();
+                    Type::Alias(typeid.as_global(CURRENT_PACKAGE_ID))
+                }
+                ast::Name::Global {
+                    package,
+                    definition,
                 } => {
                     let package_info = self.get_package(PackageId(*package));
                     let LocalId(typeid) = package_info
@@ -1021,15 +1016,16 @@ impl Database {
                         .get(&LocalId::new(DefinitionId(*definition)))
                         .map(|def| def.ty)
                         .unwrap();
-                    Type::Alias(Id::Global {
+                    Type::Alias(Id {
                         package: PackageId(*package),
                         id: typeid,
                     })
                 }
+
                 ast::Name::Local(name) => {
                     let def = self.get_global(name).unwrap();
                     let typeid = self.type_id_from_definition(def).unwrap();
-                    Type::Alias(Id::Local(typeid.clone()))
+                    Type::Alias(typeid.as_global(CURRENT_PACKAGE_ID))
                 }
                 ast::Name::Unresolved { path, identifier }
                     if path.is_empty() && prefex_scope.contains(identifier) =>
@@ -1045,22 +1041,17 @@ impl Database {
                             path, identifier
                         ));
                     match id {
-                        Id::Global { package, id } if package == CURRENT_PACKAGE_ID => {
+                        Id { package, id } if package == CURRENT_PACKAGE_ID => {
                             let id = LocalId::new(id);
                             assert!(self.type_definitions.contains_key(&id));
                             let tid = self.type_id_from_definition(id).unwrap();
                             Type::Alias(tid.as_global(CURRENT_PACKAGE_ID))
                         }
-                        Id::Global { package, id } => {
+                        Id { package, id } => {
                             let package_info = self.get_package(package);
                             let id = LocalId::new(id);
                             let tid = package_info.definition.get(&id).map(|def| def.ty).unwrap();
                             Type::Alias(tid.as_global(package))
-                        }
-                        Id::Local(id) => {
-                            assert!(self.type_definitions.contains_key(&id));
-                            let tid = self.type_id_from_definition(id).unwrap();
-                            Type::Alias(tid.as_global(CURRENT_PACKAGE_ID))
                         }
                     }
                 }
@@ -1079,7 +1070,7 @@ impl Database {
                         args,
                     },
                 );
-                Type::Alias(Id::Local(tid))
+                Type::Alias(tid.as_global(CURRENT_PACKAGE_ID))
             }
             ast::Typ::Array(inner) => {
                 let ty = Type::Array(Box::new(self.ast_type_to_type_shallow(
@@ -1089,7 +1080,7 @@ impl Database {
                     inner,
                 )));
                 let tid = self.create_type(session, ty);
-                Type::Alias(Id::Local(tid))
+                Type::Alias(tid.as_global(CURRENT_PACKAGE_ID))
             }
 
             ast::Typ::Function { args, ret } => {
@@ -1100,7 +1091,7 @@ impl Database {
                 let ret =
                     Box::new(self.ast_type_to_type_shallow(session, prefex_scope, namespace, ret));
                 let tid = self.create_type(session, Type::Function { args, ret });
-                Type::Alias(Id::Local(tid))
+                Type::Alias(tid.as_global(CURRENT_PACKAGE_ID))
             }
             ast::Typ::Tuple(inner) => {
                 let inner = inner
@@ -1108,7 +1099,7 @@ impl Database {
                     .map(|t| self.ast_type_to_type_shallow(session, prefex_scope, namespace, t))
                     .collect();
                 let tid = self.create_type(session, Type::Tuple(inner));
-                Type::Alias(Id::Local(tid))
+                Type::Alias(tid.as_global(CURRENT_PACKAGE_ID))
             }
             ast::Typ::Poly {
                 free_variables,
@@ -1144,20 +1135,16 @@ impl Database {
                     .get_definition_id_by_unresolved_name(current_namespace, path, identifier)
                     .unwrap();
                 match id {
-                    Id::Global { package, id } if package == CURRENT_PACKAGE_ID => {
+                    Id { package, id } if package == CURRENT_PACKAGE_ID => {
                         let id = LocalId::new(id);
                         assert!(self.classes.contains_key(&id));
                         id.as_global(CURRENT_PACKAGE_ID)
                     }
-                    Id::Global { package, id } => {
+                    Id { package, id } => {
                         let package_info = self.get_package(package);
                         let id = LocalId::new(id);
                         assert!(package_info.classes.contains_key(&id));
                         id.as_global(package)
-                    }
-                    Id::Local(id) => {
-                        assert!(self.classes.contains_key(&id));
-                        id.as_global(CURRENT_PACKAGE_ID)
                     }
                 }
             }
