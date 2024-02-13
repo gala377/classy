@@ -25,8 +25,20 @@ class WellFormed(a) {
     }
 }
 
+class Conv(a, b) {
+    methods for a {
+        cast: (a) -> b
+    }
+}
+
+from: { Conv(a, b) } => (a) -> b
+from x = x.cast()
+
+
 class { 
     WellFormed(a), 
 } => Show(a) {
     show: (a) -> std::String
+    
+    castShow: { Conv(a, std::String) } => (a) -> std::String
 }

@@ -34,8 +34,8 @@ const DUMMY_TYPE_ID: LocalId<TypeId> = LocalId(TypeId(0));
 /// currently compiled package.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Id<T> {
-    package: PackageId,
-    id: T,
+    pub package: PackageId,
+    pub id: T,
 }
 
 /// Id referencing current package
