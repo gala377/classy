@@ -6,7 +6,9 @@ type Foo {
     qux: Bar(std::String)
 }
 
-type { Show(a) } => Bar(a) {
+type { 
+    Show(a),
+} => Bar(a) {
     foo: Foo
     bar: (std::Int, std::Int)
     baz: a
@@ -14,8 +16,17 @@ type { Show(a) } => Bar(a) {
 
 type Baz = (std::Int, std::Int)
 
-class WellFormed(a) {}
+class WellFormed(a) {
+    methods for a {
+        show: (a) -> std::String
+    }
+    methods for std::String {
+        read: (std::String) -> a
+    }
+}
 
-class { WellFormed(a) } => Show(a) {
+class { 
+    WellFormed(a), 
+} => Show(a) {
     show: (a) -> std::String
 }

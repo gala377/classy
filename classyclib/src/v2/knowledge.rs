@@ -75,7 +75,7 @@ pub struct ClassMethodBlock {
     /// Receiver type for the methods block
     pub receiver: Id<TypeId>,
     /// Collection of all the methods defined within the block with their types
-    pub methods: Vec<(String, LocalId<TypeId>)>,
+    pub methods: Vec<MethodHandle>,
 }
 
 /// Information about a class definition
@@ -1000,10 +1000,106 @@ impl Database {
                 })
                 .collect::<Vec<_>>();
             let mut static_methods = Vec::new();
+            let mut method_blocks: Vec<ClassMethodBlock> = Vec::new();
             for bitem in &body {
                 match bitem {
-                    ast::ClassDefinitionItem::MethodBlock(mblock) => {
-                        todo!("Resolve method blocks in classes")
+                    ast::ClassDefinitionItem::MethodBlock(ast::MethodsBlock {
+                        name,
+                        typ,
+                        methods,
+                    }) => {
+                        if name.is_some() {
+                            panic!("named method blocks within classes are not supported")
+                        }
+                        let mut block_bounds = Vec::new();
+                        let mut block_free_vars = Vec::new();
+                        let mut block_receiver = typ.clone();
+                        if let ast::Typ::Poly {
+                            bounds,
+                            free_variables,
+                            typ,
+                        } = typ
+                        {
+                            block_bounds = bounds.clone();
+                            block_free_vars = free_variables.clone();
+                            block_receiver = *typ.clone();
+                        }
+                        if !block_bounds.is_empty() {
+                            panic!("bounds on method blocks within classes are not supported")
+                        }
+                        if !block_free_vars.is_empty() {
+                            prefex_scope.new_scope();
+                            prefex_scope.add_type_vars(&block_free_vars);
+                        }
+
+                        let block_receiver = self.ast_type_to_type_shallow(
+                            session,
+                            &mut prefex_scope,
+                            &namespace,
+                            &block_receiver,
+                        );
+                        let mut block_methods = Vec::new();
+                        for ast::Method { item: meth, .. } in methods {
+                            let mut f_bounds = Vec::new();
+                            let mut f_free_vars = Vec::new();
+                            let mut f_typ = meth.typ.clone();
+                            if let ast::Typ::Poly {
+                                bounds,
+                                free_variables,
+                                typ,
+                            } = &meth.typ
+                            {
+                                f_bounds = bounds.clone();
+                                f_free_vars = free_variables.clone();
+                                f_typ = *typ.clone();
+                            }
+                            if !f_free_vars.is_empty() {
+                                prefex_scope.new_scope();
+                                prefex_scope.add_type_vars(&f_free_vars);
+                            }
+                            let f_typ = self.ast_type_to_type_shallow(
+                                session,
+                                &mut prefex_scope,
+                                &namespace,
+                                &f_typ,
+                            );
+                            let f_constraints = f_bounds
+                                .iter()
+                                .map(|bound| {
+                                    self.ast_type_bound_to_generic_constraint_shallow(
+                                        session,
+                                        &mut prefex_scope,
+                                        bound,
+                                        &namespace,
+                                    )
+                                })
+                                .collect::<Vec<_>>();
+                            if !f_free_vars.is_empty() {
+                                prefex_scope.pop_scope();
+                            }
+                            let definition = Definition {
+                                name: meth.name.clone(),
+                                kind: DefinitionKind::Method,
+                                constraints: f_constraints,
+                                ty: self.create_type(session, f_typ),
+                                file,
+                                implicit_imports: Vec::new(),
+                            };
+                            let func_id = self.add_definition(session, definition);
+                            block_methods.push(MethodHandle {
+                                name: meth.name.clone(),
+                                definition: func_id,
+                            });
+                        }
+                        if !block_bounds.is_empty() {
+                            prefex_scope.pop_scope();
+                        }
+                        method_blocks.push(ClassMethodBlock {
+                            receiver: self
+                                .create_type(session, block_receiver)
+                                .as_global(CURRENT_PACKAGE_ID),
+                            methods: block_methods,
+                        });
                     }
                     ast::ClassDefinitionItem::Function(ast::FuncDecl { name, typ }) => {
                         let mut f_bounds = Vec::new();
@@ -1013,7 +1109,7 @@ impl Database {
                             bounds,
                             free_variables,
                             typ,
-                        } = typ
+                        } = &typ
                         {
                             f_bounds = bounds.clone();
                             f_free_vars = free_variables.clone();
@@ -1062,6 +1158,7 @@ impl Database {
                 } // end match bitem
             } // end for bitem in body
             self.classes.get_mut(&id).unwrap().static_methods = static_methods;
+            self.classes.get_mut(&id).unwrap().method_blocks = method_blocks;
             self.definitions.get_mut(&id).unwrap().constraints = constrains;
         } // end for def in class_definitions
     }
