@@ -82,6 +82,8 @@ pub struct ClassMethodBlock {
 #[derive(Debug)]
 pub struct ClassInfo {
     pub name: String,
+    // Generic arguments for the class instance
+    pub arguments: Vec<String>,
     // Collection of all the static methods defined within the class
     // and their types
     pub static_methods: Vec<MethodHandle>,
@@ -837,6 +839,7 @@ impl Database {
                 id.clone(),
                 ClassInfo {
                     name: ast_node.name.clone(),
+                    arguments: ast_node.args.clone(),
                     static_methods: Vec::new(),
                     method_blocks: Vec::new(),
                 },

@@ -3,16 +3,18 @@ use std::fmt;
 use maud::{html, Escaper, Markup, Render};
 use std::fmt::Write;
 
-use crate::v2::knowledge::CURRENT_PACKAGE_ID;
-
-use super::{
-    knowledge::{self, Id, LocalId, PackageId},
-    ty::{self, Type},
+use crate::v2::knowledge::{
+    self, ClassInfo, ClassMethodBlock, DefinitionId, Id, LocalId, MethodHandle, TypeId,
+    CURRENT_PACKAGE_ID,
 };
+use crate::v2::ty::Type;
+
+use super::knowledge::PackageId;
 
 pub fn render_db(db: &knowledge::Database, path: impl AsRef<std::path::Path>) {
     render_types_page(&db, &path.as_ref().join("types.html"));
     render_classes(db, &path.as_ref().join("classes.html"));
+    render_definitions(db, &path.as_ref().join("definitions.html"));
 }
 
 fn menu() -> Markup {
@@ -20,6 +22,7 @@ fn menu() -> Markup {
         div class="navbar" {
             a href="types.html" { "Types" }
             a href="classes.html" { "Classes" }
+            a href="definitions.html" { "Definitions" }
         }
     }
 }
@@ -27,6 +30,51 @@ fn menu() -> Markup {
 fn css() -> Markup {
     html! {
         link rel="stylesheet" type="text/css" href=("style.css");
+    }
+}
+
+fn render_definitions(db: &knowledge::Database, path: &std::path::Path) {
+    let markup = html! {
+        (header())
+        table {
+            thead {
+                tr {
+                    th { "Id" }
+                    th { "Name" }
+                    th { "Kind" }
+                    th { "Type" }
+                    th { "File" }
+                }
+            }
+            tbody {
+                @for (LocalId(DefinitionId(id)), def) in &db.definitions {
+                    tr {
+                        td { (id) }
+                        (render_def(db, def))
+                    }
+                }
+            }
+        }
+    };
+    std::fs::write(path, markup.into_string()).unwrap();
+}
+
+fn render_def(
+    _db: &knowledge::Database,
+    knowledge::Definition {
+        name,
+        kind,
+        constraints: _,
+        ty,
+        file,
+        implicit_imports: _,
+    }: &knowledge::Definition,
+) -> Markup {
+    html! {
+        td { (name) }
+        td { (Debug::from(kind)) }
+        td { a href=(format!("types.html#{}", ty.0.0)) { (Debug::from(ty)) } }
+        td { (Debug::from(file)) }
     }
 }
 
@@ -72,20 +120,75 @@ fn render_classes(db: &knowledge::Database, path: &std::path::Path) {
             thead {
                 tr {
                     th { "Id" }
-                    th { "Class" }
+                    th { "Name" }
+                    th { "Arguments" }
+                    th { "Static methods" }
+                    th { "Method blocks" }
                 }
             }
             tbody {
-                @for (id, class) in &db.classes {
+                @for (LocalId(DefinitionId(id)), class) in &db.classes {
                     tr {
-                        td { (Debug::from(id)) }
-                        td { (Debug::from(class)) }
+                        td { (id) }
+                        (render_class(db, class))
                     }
                 }
             }
         }
     };
     std::fs::write(path, markup.into_string()).unwrap();
+}
+
+fn render_class(
+    db: &knowledge::Database,
+    ClassInfo {
+        name,
+        static_methods,
+        method_blocks,
+        arguments,
+    }: &ClassInfo,
+) -> Markup {
+    html! {
+        td { (name) }
+        td {
+            @for name in arguments {
+                (name)
+                ", "
+            }
+        }
+        td {
+            @for MethodHandle { name, definition } in static_methods {
+                span {
+                    (name)
+                    "=>"
+                    (Debug::from(definition))
+                }
+                br;
+            }
+        }
+        td {
+            @for ClassMethodBlock { receiver, methods }  in method_blocks {
+
+                    @if receiver.package == CURRENT_PACKAGE_ID {
+                        a href=(format!("types.html#{}", receiver.id.0)) { (format_id(db, receiver)) }
+                    } @else {
+                        (format_id(db, receiver))
+                    }
+                    "{"
+                    br;
+                    @for MethodHandle { name, definition } in methods {
+                        span {
+                            (name)
+                            "=>"
+                            (Debug::from(definition))
+                        }
+                        br;
+                    }
+                    "}"
+                    br;
+            }
+        }
+    }
 }
 
 fn render_type(db: &knowledge::Database, ty: &Type) -> Markup {
