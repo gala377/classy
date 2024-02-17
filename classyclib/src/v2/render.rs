@@ -19,7 +19,7 @@ pub fn render_db(db: &knowledge::Database, path: impl AsRef<std::path::Path>) {
 
 fn menu() -> Markup {
     html! {
-        div class="navbar" {
+        #navbar {
             a href="types.html" { "Types" }
             a href="classes.html" { "Classes" }
             a href="definitions.html" { "Definitions" }
@@ -73,7 +73,7 @@ fn render_def(
     html! {
         td { (name) }
         td { (Debug::from(kind)) }
-        td { a href=(format!("types.html#{}", ty.0.0)) { (Debug::from(ty)) } }
+        td { a href={ "types.html#" (ty.0.0) } { (Debug::from(ty)) } }
         td { (Debug::from(file)) }
     }
 }
@@ -92,7 +92,7 @@ fn render_types_page(db: &knowledge::Database, path: &std::path::Path) {
                 }
                 tbody {
                     @for (id, ty) in &db.typeid_to_type {
-                        tr id=(id.0.0) {
+                        tr.{(id.0.0)} {
                             td { ( bare_tid(id)) }
                             td { (type_kind(ty)) }
                             td { (render_type(db, ty)) }
@@ -107,7 +107,7 @@ fn render_types_page(db: &knowledge::Database, path: &std::path::Path) {
 
 fn header() -> Markup {
     html! {
-        script src="scripts.js" {}
+        script src="scripts.js";
         (css())
         (menu())
     }
@@ -170,7 +170,9 @@ fn render_class(
             @for ClassMethodBlock { receiver, methods }  in method_blocks {
 
                     @if receiver.package == CURRENT_PACKAGE_ID {
-                        a href=(format!("types.html#{}", receiver.id.0)) { (format_id(db, receiver)) }
+                        a href={ "types.html#" (receiver.id.0) } {
+                                (format_id(db, receiver))
+                        }
                     } @else {
                         (format_id(db, receiver))
                     }
@@ -268,7 +270,9 @@ fn render_type(db: &knowledge::Database, ty: &Type) -> Markup {
                 (package_name(db, package.clone()))
                 "["
                 @if *package == CURRENT_PACKAGE_ID {
-                    a href=(format!("types.html#{}", id.0)) onclick="updateURL(this.href)(event)" { (Debug::from(id)) }
+                    a href={ "types.html#" (id.0) } onclick="updateURL(this.href)(event)" {
+                        (Debug::from(id))
+                    }
                 } @else {
                     (Debug::from(id))
                 }
