@@ -289,6 +289,12 @@ pub struct MethodHandle {
     pub definition: LocalId<DefinitionId>,
 }
 
+impl Default for Database {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Database {
     const INITIAL_TYPE_MAP_CAPACITY: u64 = 1000;
 
@@ -305,7 +311,7 @@ impl Database {
             globals: HashMap::new(),
             typeid_to_type: HashMap::new(),
             reverse_type_aliases: Rc::new(RefCell::new(TypeHashMap::new(
-                Self::INITIAL_TYPE_MAP_CAPACITY as u64,
+                Self::INITIAL_TYPE_MAP_CAPACITY,
             ))),
             method_blocks: HashMap::new(),
             classes: HashMap::new(),
@@ -330,7 +336,7 @@ impl Database {
         // this is important as the current package id is 0
         // so we need to subtract 1 to get the correct index
         // into the dependencies vector
-        &self.packages[(id.0 - 1) as usize]
+        &self.packages[id.0 - 1]
     }
 
     pub fn package_id(&self, of: &str) -> Option<PackageId> {
@@ -338,7 +344,7 @@ impl Database {
     }
 
     pub fn package_info(&self, of: PackageId) -> Option<&PackageInfo> {
-        self.packages.get(of.0 as usize)
+        self.packages.get(of.0)
     }
     // Definitions
 
@@ -367,10 +373,7 @@ impl Database {
     ) {
         let id = LocalId::new(id);
         assert!(!self.type_definitions.contains_key(&id));
-        assert!(self
-            .globals
-            .insert(definition.name.clone(), id.clone())
-            .is_none());
+        assert!(self.globals.insert(definition.name.clone(), id).is_none());
         self.definitions.insert(
             id,
             Definition {
@@ -393,10 +396,7 @@ impl Database {
     ) {
         let id = LocalId::new(id);
         assert!(!self.function_definitions.contains_key(&id));
-        assert!(self
-            .globals
-            .insert(definition.name.clone(), id.clone())
-            .is_none());
+        assert!(self.globals.insert(definition.name.clone(), id).is_none());
 
         self.definitions.insert(
             id,
@@ -420,10 +420,7 @@ impl Database {
     ) {
         let id = LocalId::new(id);
         assert!(!self.variable_definitions.contains_key(&id));
-        assert!(self
-            .globals
-            .insert(definition.name.clone(), id.clone())
-            .is_none());
+        assert!(self.globals.insert(definition.name.clone(), id).is_none());
 
         self.definitions.insert(
             id,
@@ -450,7 +447,7 @@ impl Database {
         if definition.name.is_some() {
             assert!(self
                 .globals
-                .insert(definition.name.clone().unwrap(), id.clone())
+                .insert(definition.name.clone().unwrap(), id)
                 .is_none());
         }
 
@@ -476,10 +473,7 @@ impl Database {
     ) {
         let id = LocalId::new(id);
         assert!(!self.class_definitions.contains_key(&id));
-        assert!(self
-            .globals
-            .insert(definition.name.clone(), id.clone())
-            .is_none());
+        assert!(self.globals.insert(definition.name.clone(), id).is_none());
         self.definitions.insert(
             id,
             Definition {
@@ -505,7 +499,7 @@ impl Database {
         if definition.name.is_some() {
             assert!(self
                 .globals
-                .insert(definition.name.clone().unwrap(), id.clone())
+                .insert(definition.name.clone().unwrap(), id)
                 .is_none());
         }
         self.definitions.insert(
@@ -551,12 +545,12 @@ impl Database {
     ) -> Option<&Type> {
         if let Some(potential_package) = path.first() {
             if let Some(package_id) = self.package_id(potential_package) {
-                let package_info = self.get_package(package_id.clone());
+                let package_info = self.get_package(package_id);
                 let mut expanded_name = path[1..].to_vec();
                 expanded_name.push(name.to_string());
                 let expanded_name = expanded_name.join("::");
                 if let Some(definition_id) = package_info.globals.get(&expanded_name) {
-                    return self.get_type(definition_id.clone().as_global(package_id));
+                    return self.get_type((*definition_id).as_global(package_id));
                 }
                 return None;
             }
@@ -568,7 +562,7 @@ impl Database {
         let Some(definition_id) = self.globals.get(&expand_name) else {
             return None;
         };
-        self.get_type(definition_id.clone().as_global(CURRENT_PACKAGE_ID))
+        self.get_type((*definition_id).as_global(CURRENT_PACKAGE_ID))
     }
 
     pub fn get_definition_id_by_unresolved_name(
@@ -579,7 +573,7 @@ impl Database {
     ) -> Option<Id<DefinitionId>> {
         if let Some(potential_package) = path.first() {
             if let Some(package_id) = self.package_id(potential_package) {
-                let package_info = self.get_package(package_id.clone());
+                let package_info = self.get_package(package_id);
                 let mut expanded_name = path[1..].to_vec();
                 expanded_name.push(name.to_string());
                 let expanded_name = expanded_name.join("::");
@@ -645,7 +639,7 @@ impl Database {
         loop {
             let resolved = self.resolve_tid_ref(typ)?;
             if let Type::Alias(for_type) = resolved {
-                typ = for_type.clone();
+                typ = *for_type;
             } else {
                 return Ok(typ);
             }
@@ -792,7 +786,7 @@ impl Database {
             Type::Alias(for_type) => {
                 let resolved = self.resolve_alias(*for_type)?;
                 let resolved = self.resolve_tid_ref(resolved)?;
-                self.hash_type_with_hasher(&resolved, state)?;
+                self.hash_type_with_hasher(resolved, state)?;
             }
             Type::ToInfere => return Err(QueryError::InvalidHash(Type::ToInfere)),
             Type::Scheme { prefex, typ } => {
@@ -825,18 +819,18 @@ impl Database {
     pub fn create_type_and_class_stumps(&mut self, session: &Session) {
         // create ids for all type definitions
         // for now insert a bogus type there
-        for (id, _ast_node) in &self.type_definitions {
+        for id in self.type_definitions.keys() {
             let type_id = session.id_provider().next();
             let type_id = LocalId::new(TypeId(type_id));
             self.definitions
-                .entry(id.clone())
+                .entry(*id)
                 .and_modify(|def| def.ty = type_id);
             self.typeid_to_type.insert(type_id, Type::Unit);
         }
         // Same for class definitions if we need to look them up
         for (id, ast_node) in &self.class_definitions {
             self.classes.insert(
-                id.clone(),
+                *id,
                 ClassInfo {
                     name: ast_node.name.clone(),
                     arguments: ast_node.args.clone(),
@@ -969,7 +963,7 @@ impl Database {
                 };
             }
             let tid = self.type_id_from_definition(id).unwrap();
-            self.typeid_to_type.insert(tid.clone(), t);
+            self.typeid_to_type.insert(tid, t);
             self.definitions.get_mut(&id).unwrap().constraints = constraints;
         }
     }
@@ -1218,10 +1212,12 @@ impl Database {
                 ast::Name::Unresolved { path, identifier } => {
                     let id = self
                         .get_definition_id_by_unresolved_name(namespace, path, identifier)
-                        .expect(&format!(
-                            "expected definition to be found, {:?} {:?}",
-                            path, identifier
-                        ));
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "expected definition to be found, {:?} {:?}",
+                                path, identifier
+                            )
+                        });
                     match id {
                         Id { package, id } if package == CURRENT_PACKAGE_ID => {
                             let id = LocalId::new(id);
@@ -1358,7 +1354,7 @@ impl Database {
         let lookup = self
             .reverse_type_aliases
             .borrow()
-            .get(&self, &ty)
+            .get(self, &ty)
             .unwrap()
             .cloned();
         match lookup {
@@ -1366,8 +1362,8 @@ impl Database {
             None => {
                 let id = session.id_provider().next();
                 let id = LocalId::new(TypeId(id));
-                self.typeid_to_type.insert(id.clone(), ty.clone());
-                self.insert_into_type_map(ty, id.clone());
+                self.typeid_to_type.insert(id, ty.clone());
+                self.insert_into_type_map(ty, id);
                 id
             }
         }
@@ -1384,7 +1380,7 @@ impl Database {
         let reverse_type_aliases = self.reverse_type_aliases.clone();
         reverse_type_aliases
             .borrow_mut()
-            .insert(&self, ty, tid)
+            .insert(self, ty, tid)
             .unwrap();
     }
 
