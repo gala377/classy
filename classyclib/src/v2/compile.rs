@@ -14,8 +14,6 @@ use crate::{
     v2::knowledge::{Database, DefinitionId, PackageInfo},
 };
 
-use super::render;
-
 #[derive(Error, Debug)]
 pub enum CompilationError {
     #[error("Syntax error: {0:?}")]
@@ -62,7 +60,7 @@ impl Compiler {
         self.database.lower_method_blocks(&self.session);
         self.database.lower_instances(&self.session);
         self.database.dump_all();
-        render::render_db(&self.database, "./render");
+        //render::render_db(&self.database, "./render");
         Ok(())
     }
 

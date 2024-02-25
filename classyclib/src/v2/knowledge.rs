@@ -47,7 +47,10 @@ impl<T: Default> Id<T> {
     }
 }
 
-/// Id referencing currently compiled package
+/// Id referencing package the item is in.
+///
+/// For example a local type id of a function references a type
+/// accessible from the package the function is in.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub struct LocalId<T>(pub T);
 
@@ -99,17 +102,19 @@ pub const CURRENT_PACKAGE_ID: PackageId = PackageId(0);
 /// Information about a method blocks defined within a class
 #[derive(Debug, Clone)]
 pub struct ClassMethodBlock {
+    /// References methods block definition.
+    ///
+    /// Use it to retrieve the methods from the method blocks
+    pub id: LocalId<DefinitionId>,
     /// Receiver type for the methods block
     pub receiver: Id<TypeId>,
-    /// Collection of all the methods defined within the block with their types
-    pub methods: Vec<MethodHandle>,
 }
 
 impl ClassMethodBlock {
     pub fn dummy() -> Self {
         Self {
+            id: LocalId::new(DefinitionId::default()),
             receiver: Id::dummy(),
-            methods: Vec::new(),
         }
     }
 }
@@ -139,18 +144,17 @@ impl ClassInfo {
 #[derive(Debug, Clone)]
 /// Information about a method blocks within an instance
 pub struct InstanceMethodBlock {
+    /// References method blocks definition. Access its kind to get methods
+    pub id: LocalId<DefinitionId>,
     /// Receiver type for the methods block
     pub receiver: Id<TypeId>,
-    /// Collection of all the methods defined within the block with their
-    /// definitions
-    pub methods: Vec<(String, LocalId<DefinitionId>)>,
 }
 
 impl InstanceMethodBlock {
     pub fn dummy() -> Self {
         Self {
+            id: LocalId::new(DefinitionId::default()),
             receiver: Id::dummy(),
-            methods: Vec::new(),
         }
     }
 }
@@ -165,7 +169,7 @@ pub struct InstanceInfo {
     /// typeclass and its arguments
     pub receiver: GenericConstraint,
     /// Static methods implementations defined within the instance
-    pub static_methods: Vec<(String, LocalId<DefinitionId>)>,
+    pub static_methods: Vec<MethodHandle>,
     /// Method blocks implemented within the instance
     pub method_blocks: Vec<InstanceMethodBlock>,
     /// Should be autoimported if the given definition is autoimported
@@ -195,7 +199,7 @@ pub struct MethodBlockInfo {
     /// Receiver type for the methods block
     pub receiver: Id<TypeId>,
     /// Methods definitions
-    pub methods: Vec<(String, LocalId<DefinitionId>)>,
+    pub methods: Vec<MethodHandle>,
 }
 
 impl MethodBlockInfo {
@@ -229,7 +233,7 @@ pub struct FileInfo {
 #[derive(Debug, Clone)]
 pub enum DefinitionKind {
     ConstVar,
-    Method,
+    Method(MethodInfo),
     ClassMethod,
     MethodBlock(MethodBlockInfo),
     Class(ClassInfo),
@@ -251,6 +255,13 @@ impl DefinitionKind {
     }
 
     pub fn as_method_block(&self) -> Option<&MethodBlockInfo> {
+        match self {
+            Self::MethodBlock(info) => Some(info),
+            _ => None,
+        }
+    }
+
+    pub fn as_method_block_mut(&mut self) -> Option<&mut MethodBlockInfo> {
         match self {
             Self::MethodBlock(info) => Some(info),
             _ => None,
@@ -283,6 +294,10 @@ pub struct Definition {
     pub file: LocalId<DefinitionId>,
     /// Items that should be imported whenever this defintion is
     pub implicit_imports: Vec<LocalId<DefinitionId>>,
+    /// Possible parent of the definition, for methods it could be their method
+    /// block for method blocks it might be their instance, class or just
+    /// nothing.
+    pub parent: Option<LocalId<DefinitionId>>,
 }
 
 impl Definition {
@@ -494,6 +509,7 @@ impl Database {
                 implicit_imports: Default::default(),
                 ty: DUMMY_TYPE_ID,
                 file,
+                parent: None,
             },
         );
         self.type_definitions.insert(id, definition);
@@ -518,6 +534,7 @@ impl Database {
                 constraints: Vec::new(),
                 ty: DUMMY_TYPE_ID,
                 file,
+                parent: None,
             },
         );
         self.function_definitions.insert(id, definition);
@@ -542,6 +559,7 @@ impl Database {
                 constraints: Vec::new(),
                 ty: DUMMY_TYPE_ID,
                 file,
+                parent: None,
             },
         );
         self.variable_definitions.insert(id, definition);
@@ -571,6 +589,7 @@ impl Database {
                 constraints: Vec::new(),
                 ty: DUMMY_TYPE_ID,
                 file,
+                parent: None,
             },
         );
         self.method_blocks_definitions.insert(id, definition);
@@ -594,6 +613,7 @@ impl Database {
                 constraints: Vec::new(),
                 ty: DUMMY_TYPE_ID,
                 file,
+                parent: None,
             },
         );
         self.class_definitions.insert(id, definition);
@@ -622,6 +642,7 @@ impl Database {
                 constraints: Vec::new(),
                 ty: DUMMY_TYPE_ID,
                 file,
+                parent: None,
             },
         );
         self.instance_definitions.insert(id, definition);
@@ -1139,29 +1160,51 @@ impl Database {
                             &namespace,
                             &block_receiver,
                         );
-                        let mut block_methods = Vec::new();
+                        let receiver = self.create_type(session, block_receiver);
+                        let mut method_block_definition = Definition {
+                            name: "".to_string(),
+                            kind: DefinitionKind::MethodBlock(MethodBlockInfo {
+                                name: None,
+                                receiver: receiver.as_global(CURRENT_PACKAGE_ID),
+                                methods: vec![],
+                            }),
+                            constraints: vec![],
+                            ty: receiver.clone(),
+                            file,
+                            implicit_imports: vec![],
+                            parent: Some(id),
+                        };
+                        let method_block_id =
+                            LocalId::new(DefinitionId(session.id_provider().next()));
                         for ast::Method { item: meth, .. } in methods {
-                            block_methods.push(MethodHandle {
+                            let method_handle = MethodHandle {
                                 name: meth.name.clone(),
                                 definition: self.lower_method(
                                     &mut prefex_scope,
                                     session,
                                     &namespace,
                                     file,
+                                    method_block_id,
                                     &meth.name,
                                     &meth.typ,
                                 ),
-                            });
+                            };
+                            method_block_definition
+                                .kind
+                                .as_method_block_mut()
+                                .unwrap()
+                                .methods
+                                .push(method_handle);
                         }
                         if !block_bounds.is_empty() {
                             prefex_scope.pop_scope();
                         }
                         method_blocks.push(ClassMethodBlock {
-                            receiver: self
-                                .create_type(session, block_receiver)
-                                .as_global(CURRENT_PACKAGE_ID),
-                            methods: block_methods,
+                            id: method_block_id,
+                            receiver: receiver.as_global(CURRENT_PACKAGE_ID),
                         });
+                        self.definitions
+                            .insert(method_block_id, method_block_definition);
                     }
                     ast::ClassDefinitionItem::Function(ast::FuncDecl { name, typ }) => {
                         static_methods.push(MethodHandle {
@@ -1171,6 +1214,7 @@ impl Database {
                                 session,
                                 &namespace,
                                 file,
+                                id,
                                 name,
                                 typ,
                             ),
@@ -1230,8 +1274,8 @@ impl Database {
             );
             let mut block_methods = Vec::new();
             for ast::Method {
-                id,
                 item: ast::FunctionDefinition { name, typ, .. },
+                ..
             } in methods
             {
                 block_methods.push(MethodHandle {
@@ -1241,6 +1285,7 @@ impl Database {
                         session,
                         &namespace,
                         file,
+                        *id,
                         name,
                         typ,
                     ),
@@ -1253,10 +1298,7 @@ impl Database {
             *method_block = Definition {
                 kind: DefinitionKind::MethodBlock(MethodBlockInfo {
                     receiver,
-                    methods: block_methods
-                        .into_iter()
-                        .map(|MethodHandle { name, definition }| (name, definition))
-                        .collect(),
+                    methods: block_methods,
                     name: if method_block.name.is_empty() {
                         None
                     } else {
@@ -1322,6 +1364,7 @@ impl Database {
                                 session,
                                 &namespace,
                                 file,
+                                *id,
                                 name,
                                 typ,
                             ),
@@ -1358,32 +1401,51 @@ impl Database {
                             &namespace,
                             &block_receiver,
                         );
-                        let mut block_methods = Vec::new();
+                        let receiver = self.create_type(session, block_receiver);
+                        let method_blocks_id =
+                            LocalId::new(DefinitionId(session.id_provider().next()));
+                        let mut method_blocks_definition = Definition {
+                            name: "".to_string(),
+                            kind: DefinitionKind::MethodBlock(MethodBlockInfo {
+                                name: None,
+                                receiver: receiver.as_global(CURRENT_PACKAGE_ID),
+                                methods: vec![],
+                            }),
+                            constraints: vec![],
+                            ty: receiver.clone(),
+                            file,
+                            implicit_imports: vec![],
+                            parent: Some(*id),
+                        };
                         for ast::Method { item: meth, .. } in methods {
-                            block_methods.push(MethodHandle {
+                            let method_handle = MethodHandle {
                                 name: meth.name.clone(),
                                 definition: self.lower_method(
                                     &mut prefex_scope,
                                     session,
                                     &namespace,
                                     file,
+                                    method_blocks_id,
                                     &meth.name,
                                     &meth.typ,
                                 ),
-                            });
+                            };
+                            method_blocks_definition
+                                .kind
+                                .as_method_block_mut()
+                                .unwrap()
+                                .methods
+                                .push(method_handle);
                         }
                         if !block_bounds.is_empty() {
                             prefex_scope.pop_scope();
                         }
                         method_blocks.push(InstanceMethodBlock {
-                            receiver: self
-                                .create_type(session, block_receiver)
-                                .as_global(CURRENT_PACKAGE_ID),
-                            methods: block_methods
-                                .into_iter()
-                                .map(|MethodHandle { name, definition }| (name, definition))
-                                .collect(),
+                            id: method_blocks_id,
+                            receiver: receiver.as_global(CURRENT_PACKAGE_ID),
                         });
+                        self.definitions
+                            .insert(method_blocks_id, method_blocks_definition);
                     }
                 }
             }
@@ -1391,10 +1453,7 @@ impl Database {
             *instance = Definition {
                 kind: DefinitionKind::Instance(InstanceInfo {
                     receiver,
-                    static_methods: static_methods
-                        .into_iter()
-                        .map(|MethodHandle { name, definition }| (name, definition))
-                        .collect(),
+                    static_methods,
                     method_blocks,
                     autoimported: None,
                     name: name.clone(),
@@ -1412,6 +1471,7 @@ impl Database {
         session: &Session,
         namespace: &[String],
         file: LocalId<DefinitionId>,
+        parent: LocalId<DefinitionId>,
         name: &str,
         typ: &ast::Typ,
     ) -> LocalId<DefinitionId> {
@@ -1442,13 +1502,18 @@ impl Database {
         if !f_free_vars.is_empty() {
             prefex_scope.pop_scope();
         }
+        let ty = self.create_type(session, f_typ);
         let definition = Definition {
             name: name.to_owned(),
-            kind: DefinitionKind::Method,
+            kind: DefinitionKind::Method(MethodInfo {
+                name: name.to_owned(),
+                ty,
+            }),
             constraints: f_constraints,
-            ty: self.create_type(session, f_typ),
+            ty,
             file,
             implicit_imports: Vec::new(),
+            parent: Some(parent),
         };
         self.add_definition(session, definition)
     }

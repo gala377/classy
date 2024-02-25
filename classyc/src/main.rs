@@ -174,6 +174,7 @@ fn prepare_std_package() -> PackageInfo {
                         ty: LocalId(TypeId(i)),
                         file: LocalId(DefinitionId(0)),
                         implicit_imports: vec![],
+                        parent: None,
                     },
                 );
             }
