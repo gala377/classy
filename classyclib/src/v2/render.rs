@@ -127,7 +127,7 @@ fn render_classes(db: &knowledge::Database, path: &std::path::Path) {
                 }
             }
             tbody {
-                @for (LocalId(DefinitionId(id)), class) in &db.classes {
+                @for (LocalId(DefinitionId(id)), class) in db.classes() {
                     tr {
                         td { (id) }
                         (render_class(db, class))

@@ -18,7 +18,7 @@ use crate::typecheck::types::DeBruijn;
 use crate::v2::instance::UnificationError;
 use crate::v2::ty::Type;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GenericConstraint {
     /// Class used for the constraint
     pub class: Id<DefinitionId>,
@@ -38,7 +38,14 @@ pub struct Id<T> {
     pub id: T,
 }
 
-/// Id referencing current package
+impl<T: Default> Id<T> {
+    const DUMMY: Self = Self {
+        package: CURRENT_PACKAGE_ID,
+        id: T::default(),
+    };
+}
+
+/// Id referencing currently compiled package
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub struct LocalId<T>(pub T);
 
@@ -59,18 +66,36 @@ impl<T> LocalId<T> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub struct DefinitionId(pub UniqueId);
 
+impl Default for DefinitionId {
+    fn default() -> Self {
+        Self(0)
+    }
+}
+
 /// Id that identifies a type
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub struct TypeId(pub UniqueId);
+
+impl Default for TypeId {
+    fn default() -> Self {
+        Self(0)
+    }
+}
 
 /// Id that identifies a package
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub struct PackageId(pub UniqueId);
 
+impl Default for PackageId {
+    fn default() -> Self {
+        Self(0)
+    }
+}
+
 pub const CURRENT_PACKAGE_ID: PackageId = PackageId(0);
 
 /// Information about a method blocks defined within a class
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ClassMethodBlock {
     /// Receiver type for the methods block
     pub receiver: Id<TypeId>,
@@ -78,8 +103,15 @@ pub struct ClassMethodBlock {
     pub methods: Vec<MethodHandle>,
 }
 
+impl ClassMethodBlock {
+    pub const DUMMY: Self = Self {
+        receiver: Id::DUMMY,
+        methods: Vec::new(),
+    };
+}
+
 /// Information about a class definition
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ClassInfo {
     pub name: String,
     // Generic arguments for the class instance
@@ -91,6 +123,16 @@ pub struct ClassInfo {
     pub method_blocks: Vec<ClassMethodBlock>,
 }
 
+impl ClassInfo {
+    pub const DUMMY: Self = Self {
+        name: String::new(),
+        arguments: Vec::new(),
+        static_methods: Vec::new(),
+        method_blocks: Vec::new(),
+    };
+}
+
+#[derive(Debug, Clone)]
 /// Information about a method blocks within an instance
 pub struct InstanceMethodBlock {
     /// Receiver type for the methods block
@@ -100,6 +142,14 @@ pub struct InstanceMethodBlock {
     pub methods: Vec<(String, LocalId<DefinitionId>)>,
 }
 
+impl InstanceMethodBlock {
+    pub const DUMMY: Self = Self {
+        receiver: Id::DUMMY,
+        methods: Vec::new(),
+    };
+}
+
+#[derive(Debug, Clone)]
 pub struct InstanceInfo {
     /// Optional name of the instance
     pub name: Option<String>,
@@ -114,6 +164,17 @@ pub struct InstanceInfo {
     pub autoimported: Option<LocalId<DefinitionId>>,
 }
 
+impl InstanceInfo {
+    pub const DUMMY: Self = Self {
+        name: None,
+        receiver: Id::DUMMY,
+        static_methods: Vec::new(),
+        method_blocks: Vec::new(),
+        autoimported: None,
+    };
+}
+
+#[derive(Debug, Clone)]
 pub struct MethodBlockInfo {
     pub name: Option<String>,
     /// Receiver type for the methods block
@@ -122,9 +183,25 @@ pub struct MethodBlockInfo {
     pub methods: Vec<(String, LocalId<DefinitionId>)>,
 }
 
+impl MethodBlockInfo {
+    pub const DUMMY: Self = Self {
+        name: None,
+        receiver: Id::DUMMY,
+        methods: Vec::new(),
+    };
+}
+
+#[derive(Debug, Clone)]
 pub struct MethodInfo {
     pub name: String,
     pub ty: LocalId<TypeId>,
+}
+
+impl MethodInfo {
+    pub const DUMMY: Self = Self {
+        name: String::new(),
+        ty: DUMMY_TYPE_ID,
+    };
 }
 
 pub struct FileInfo {
@@ -132,22 +209,43 @@ pub struct FileInfo {
     pub namespace: Vec<String>,
 }
 
-#[derive(Debug, Clone, Copy, Hash)]
+#[derive(Debug, Clone)]
 pub enum DefinitionKind {
     ConstVar,
     Method,
-    MethodBlock,
-    Class,
-    Instance,
+    ClassMethod,
+    MethodBlock(MethodBlockInfo),
+    Class(ClassInfo),
+    Instance(InstanceInfo),
     Type,
     Function,
+}
+
+impl DefinitionKind {
+    pub fn is_class(&self) -> bool {
+        matches!(self, Self::Class(_))
+    }
+
+    pub fn as_class(&self) -> Option<&ClassInfo> {
+        match self {
+            Self::Class(info) => Some(info),
+            _ => None,
+        }
+    }
+
+    pub fn as_method_block(&self) -> Option<&MethodBlockInfo> {
+        match self {
+            Self::MethodBlock(info) => Some(info),
+            _ => None,
+        }
+    }
 }
 
 /// Description of the defnition.
 ///
 /// Depending on the kind of the definition it will have different fields
 /// filled.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Definition {
     /// Name of the item, if the name has not been provided then its empty
     pub name: String,
@@ -161,6 +259,12 @@ pub struct Definition {
     pub file: LocalId<DefinitionId>,
     /// Items that should be imported whenever this defintion is
     pub implicit_imports: Vec<LocalId<DefinitionId>>,
+}
+
+impl Definition {
+    pub fn is_class(&self) -> bool {
+        self.kind.is_class()
+    }
 }
 
 pub struct PackageInfo {
@@ -242,19 +346,6 @@ pub struct Database {
     /// RefCell to store the type map.
     pub reverse_type_aliases: Rc<RefCell<TypeHashMap<LocalId<TypeId>>>>,
 
-    /// Method blocks within the package in more digestable form.
-    pub method_blocks: HashMap<LocalId<DefinitionId>, MethodBlockInfo>,
-
-    /// Class info within the package in more digestable form.
-    pub classes: HashMap<LocalId<DefinitionId>, ClassInfo>,
-
-    /// Instances within the package in more digestable form.
-    pub instances: HashMap<LocalId<DefinitionId>, InstanceInfo>,
-
-    /// All the methods from instances and method blocks defined within this
-    /// package
-    pub methods: HashMap<LocalId<DefinitionId>, MethodInfo>,
-
     /// Information about the files
     pub file_info: HashMap<LocalId<DefinitionId>, FileInfo>,
 
@@ -313,10 +404,6 @@ impl Database {
             reverse_type_aliases: Rc::new(RefCell::new(TypeHashMap::new(
                 Self::INITIAL_TYPE_MAP_CAPACITY,
             ))),
-            method_blocks: HashMap::new(),
-            classes: HashMap::new(),
-            instances: HashMap::new(),
-            methods: HashMap::new(),
             file_info: Default::default(),
             definitions: Default::default(),
         }
@@ -455,7 +542,7 @@ impl Database {
             id,
             Definition {
                 name: definition.name.clone().unwrap_or_default(),
-                kind: DefinitionKind::MethodBlock,
+                kind: DefinitionKind::MethodBlock(MethodBlockInfo::DUMMY.clone()),
                 implicit_imports: Default::default(),
                 constraints: Vec::new(),
                 ty: DUMMY_TYPE_ID,
@@ -479,7 +566,7 @@ impl Database {
             Definition {
                 name: definition.name.clone(),
                 implicit_imports: Default::default(),
-                kind: DefinitionKind::Class,
+                kind: DefinitionKind::Class(ClassInfo::DUMMY.clone()),
                 constraints: Vec::new(),
                 ty: DUMMY_TYPE_ID,
                 file,
@@ -506,7 +593,7 @@ impl Database {
             id,
             Definition {
                 name: definition.name.clone().unwrap_or_default(),
-                kind: DefinitionKind::Instance,
+                kind: DefinitionKind::Instance(InstanceInfo::DUMMY.clone()),
                 implicit_imports: Default::default(),
                 constraints: Vec::new(),
                 ty: DUMMY_TYPE_ID,
@@ -829,15 +916,13 @@ impl Database {
         }
         // Same for class definitions if we need to look them up
         for (id, ast_node) in &self.class_definitions {
-            self.classes.insert(
-                *id,
-                ClassInfo {
-                    name: ast_node.name.clone(),
-                    arguments: ast_node.args.clone(),
-                    static_methods: Vec::new(),
-                    method_blocks: Vec::new(),
-                },
-            );
+            let class = self.definitions.get_mut(id).unwrap();
+            class.kind = DefinitionKind::Class(ClassInfo {
+                name: ast_node.name.clone(),
+                arguments: ast_node.args.clone(),
+                static_methods: Vec::new(),
+                method_blocks: Vec::new(),
+            });
         }
     }
 
@@ -1011,15 +1096,10 @@ impl Database {
                         let mut block_bounds = Vec::new();
                         let mut block_free_vars = Vec::new();
                         let mut block_receiver = typ.clone();
-                        if let ast::Typ::Poly {
-                            bounds,
-                            free_variables,
-                            typ,
-                        } = typ
-                        {
-                            block_bounds = bounds.clone();
-                            block_free_vars = free_variables.clone();
-                            block_receiver = *typ.clone();
+                        if let Some((free_variables, bounds, typ)) = self.unwrap_poly_type(&typ) {
+                            block_bounds = bounds.into();
+                            block_free_vars = free_variables.into();
+                            block_receiver = typ.clone();
                         }
                         if !block_bounds.is_empty() {
                             panic!("bounds on method blocks within classes are not supported")
@@ -1040,15 +1120,12 @@ impl Database {
                             let mut f_bounds = Vec::new();
                             let mut f_free_vars = Vec::new();
                             let mut f_typ = meth.typ.clone();
-                            if let ast::Typ::Poly {
-                                bounds,
-                                free_variables,
-                                typ,
-                            } = &meth.typ
+                            if let Some((free_variables, bounds, typ)) =
+                                self.unwrap_poly_type(&meth.typ)
                             {
-                                f_bounds = bounds.clone();
-                                f_free_vars = free_variables.clone();
-                                f_typ = *typ.clone();
+                                f_bounds = bounds.into();
+                                f_free_vars = free_variables.into();
+                                f_typ = typ.clone();
                             }
                             if !f_free_vars.is_empty() {
                                 prefex_scope.new_scope();
@@ -1102,15 +1179,10 @@ impl Database {
                         let mut f_bounds = Vec::new();
                         let mut f_free_vars = Vec::new();
                         let mut f_typ = typ.clone();
-                        if let ast::Typ::Poly {
-                            bounds,
-                            free_variables,
-                            typ,
-                        } = &typ
-                        {
-                            f_bounds = bounds.clone();
-                            f_free_vars = free_variables.clone();
-                            f_typ = *typ.clone();
+                        if let Some((free_variables, bounds, typ)) = self.unwrap_poly_type(typ) {
+                            f_bounds = bounds.into();
+                            f_free_vars = free_variables.into();
+                            f_typ = typ.clone();
                         }
                         if !f_free_vars.is_empty() {
                             prefex_scope.new_scope();
@@ -1154,10 +1226,123 @@ impl Database {
                     }
                 } // end match bitem
             } // end for bitem in body
-            self.classes.get_mut(&id).unwrap().static_methods = static_methods;
-            self.classes.get_mut(&id).unwrap().method_blocks = method_blocks;
-            self.definitions.get_mut(&id).unwrap().constraints = constrains;
+            let class = self.definitions.get_mut(&id).unwrap();
+            *class = Definition {
+                kind: DefinitionKind::Class(ClassInfo {
+                    static_methods,
+                    method_blocks,
+                    ..class.kind.as_class().unwrap().clone()
+                }),
+                constraints: constrains,
+                ..class.clone()
+            };
         } // end for def in class_definitions
+    }
+
+    pub fn lower_method_blocks(&mut self, session: &Session) {
+        for (id, ast::MethodsBlock { name, typ, methods }) in &self.method_blocks_definitions {
+            let namespace = self.get_namespace(*id).to_vec();
+            let file = self.definitions.get(id).unwrap().file;
+
+            let mut block_bounds = Vec::new();
+            let mut block_free_vars = Vec::new();
+            let mut block_receiver = typ.clone();
+
+            if let Some((free_variables, bounds, typ)) = self.unwrap_poly_type(typ) {
+                block_bounds = bounds.into();
+                block_free_vars = free_variables.into();
+                block_receiver = typ.clone();
+            }
+
+            let mut prefex_scope = PrefexScope::new();
+            prefex_scope.add_type_vars(&block_free_vars);
+
+            let block_constraints = block_bounds
+                .iter()
+                .map(|bound| {
+                    self.ast_type_bound_to_generic_constraint_shallow(
+                        session,
+                        &mut prefex_scope,
+                        bound,
+                        &namespace,
+                    )
+                })
+                .collect::<Vec<_>>();
+            let block_receiver = self.ast_type_to_type_shallow(
+                session,
+                &mut prefex_scope,
+                &namespace,
+                &block_receiver,
+            );
+            let mut block_methods = Vec::new();
+            for ast::Method {
+                id,
+                item: ast::FunctionDefinition { name, typ, .. },
+            } in methods
+            {
+                let mut f_bounds = Vec::new();
+                let mut f_free_vars = Vec::new();
+                let mut f_typ = typ.clone();
+                if let Some((free_variables, bounds, typ)) = self.unwrap_poly_type(&typ) {
+                    f_bounds = bounds.into();
+                    f_free_vars = free_variables.into();
+                    f_typ = typ.clone();
+                }
+                if !f_free_vars.is_empty() {
+                    prefex_scope.new_scope();
+                    prefex_scope.add_type_vars(&f_free_vars);
+                }
+                let f_typ =
+                    self.ast_type_to_type_shallow(session, &mut prefex_scope, &namespace, &f_typ);
+                let f_constraints = f_bounds
+                    .iter()
+                    .map(|bound| {
+                        self.ast_type_bound_to_generic_constraint_shallow(
+                            session,
+                            &mut prefex_scope,
+                            bound,
+                            &namespace,
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                if !f_free_vars.is_empty() {
+                    prefex_scope.pop_scope();
+                }
+                let definition = Definition {
+                    name: name.clone(),
+                    kind: DefinitionKind::Method,
+                    constraints: f_constraints,
+                    ty: self.create_type(session, f_typ),
+                    file,
+                    implicit_imports: Vec::new(),
+                };
+                let func_id = self.add_definition(session, definition);
+                block_methods.push(MethodHandle {
+                    name: name.clone(),
+                    definition: func_id,
+                });
+            } // end for method in methods
+            let receiver = self
+                .create_type(session, block_receiver)
+                .as_global(CURRENT_PACKAGE_ID);
+            let method_block = self.definitions.get_mut(id).unwrap();
+            *method_block = Definition {
+                kind: DefinitionKind::MethodBlock(MethodBlockInfo {
+                    receiver,
+                    methods: block_methods
+                        .into_iter()
+                        .map(|MethodHandle { name, definition }| (name, definition))
+                        .collect(),
+                    ..method_block.kind.as_method_block().unwrap().clone()
+                }),
+                constraints: block_constraints,
+                ..method_block.clone()
+            };
+        } // end for block in method_blocks
+    }
+
+    pub fn lower_instances(&mut self, session: &Session) {
+        todo!()
     }
 
     /// Translate ast type to ty::Type.
@@ -1315,7 +1500,7 @@ impl Database {
                 match id {
                     Id { package, id } if package == CURRENT_PACKAGE_ID => {
                         let id = LocalId::new(id);
-                        assert!(self.classes.contains_key(&id));
+                        assert!(self.definitions.get(&id).map(Definition::is_class).unwrap());
                         id.as_global(CURRENT_PACKAGE_ID)
                     }
                     Id { package, id } => {
@@ -1338,7 +1523,7 @@ impl Database {
             }
             ast::Name::Local(id) => {
                 let id = self.globals.get(id).unwrap();
-                assert!(self.classes.contains_key(id));
+                assert!(self.definitions.get(id).map(Definition::is_class).unwrap());
                 id.as_global(CURRENT_PACKAGE_ID)
             }
         };
@@ -1392,6 +1577,30 @@ impl Database {
         let id = LocalId::new(DefinitionId(session.id_provider().next()));
         self.definitions.insert(id, definition);
         id
+    }
+
+    pub fn classes(&self) -> impl Iterator<Item = (LocalId<DefinitionId>, &ClassInfo)> {
+        self.definitions.iter().filter_map(|(id, def)| match def {
+            Definition {
+                kind: DefinitionKind::Class(c),
+                ..
+            } => Some((id.clone(), c)),
+            _ => None,
+        })
+    }
+
+    pub fn unwrap_poly_type(
+        &self,
+        typ: &ast::Typ,
+    ) -> Option<(&[String], &[ast::TypeBound], &ast::Typ)> {
+        match typ {
+            ast::Typ::Poly {
+                free_variables,
+                bounds,
+                typ,
+            } => Some((free_variables.as_slice(), bounds.as_slice(), typ)),
+            _ => None,
+        }
     }
 }
 
@@ -1454,7 +1663,13 @@ impl Database {
 
     pub fn dump_classes(&self) {
         println!("\nClasses:\n");
-        for (id, t) in &self.classes {
+        for (id, t) in self.definitions.iter().filter_map(|(id, def)| match def {
+            Definition {
+                kind: DefinitionKind::Class(c),
+                ..
+            } => Some((id, c)),
+            _ => None,
+        }) {
             println!("{:?} => {:#?}", id.0, t);
         }
     }

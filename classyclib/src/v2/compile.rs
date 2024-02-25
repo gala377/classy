@@ -59,6 +59,8 @@ impl Compiler {
         self.database.create_type_and_class_stumps(&self.session);
         self.database.lower_type_definitions(&self.session);
         self.database.lower_class_definitions(&self.session);
+        self.database.lower_method_blocks(&self.session);
+        self.database.lower_instances(&self.session);
         self.database.dump_all();
         render::render_db(&self.database, "./render");
         Ok(())
