@@ -153,8 +153,11 @@ impl InstanceMethodBlock {
 pub struct InstanceInfo {
     /// Optional name of the instance
     pub name: Option<String>,
-    /// Type of the reeiver the instance is defined for
-    pub receiver: Id<TypeId>,
+    /// Free type variables within the receiver type
+    pub free_vars: Vec<String>,
+    /// Type of the reeiver the instance is defined for, contains name of the
+    /// typeclass and its arguments
+    pub receiver: GenericConstraint,
     /// Static methods implementations defined within the instance
     pub static_methods: Vec<(String, LocalId<DefinitionId>)>,
     /// Method blocks implemented within the instance
@@ -167,7 +170,11 @@ pub struct InstanceInfo {
 impl InstanceInfo {
     pub const DUMMY: Self = Self {
         name: None,
-        receiver: Id::DUMMY,
+        free_vars: Vec::new(),
+        receiver: GenericConstraint {
+            class: Id::DUMMY,
+            args: Vec::new(),
+        },
         static_methods: Vec::new(),
         method_blocks: Vec::new(),
         autoimported: None,
@@ -236,6 +243,13 @@ impl DefinitionKind {
     pub fn as_method_block(&self) -> Option<&MethodBlockInfo> {
         match self {
             Self::MethodBlock(info) => Some(info),
+            _ => None,
+        }
+    }
+
+    pub fn as_instance(&self) -> Option<&InstanceInfo> {
+        match self {
+            Self::Instance(info) => Some(info),
             _ => None,
         }
     }
@@ -1117,52 +1131,16 @@ impl Database {
                         );
                         let mut block_methods = Vec::new();
                         for ast::Method { item: meth, .. } in methods {
-                            let mut f_bounds = Vec::new();
-                            let mut f_free_vars = Vec::new();
-                            let mut f_typ = meth.typ.clone();
-                            if let Some((free_variables, bounds, typ)) =
-                                self.unwrap_poly_type(&meth.typ)
-                            {
-                                f_bounds = bounds.into();
-                                f_free_vars = free_variables.into();
-                                f_typ = typ.clone();
-                            }
-                            if !f_free_vars.is_empty() {
-                                prefex_scope.new_scope();
-                                prefex_scope.add_type_vars(&f_free_vars);
-                            }
-                            let f_typ = self.ast_type_to_type_shallow(
-                                session,
-                                &mut prefex_scope,
-                                &namespace,
-                                &f_typ,
-                            );
-                            let f_constraints = f_bounds
-                                .iter()
-                                .map(|bound| {
-                                    self.ast_type_bound_to_generic_constraint_shallow(
-                                        session,
-                                        &mut prefex_scope,
-                                        bound,
-                                        &namespace,
-                                    )
-                                })
-                                .collect::<Vec<_>>();
-                            if !f_free_vars.is_empty() {
-                                prefex_scope.pop_scope();
-                            }
-                            let definition = Definition {
-                                name: meth.name.clone(),
-                                kind: DefinitionKind::Method,
-                                constraints: f_constraints,
-                                ty: self.create_type(session, f_typ),
-                                file,
-                                implicit_imports: Vec::new(),
-                            };
-                            let func_id = self.add_definition(session, definition);
                             block_methods.push(MethodHandle {
                                 name: meth.name.clone(),
-                                definition: func_id,
+                                definition: self.lower_method(
+                                    &mut prefex_scope,
+                                    session,
+                                    &namespace,
+                                    file,
+                                    &meth.name,
+                                    &meth.typ,
+                                ),
                             });
                         }
                         if !block_bounds.is_empty() {
@@ -1176,52 +1154,16 @@ impl Database {
                         });
                     }
                     ast::ClassDefinitionItem::Function(ast::FuncDecl { name, typ }) => {
-                        let mut f_bounds = Vec::new();
-                        let mut f_free_vars = Vec::new();
-                        let mut f_typ = typ.clone();
-                        if let Some((free_variables, bounds, typ)) = self.unwrap_poly_type(typ) {
-                            f_bounds = bounds.into();
-                            f_free_vars = free_variables.into();
-                            f_typ = typ.clone();
-                        }
-                        if !f_free_vars.is_empty() {
-                            prefex_scope.new_scope();
-                            prefex_scope.add_type_vars(&f_free_vars);
-                        }
-                        let f_typ = self.ast_type_to_type_shallow(
-                            session,
-                            &mut prefex_scope,
-                            &namespace,
-                            &f_typ,
-                        );
-                        let f_constraints = f_bounds
-                            .iter()
-                            .map(|bound| {
-                                self.ast_type_bound_to_generic_constraint_shallow(
-                                    session,
-                                    &mut prefex_scope,
-                                    bound,
-                                    &namespace,
-                                )
-                            })
-                            .collect::<Vec<_>>();
-                        if !f_free_vars.is_empty() {
-                            prefex_scope.pop_scope();
-                        }
-
-                        let definition = Definition {
-                            name: name.clone(),
-                            // todo: I guess? We don't have an item for class declaration
-                            kind: DefinitionKind::Method,
-                            constraints: f_constraints,
-                            ty: self.create_type(session, f_typ),
-                            file,
-                            implicit_imports: Vec::new(),
-                        };
-                        let func_id = self.add_definition(session, definition);
                         static_methods.push(MethodHandle {
                             name: name.clone(),
-                            definition: func_id,
+                            definition: self.lower_method(
+                                &mut prefex_scope,
+                                session,
+                                &namespace,
+                                file,
+                                name,
+                                typ,
+                            ),
                         });
                     }
                 } // end match bitem
@@ -1231,7 +1173,8 @@ impl Database {
                 kind: DefinitionKind::Class(ClassInfo {
                     static_methods,
                     method_blocks,
-                    ..class.kind.as_class().unwrap().clone()
+                    name: class.name.clone(),
+                    arguments: args.clone(),
                 }),
                 constraints: constrains,
                 ..class.clone()
@@ -1280,46 +1223,16 @@ impl Database {
                 item: ast::FunctionDefinition { name, typ, .. },
             } in methods
             {
-                let mut f_bounds = Vec::new();
-                let mut f_free_vars = Vec::new();
-                let mut f_typ = typ.clone();
-                if let Some((free_variables, bounds, typ)) = self.unwrap_poly_type(&typ) {
-                    f_bounds = bounds.into();
-                    f_free_vars = free_variables.into();
-                    f_typ = typ.clone();
-                }
-                if !f_free_vars.is_empty() {
-                    prefex_scope.new_scope();
-                    prefex_scope.add_type_vars(&f_free_vars);
-                }
-                let f_typ =
-                    self.ast_type_to_type_shallow(session, &mut prefex_scope, &namespace, &f_typ);
-                let f_constraints = f_bounds
-                    .iter()
-                    .map(|bound| {
-                        self.ast_type_bound_to_generic_constraint_shallow(
-                            session,
-                            &mut prefex_scope,
-                            bound,
-                            &namespace,
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                if !f_free_vars.is_empty() {
-                    prefex_scope.pop_scope();
-                }
-                let definition = Definition {
-                    name: name.clone(),
-                    kind: DefinitionKind::Method,
-                    constraints: f_constraints,
-                    ty: self.create_type(session, f_typ),
-                    file,
-                    implicit_imports: Vec::new(),
-                };
-                let func_id = self.add_definition(session, definition);
                 block_methods.push(MethodHandle {
                     name: name.clone(),
-                    definition: func_id,
+                    definition: self.lower_method(
+                        &mut prefex_scope,
+                        session,
+                        &namespace,
+                        file,
+                        name,
+                        typ,
+                    ),
                 });
             } // end for method in methods
             let receiver = self
@@ -1333,7 +1246,11 @@ impl Database {
                         .into_iter()
                         .map(|MethodHandle { name, definition }| (name, definition))
                         .collect(),
-                    ..method_block.kind.as_method_block().unwrap().clone()
+                    name: if method_block.name.is_empty() {
+                        None
+                    } else {
+                        Some(method_block.name.clone())
+                    },
                 }),
                 constraints: block_constraints,
                 ..method_block.clone()
@@ -1342,7 +1259,182 @@ impl Database {
     }
 
     pub fn lower_instances(&mut self, session: &Session) {
-        todo!()
+        for (
+            id,
+            ast::InstanceDefinition {
+                name,
+                free_variables,
+                bounds,
+                instanced_class,
+                body,
+            },
+        ) in &self.instance_definitions
+        {
+            let namespace = self.get_namespace(*id).to_vec();
+            let file = self.definitions.get(id).unwrap().file;
+            let mut prefex_scope = PrefexScope::new();
+            prefex_scope.add_type_vars(&free_variables);
+            let constrains = bounds
+                .iter()
+                .map(|bound| {
+                    self.ast_type_bound_to_generic_constraint_shallow(
+                        session,
+                        &mut prefex_scope,
+                        bound,
+                        &namespace,
+                    )
+                })
+                .collect::<Vec<_>>();
+            let receiver = self.ast_type_bound_to_generic_constraint_shallow(
+                session,
+                &mut prefex_scope,
+                instanced_class,
+                &namespace,
+            );
+            let mut static_methods = Vec::new();
+            let mut method_blocks = Vec::new();
+            for instance_item in body {
+                match instance_item {
+                    ast::InstanceDefinitionItem::FunctionDefinition(ast::FunctionDefinition {
+                        name,
+                        typ,
+                        ..
+                    }) => {
+                        static_methods.push(MethodHandle {
+                            name: name.clone(),
+                            definition: self.lower_method(
+                                &mut prefex_scope,
+                                session,
+                                &namespace,
+                                file,
+                                name,
+                                typ,
+                            ),
+                        });
+                    }
+                    ast::InstanceDefinitionItem::MethodsBlock(ast::MethodsBlock {
+                        name,
+                        typ,
+                        methods,
+                    }) => {
+                        if name.is_some() {
+                            panic!("named method blocks within instances are not supported")
+                        }
+                        let mut block_bounds = Vec::new();
+                        let mut block_free_vars = Vec::new();
+                        let mut block_receiver = typ.clone();
+                        if let Some((free_variables, bounds, typ)) = self.unwrap_poly_type(&typ) {
+                            block_bounds = bounds.into();
+                            block_free_vars = free_variables.into();
+                            block_receiver = typ.clone();
+                        }
+                        if !block_bounds.is_empty() {
+                            panic!("bounds on method blocks within instances are not supported")
+                        }
+                        if !block_free_vars.is_empty() {
+                            prefex_scope.new_scope();
+                            prefex_scope.add_type_vars(&block_free_vars);
+                        }
+
+                        let block_receiver = self.ast_type_to_type_shallow(
+                            session,
+                            &mut prefex_scope,
+                            &namespace,
+                            &block_receiver,
+                        );
+                        let mut block_methods = Vec::new();
+                        for ast::Method { item: meth, .. } in methods {
+                            block_methods.push(MethodHandle {
+                                name: meth.name.clone(),
+                                definition: self.lower_method(
+                                    &mut prefex_scope,
+                                    session,
+                                    &namespace,
+                                    file,
+                                    &meth.name,
+                                    &meth.typ,
+                                ),
+                            });
+                        }
+                        if !block_bounds.is_empty() {
+                            prefex_scope.pop_scope();
+                        }
+                        method_blocks.push(InstanceMethodBlock {
+                            receiver: self
+                                .create_type(session, block_receiver)
+                                .as_global(CURRENT_PACKAGE_ID),
+                            methods: block_methods
+                                .into_iter()
+                                .map(|MethodHandle { name, definition }| (name, definition))
+                                .collect(),
+                        });
+                    }
+                }
+            }
+            let instance = self.definitions.get_mut(id).unwrap();
+            *instance = Definition {
+                kind: DefinitionKind::Instance(InstanceInfo {
+                    receiver,
+                    static_methods: static_methods
+                        .into_iter()
+                        .map(|MethodHandle { name, definition }| (name, definition))
+                        .collect(),
+                    method_blocks,
+                    autoimported: None,
+                    name: name.clone(),
+                    free_vars: free_variables.clone(),
+                }),
+                constraints: constrains,
+                ..instance.clone()
+            };
+        }
+    }
+
+    pub fn lower_method(
+        &self,
+        prefex_scope: &mut PrefexScope,
+        session: &Session,
+        namespace: &[String],
+        file: LocalId<DefinitionId>,
+        name: &str,
+        typ: &ast::Typ,
+    ) -> LocalId<DefinitionId> {
+        let mut f_bounds = Vec::new();
+        let mut f_free_vars = Vec::new();
+        let mut f_typ = typ.clone();
+        if let Some((free_variables, bounds, typ)) = self.unwrap_poly_type(&typ) {
+            f_bounds = bounds.into();
+            f_free_vars = free_variables.into();
+            f_typ = typ.clone();
+        }
+        if !f_free_vars.is_empty() {
+            prefex_scope.new_scope();
+            prefex_scope.add_type_vars(&f_free_vars);
+        }
+        let f_typ = self.ast_type_to_type_shallow(session, prefex_scope, &namespace, &f_typ);
+        let f_constraints = f_bounds
+            .iter()
+            .map(|bound| {
+                self.ast_type_bound_to_generic_constraint_shallow(
+                    session,
+                    prefex_scope,
+                    bound,
+                    &namespace,
+                )
+            })
+            .collect::<Vec<_>>();
+        if !f_free_vars.is_empty() {
+            prefex_scope.pop_scope();
+        }
+        let definition = Definition {
+            name: name.to_owned(),
+            kind: DefinitionKind::Method,
+            constraints: f_constraints,
+            ty: self.create_type(session, f_typ),
+            file,
+            implicit_imports: Vec::new(),
+        };
+        self.add_definition(session, definition)
     }
 
     /// Translate ast type to ty::Type.
