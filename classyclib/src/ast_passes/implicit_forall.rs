@@ -1,8 +1,8 @@
 use core::panic;
 
-use classy_syntax::ast::{self, Folder};
+use classy_syntax::ast::{self, fold, visitor, Folder};
 
-use crate::{scope::Scope, session::Session};
+use crate::{scope::Scope, session::Session, v2::instance};
 
 use super::AstPass;
 
@@ -132,6 +132,42 @@ impl ast::Folder for ImplicitForall {
         let item = self.fold_function_definition(item);
         println!("New item is: {:?}", item);
         ast::Method { id, item }
+    }
+
+    fn fold_instance_definition(
+        &mut self,
+        ast::InstanceDefinition {
+            name,
+            free_variables,
+            bounds,
+            instanced_class: ast::TypeBound { head, args },
+            body,
+        }: ast::InstanceDefinition,
+    ) -> ast::InstanceDefinition {
+        println!("instance: {:?}", name);
+        self.prefex.clear();
+        let bounds = bounds
+            .into_iter()
+            .map(|ast::TypeBound { head, args }| self.fold_type_bound(head, args))
+            .collect();
+        let instanced_class = self.fold_type_bound(head, args);
+        let free_variables = self.prefex.clone();
+        self.ignore_names.new_scope();
+        for name in &free_variables {
+            self.ignore_names.add(name.clone(), ());
+        }
+        let body = body
+            .into_iter()
+            .map(|item| self.fold_instance_definition_item(item))
+            .collect();
+        self.ignore_names.pop_scope();
+        ast::InstanceDefinition {
+            name,
+            free_variables,
+            bounds,
+            instanced_class,
+            body,
+        }
     }
 }
 

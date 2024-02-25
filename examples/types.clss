@@ -25,6 +25,17 @@ class WellFormed(a) {
     }
 }
 
+instance something for { Show(a) } => WellFormed(a) {
+    methods for a {
+        show: (a) -> std::String
+        show x = ()
+    }
+    methods for std::String {
+        read: (std::String) -> a
+        read x = ()
+    }
+}
+
 class Conv(a, b) {
     methods for a {
         cast: (a) -> b

@@ -4,8 +4,7 @@ use maud::{html, Escaper, Markup, Render};
 use std::fmt::Write;
 
 use crate::v2::knowledge::{
-    self, ClassInfo, ClassMethodBlock, DefinitionId, Id, LocalId, MethodHandle, TypeId,
-    CURRENT_PACKAGE_ID,
+    self, ClassInfo, ClassMethodBlock, DefinitionId, Id, LocalId, MethodHandle, CURRENT_PACKAGE_ID,
 };
 use crate::v2::ty::Type;
 
@@ -15,6 +14,7 @@ pub fn render_db(db: &knowledge::Database, path: impl AsRef<std::path::Path>) {
     render_types_page(&db, &path.as_ref().join("types.html"));
     render_classes(db, &path.as_ref().join("classes.html"));
     render_definitions(db, &path.as_ref().join("definitions.html"));
+    render_instances(db, &path.as_ref().join("instances.html"));
 }
 
 fn menu() -> Markup {
@@ -23,48 +23,151 @@ fn menu() -> Markup {
             a href="types.html" { "Types" }
             a href="classes.html" { "Classes" }
             a href="definitions.html" { "Definitions" }
+            a href="instances.html" { "Instances" }
         }
     }
 }
 
 fn css() -> Markup {
     html! {
-        link rel="stylesheet" type="text/css" href=("style.css");
+        link rel="stylesheet" type="text/css" href=("style.css") {}
     }
 }
 
-fn render_definitions(db: &knowledge::Database, path: &std::path::Path) {
+fn render_instances(db: &knowledge::Database, path: &std::path::Path) {
     let markup = html! {
+        html {
         (header())
+        body {
+        (menu())
         table {
             thead {
                 tr {
                     th { "Id" }
                     th { "Name" }
-                    th { "Kind" }
-                    th { "Type" }
-                    th { "File" }
+                    th { "Free vars" }
+                    th { "Receiver" }
+                    th { "Static methods" }
+                    th { "Method blocks" }
                 }
             }
             tbody {
-                @for (LocalId(DefinitionId(id)), def) in &db.definitions {
+                @for (LocalId(DefinitionId(id)), instance) in db.instances() {
                     tr {
                         td { (id) }
-                        (render_def(db, def))
+                        (render_instance(db, instance))
                     }
                 }
             }
         }
+    }
+    }
     };
     std::fs::write(path, markup.into_string()).unwrap();
 }
 
+fn render_instance(
+    db: &knowledge::Database,
+    knowledge::InstanceInfo {
+        name,
+        free_vars,
+        receiver,
+        static_methods,
+        method_blocks,
+        autoimported: _,
+    }: &knowledge::InstanceInfo,
+) -> Markup {
+    html! {
+        td {
+            // Name
+            (name.clone().unwrap_or_else(|| "anon".to_string()))
+         }
+        td {
+            // Free vars
+            @for name in free_vars {
+                (name)
+                ", "
+            }
+        }
+        td {
+            //receiver
+            (render_constraint(db, receiver))
+        }
+        td { // static methods
+            @for ( name, definition ) in static_methods {
+                span {
+                    (name)
+                    "=>"
+                    (Debug::from(definition))
+                }
+                br;
+            }
+        }
+        td { // method blocks
+            @for knowledge::InstanceMethodBlock { receiver, methods }  in method_blocks {
+                @if receiver.package == CURRENT_PACKAGE_ID {
+                    a href={ "types.html#" (receiver.id.0) } {
+                            (format_id(db, receiver))
+                    }
+                } @else {
+                    (format_id(db, receiver))
+                }
+                "{"
+                br;
+                @for  ( name, definition ) in methods {
+                    span {
+                        (name)
+                        "=>"
+                        (Debug::from(definition))
+                    }
+                    br;
+                }
+                "}"
+                br;
+            }
+        }
+
+    }
+}
+
+fn render_definitions(db: &knowledge::Database, path: &std::path::Path) {
+    let markup = html! {
+    html {
+        (header())
+        body {
+            (menu())
+            table {
+                thead {
+                    tr {
+                        th { "Id" }
+                        th { "Name" }
+                        th { "Kind" }
+                        th { "Type" }
+                        th { "Constraints" }
+                        th { "File" }
+                    }
+                }
+                tbody {
+                    @for (LocalId(DefinitionId(id)), def) in &db.definitions {
+                        tr {
+                            td { (id) }
+                            (render_def(db, def))
+                        }
+                    }
+                }
+            }
+        }
+    }
+        };
+    std::fs::write(path, markup.into_string()).unwrap();
+}
+
 fn render_def(
-    _db: &knowledge::Database,
+    db: &knowledge::Database,
     knowledge::Definition {
         name,
         kind,
-        constraints: _,
+        constraints,
         ty,
         file,
         implicit_imports: _,
@@ -74,28 +177,33 @@ fn render_def(
         td { (name) }
         td { (Debug::from(kind)) }
         td { a href={ "types.html#" (ty.0.0) } { (Debug::from(ty)) } }
+        td { (render_constraints(db, constraints)) }
         td { (Debug::from(file)) }
     }
 }
 
 fn render_types_page(db: &knowledge::Database, path: &std::path::Path) {
     let markup = html! {
-        (header())
-        body onload="highlightRow();" {
-            table {
-                thead {
-                    tr {
-                        th { "Id" }
-                        th { "Kind" }
-                        th { "Type" }
+        html {
+            (header())
+            (menu())
+
+            body onload="highlightRow();" {
+                table {
+                    thead {
+                        tr {
+                            th { "Id" }
+                            th { "Kind" }
+                            th { "Type" }
+                        }
                     }
-                }
-                tbody {
-                    @for (id, ty) in &db.typeid_to_type {
-                        tr.{(id.0.0)} {
-                            td { ( bare_tid(id)) }
-                            td { (type_kind(ty)) }
-                            td { (render_type(db, ty)) }
+                    tbody {
+                        @for (id, ty) in &db.typeid_to_type {
+                            tr.{(id.0.0)} {
+                                td { ( bare_tid(id)) }
+                                td { (type_kind(ty)) }
+                                td { (render_type(db, ty)) }
+                            }
                         }
                     }
                 }
@@ -107,34 +215,40 @@ fn render_types_page(db: &knowledge::Database, path: &std::path::Path) {
 
 fn header() -> Markup {
     html! {
-        script src="scripts.js";
-        (css())
-        (menu())
+        head {
+            script src="scripts.js" {}
+            (css())
+        }
     }
 }
 
 fn render_classes(db: &knowledge::Database, path: &std::path::Path) {
     let markup = html! {
+    html {
         (header())
-        table {
-            thead {
-                tr {
-                    th { "Id" }
-                    th { "Name" }
-                    th { "Arguments" }
-                    th { "Static methods" }
-                    th { "Method blocks" }
-                }
-            }
-            tbody {
-                @for (LocalId(DefinitionId(id)), class) in db.classes() {
+        body {
+            (menu())
+            table {
+                thead {
                     tr {
-                        td { (id) }
-                        (render_class(db, class))
+                        th { "Id" }
+                        th { "Name" }
+                        th { "Arguments" }
+                        th { "Static methods" }
+                        th { "Method blocks" }
+                    }
+                }
+                tbody {
+                    @for (LocalId(DefinitionId(id)), class) in db.classes() {
+                        tr {
+                            td { (id) }
+                            (render_class(db, class))
+                        }
                     }
                 }
             }
         }
+    }
     };
     std::fs::write(path, markup.into_string()).unwrap();
 }
@@ -379,6 +493,33 @@ fn package_name(db: &knowledge::Database, id: PackageId) -> Markup {
     }
 }
 
+fn render_constraints(
+    db: &knowledge::Database,
+    constraints: &[knowledge::GenericConstraint],
+) -> Markup {
+    html! {
+        @for constraint in constraints {
+            (render_constraint(db, constraint))
+            br;
+        }
+    }
+}
+
+fn render_constraint(
+    db: &knowledge::Database,
+    knowledge::GenericConstraint { class, args }: &knowledge::GenericConstraint,
+) -> Markup {
+    html! {
+        "head:"
+        (format_id(db, class))
+        ","
+        @for arg in args {
+            (render_type(db, arg))
+            ","
+        }
+    }
+}
+
 struct Debug<T: fmt::Debug>(T);
 
 impl<T: fmt::Debug> From<T> for Debug<T> {
@@ -390,6 +531,6 @@ impl<T: fmt::Debug> From<T> for Debug<T> {
 impl<T: fmt::Debug> Render for Debug<T> {
     fn render_to(&self, output: &mut String) {
         let mut escaper = Escaper::new(output);
-        write!(escaper, "{:?}", self.0).unwrap();
+        write!(escaper, "{:#?}", self.0).unwrap();
     }
 }

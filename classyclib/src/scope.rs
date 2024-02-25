@@ -83,4 +83,8 @@ where
     pub fn contains(&self, key: &K) -> bool {
         self.stack.iter().any(|s| s.contains_key(key))
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
+        self.stack.iter().rev().flat_map(|s| s.iter())
+    }
 }

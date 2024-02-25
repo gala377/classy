@@ -39,10 +39,12 @@ pub struct Id<T> {
 }
 
 impl<T: Default> Id<T> {
-    const DUMMY: Self = Self {
-        package: CURRENT_PACKAGE_ID,
-        id: T::default(),
-    };
+    pub fn dummy() -> Self {
+        Self {
+            package: CURRENT_PACKAGE_ID,
+            id: T::default(),
+        }
+    }
 }
 
 /// Id referencing currently compiled package
@@ -104,10 +106,12 @@ pub struct ClassMethodBlock {
 }
 
 impl ClassMethodBlock {
-    pub const DUMMY: Self = Self {
-        receiver: Id::DUMMY,
-        methods: Vec::new(),
-    };
+    pub fn dummy() -> Self {
+        Self {
+            receiver: Id::dummy(),
+            methods: Vec::new(),
+        }
+    }
 }
 
 /// Information about a class definition
@@ -143,10 +147,12 @@ pub struct InstanceMethodBlock {
 }
 
 impl InstanceMethodBlock {
-    pub const DUMMY: Self = Self {
-        receiver: Id::DUMMY,
-        methods: Vec::new(),
-    };
+    pub fn dummy() -> Self {
+        Self {
+            receiver: Id::dummy(),
+            methods: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -168,17 +174,19 @@ pub struct InstanceInfo {
 }
 
 impl InstanceInfo {
-    pub const DUMMY: Self = Self {
-        name: None,
-        free_vars: Vec::new(),
-        receiver: GenericConstraint {
-            class: Id::DUMMY,
-            args: Vec::new(),
-        },
-        static_methods: Vec::new(),
-        method_blocks: Vec::new(),
-        autoimported: None,
-    };
+    pub fn dummy() -> Self {
+        Self {
+            name: None,
+            free_vars: Vec::new(),
+            receiver: GenericConstraint {
+                class: Id::dummy(),
+                args: Vec::new(),
+            },
+            static_methods: Vec::new(),
+            method_blocks: Vec::new(),
+            autoimported: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -191,11 +199,13 @@ pub struct MethodBlockInfo {
 }
 
 impl MethodBlockInfo {
-    pub const DUMMY: Self = Self {
-        name: None,
-        receiver: Id::DUMMY,
-        methods: Vec::new(),
-    };
+    pub fn dummy() -> Self {
+        Self {
+            name: None,
+            receiver: Id::dummy(),
+            methods: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -556,7 +566,7 @@ impl Database {
             id,
             Definition {
                 name: definition.name.clone().unwrap_or_default(),
-                kind: DefinitionKind::MethodBlock(MethodBlockInfo::DUMMY.clone()),
+                kind: DefinitionKind::MethodBlock(MethodBlockInfo::dummy()),
                 implicit_imports: Default::default(),
                 constraints: Vec::new(),
                 ty: DUMMY_TYPE_ID,
@@ -607,7 +617,7 @@ impl Database {
             id,
             Definition {
                 name: definition.name.clone().unwrap_or_default(),
-                kind: DefinitionKind::Instance(InstanceInfo::DUMMY.clone()),
+                kind: DefinitionKind::Instance(InstanceInfo::dummy()),
                 implicit_imports: Default::default(),
                 constraints: Vec::new(),
                 ty: DUMMY_TYPE_ID,
@@ -1183,7 +1193,8 @@ impl Database {
     }
 
     pub fn lower_method_blocks(&mut self, session: &Session) {
-        for (id, ast::MethodsBlock { name, typ, methods }) in &self.method_blocks_definitions {
+        let method_blocks = self.method_blocks_definitions.clone();
+        for (id, ast::MethodsBlock { typ, methods, .. }) in method_blocks.iter() {
             let namespace = self.get_namespace(*id).to_vec();
             let file = self.definitions.get(id).unwrap().file;
 
@@ -1259,6 +1270,7 @@ impl Database {
     }
 
     pub fn lower_instances(&mut self, session: &Session) {
+        let instance_definitions = self.instance_definitions.clone();
         for (
             id,
             ast::InstanceDefinition {
@@ -1268,11 +1280,13 @@ impl Database {
                 instanced_class,
                 body,
             },
-        ) in &self.instance_definitions
+        ) in &instance_definitions
         {
+            println!("Lowering instance {name:?}");
             let namespace = self.get_namespace(*id).to_vec();
             let file = self.definitions.get(id).unwrap().file;
             let mut prefex_scope = PrefexScope::new();
+            println!("Free vars are {free_variables:?}");
             prefex_scope.add_type_vars(&free_variables);
             let constrains = bounds
                 .iter()
@@ -1300,6 +1314,7 @@ impl Database {
                         typ,
                         ..
                     }) => {
+                        println!("Lowering instance method {name:?}");
                         static_methods.push(MethodHandle {
                             name: name.clone(),
                             definition: self.lower_method(
@@ -1317,6 +1332,7 @@ impl Database {
                         typ,
                         methods,
                     }) => {
+                        println!("Lowering instance methods block {typ:?}");
                         if name.is_some() {
                             panic!("named method blocks within instances are not supported")
                         }
@@ -1391,7 +1407,7 @@ impl Database {
     }
 
     pub fn lower_method(
-        &self,
+        &mut self,
         prefex_scope: &mut PrefexScope,
         session: &Session,
         namespace: &[String],
@@ -1487,6 +1503,11 @@ impl Database {
                     Type::Generic(DeBruijn(shift.try_into().unwrap()), *position)
                 }
                 ast::Name::Unresolved { path, identifier } => {
+                    println!("Resolving {:?} {:?} {:?}", namespace, path, identifier);
+                    println!("Prefex scope is");
+                    for (k, v) in prefex_scope.iter() {
+                        println!("{:?} {:?}", k, v);
+                    }
                     let id = self
                         .get_definition_id_by_unresolved_name(namespace, path, identifier)
                         .unwrap_or_else(|| {
@@ -1681,9 +1702,19 @@ impl Database {
         })
     }
 
-    pub fn unwrap_poly_type(
-        &self,
-        typ: &ast::Typ,
+    pub fn instances(&self) -> impl Iterator<Item = (LocalId<DefinitionId>, &InstanceInfo)> {
+        self.definitions.iter().filter_map(|(id, def)| match def {
+            Definition {
+                kind: DefinitionKind::Instance(c),
+                ..
+            } => Some((id.clone(), c)),
+            _ => None,
+        })
+    }
+
+    pub fn unwrap_poly_type<'a>(
+        &'a self,
+        typ: &'a ast::Typ,
     ) -> Option<(&[String], &[ast::TypeBound], &ast::Typ)> {
         match typ {
             ast::Typ::Poly {
