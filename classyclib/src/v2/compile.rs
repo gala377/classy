@@ -59,6 +59,7 @@ impl Compiler {
         self.database.lower_class_definitions(&self.session);
         self.database.lower_method_blocks(&self.session);
         self.database.lower_instances(&self.session);
+        self.database.lower_functions(&self.session);
         self.database.dump_all();
         //render::render_db(&self.database, "./render");
         Ok(())
@@ -148,5 +149,21 @@ impl Compiler {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+impl Compiler {
+    pub fn make_database(mut self) -> (Database, Session) {
+        self.parse_source_files().unwrap();
+        self.after_parsing_passes();
+        self.populate_db_definitions();
+        self.database.create_type_and_class_stumps(&self.session);
+        self.database.lower_type_definitions(&self.session);
+        self.database.lower_class_definitions(&self.session);
+        self.database.lower_method_blocks(&self.session);
+        self.database.lower_instances(&self.session);
+        self.database.lower_functions(&self.session);
+        (self.database, self.session)
     }
 }

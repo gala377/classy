@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::Hash};
+use std::{borrow::Borrow, collections::HashMap, hash::Hash};
 
 pub struct Scope<K, V> {
     stack: Vec<HashMap<K, V>>,
@@ -35,7 +35,11 @@ where
         self.stack.last_mut().unwrap().insert(key, value);
     }
 
-    pub fn get(&self, key: &K) -> Option<&V> {
+    pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V>
+    where
+        K: Borrow<Q>,
+        Q: Eq + Hash,
+    {
         for scope in self.stack.iter().rev() {
             if let Some(value) = scope.get(key) {
                 return Some(value);

@@ -691,6 +691,7 @@ impl Database {
         expanded_name.extend(path.iter().cloned());
         expanded_name.push(name.to_string());
         let expand_name = expanded_name.join("::");
+        println!("Expanded name {expand_name}");
         let Some(definition_id) = self.globals.get(&expand_name) else {
             return None;
         };
@@ -1518,11 +1519,15 @@ impl Database {
         self.add_definition(session, definition)
     }
 
+    pub fn lower_functions(&mut self, session: &Session) {
+        todo!();
+    }
+
     /// Translate ast type to ty::Type.
     ///
     /// Any type references are resolved to their type ids.
     /// Any builtin composite types are created fresh
-    fn ast_type_to_type_shallow(
+    pub fn ast_type_to_type_shallow(
         &mut self,
         session: &Session,
         prefex_scope: &mut PrefexScope,
