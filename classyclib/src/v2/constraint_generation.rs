@@ -298,12 +298,13 @@ mod tests {
     use self::knowledge::{Definition, DefinitionKind, LocalId, PackageInfo, TypeId};
 
     use super::*;
+    use crate::util::composition::Pipe;
     use crate::v2::compile::Compiler;
     use crate::v2::knowledge::Database;
     use classy_syntax::ast;
     use std::collections::HashMap;
 
-    const SOURCE: &str = r#"
+    const SOURCE_1: &str = r#"
         // import std::Int 
 
         type Foo {
@@ -364,11 +365,11 @@ mod tests {
         }
     }
 
-    fn setup_database() -> (Database, Session) {
+    fn setup_database(source: &str) -> (Database, Session) {
         let std_package = prepare_std_package();
         let compiler = Compiler::new(
             "test",
-            vec![("test".into(), SOURCE.into())],
+            vec![("test".into(), source.into())],
             vec![std_package],
         );
         let (db, sess) = compiler.make_database();
@@ -390,7 +391,7 @@ mod tests {
 
     #[test]
     fn infer_intlit() {
-        let (mut database, session) = setup_database();
+        let (mut database, session) = setup_database(SOURCE_1);
         let mut inferer = simple_inferer(&mut database, &session);
         let res = inferer.infer_expr(&ast::Expr {
             id: 0,
@@ -399,9 +400,21 @@ mod tests {
         assert_eq!(res, Type::Int);
     }
 
+    fn assert_types_eq(database: &Database, res: &Type, expected: &Type) {
+        if !database.types_strictly_eq(&res, &expected).unwrap() {
+            let resolved = if let Type::Alias(for_t) = res {
+                let id = database.resolve_alias(*for_t).unwrap();
+                database.resolve_tid(id).unwrap()
+            } else {
+                res.clone()
+            };
+            panic!("expected {expected:?} got {resolved:?}");
+        }
+    }
+
     #[test]
     fn infer_function_t() {
-        let (mut database, session) = setup_database();
+        let (mut database, session) = setup_database(SOURCE_1);
         let mut inferer = simple_inferer(&mut database, &session);
         let res = inferer.infer_expr(&ast::Expr {
             id: 0,
@@ -410,12 +423,54 @@ mod tests {
                 identifier: "foo".to_string(),
             }),
         });
-        assert_eq!(
-            res,
-            Type::Function {
-                args: vec![Type::Int, Type::Int],
-                ret: Box::new(Type::Int)
-            }
+        let expected = Type::Function {
+            args: vec![Type::Int, Type::Int],
+            ret: Box::new(Type::Int),
+        };
+        assert_types_eq(&database, &res, &expected);
+    }
+
+    const SOURCE_2: &str = r#"
+        namespace some::nested::name
+        type Foo {}
+
+        foo: (Foo) -> std::Int
+        foo a = ()
+    "#;
+
+    #[test]
+    fn infer_function_t_within_namespace() {
+        let (mut database, session) = setup_database(SOURCE_2);
+        let mut inferer = Inferer::new(
+            &session,
+            &mut database,
+            &["some", "nested", "name"]
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>(),
+            PrefexScope::new(),
+            Type::Unit,
         );
+        let res = inferer.infer_expr(&ast::Expr {
+            id: 0,
+            kind: ast::ExprKind::Name(ast::Name::Unresolved {
+                path: vec![],
+                identifier: "foo".to_string(),
+            }),
+        });
+        let foo_t = database
+            .get_global("some::nested::name::Foo")
+            .unwrap()
+            .pipe(|id| {
+                database
+                    .get_type(id.as_global(PackageId(0)))
+                    .cloned()
+                    .unwrap()
+            });
+        let expected = Type::Function {
+            args: vec![foo_t],
+            ret: Box::new(Type::Int),
+        };
+        assert_types_eq(&database, &res, &expected);
     }
 }

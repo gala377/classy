@@ -1520,7 +1520,55 @@ impl Database {
     }
 
     pub fn lower_functions(&mut self, session: &Session) {
-        todo!();
+        let function_definitions = self.function_definitions.clone();
+        for (
+            id,
+            ast::FunctionDefinition {
+                name,
+                typ,
+                parameters,
+                body,
+                attributes,
+            },
+        ) in function_definitions.iter()
+        {
+            let namespace = self.get_namespace(*id).to_vec();
+            let file = self.definitions.get(id).unwrap().file;
+            let mut prefex_scope = PrefexScope::new();
+            let mut f_bounds = Vec::new();
+            let mut f_free_vars = Vec::new();
+            let mut f_typ = typ.clone();
+            if let Some((free_variables, bounds, typ)) = self.unwrap_poly_type(&typ) {
+                f_bounds = bounds.into();
+                f_free_vars = free_variables.into();
+                f_typ = typ.clone();
+            }
+            prefex_scope.add_type_vars(&f_free_vars);
+            let f_typ =
+                self.ast_type_to_type_shallow(session, &mut prefex_scope, &namespace, &f_typ);
+            let f_constraints = f_bounds
+                .iter()
+                .map(|bound| {
+                    self.ast_type_bound_to_generic_constraint_shallow(
+                        session,
+                        &mut prefex_scope,
+                        bound,
+                        &namespace,
+                    )
+                })
+                .collect::<Vec<_>>();
+            prefex_scope.pop_scope();
+            let ty = self.create_type(session, f_typ);
+            let instance = self.definitions.get_mut(id).unwrap();
+            *instance = Definition {
+                kind: DefinitionKind::Function,
+                constraints: f_constraints,
+                ty,
+                file,
+                implicit_imports: Vec::new(),
+                ..instance.clone()
+            };
+        }
     }
 
     /// Translate ast type to ty::Type.
