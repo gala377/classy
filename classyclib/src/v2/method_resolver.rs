@@ -35,7 +35,7 @@ impl MethodResolver {
         // 1. check if type is concrete (meaning no fresh variables within it)
         // 2. if it is, create a blackboard query
         //   under constraints in scope
-        //      find method with the given name of the receiver
+        //      find method with the given name for the receiver
         //   if not found, return error
         //   if found find the most specific method and return it
         todo!()
