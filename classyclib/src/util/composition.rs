@@ -31,4 +31,13 @@ mod tests {
         let result = (|x| x + 1).compose(|x| x * 2)(1);
         assert_eq!(result, 4);
     }
+
+    #[test]
+    fn test_compose_with_local_function() {
+        fn add_one(x: i32) -> i32 {
+            x + 1
+        }
+        let result = add_one.compose(|x| x * 2);
+        assert_eq!(result(1), 4);
+    }
 }

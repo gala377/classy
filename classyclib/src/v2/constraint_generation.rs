@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use classy_syntax::ast;
 
@@ -25,6 +25,11 @@ enum Constraint {
     HasCase {
         ty: Type,
         case: String,
+        of_type: Type,
+    },
+    HasMethod {
+        receiver: Type,
+        method: String,
         of_type: Type,
     },
 }
@@ -142,7 +147,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                     ret: Box::new(ret_ty.clone()),
                 };
                 self.add_constraint(Constraint::Eq(func_ty, inferred_func_ty.clone()));
-                inferred_func_ty
+                ret_ty
             }
             ast::ExprKind::Access { val, field } => {
                 let val_ty = self.infer_expr(val);
@@ -200,7 +205,56 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                 self.add_constraint(Constraint::Eq(expr_ty, ty.clone()));
                 ty
             }
-            ast::ExprKind::StructLiteral { strct, values } => todo!(),
+            ast::ExprKind::StructLiteral { strct, values } => {
+                let ret = self.new_fresh_type();
+                let mut strct_t = match strct {
+                    ast::Name::Unresolved { path, identifier } => self
+                        .database
+                        .get_type_by_unresolved_name(&self.current_namespace, path, &identifier)
+                        .cloned()
+                        .expect(&format!(
+                            "Name {path:?}::{identifier} not found in database"
+                        )),
+                    ast::Name::Global {
+                        package,
+                        definition,
+                    } => {
+                        let package = PackageId(*package);
+                        let definition = DefinitionId(*definition);
+                        let id = Id {
+                            package,
+                            id: definition,
+                        };
+                        self.database.get_type(id).cloned().unwrap()
+                    }
+                    ast::Name::Local(name) => panic!("What are you trying to do exaclty?"),
+                };
+                self.add_constraint(Constraint::Eq(ret.clone(), strct_t.clone()));
+                if let Type::Alias(for_t) = strct_t {
+                    let tid = self.database.resolve_alias(for_t).unwrap();
+                    strct_t = self.database.resolve_tid(tid).unwrap();
+                }
+                let Type::Struct { def, fields } = strct_t else {
+                    panic!("Expected struct type, got {strct_t:?}");
+                };
+                let seen_fields = values.keys().collect::<HashSet<_>>();
+                let actual_fields = fields.iter().map(|(name, _)| name).collect::<HashSet<_>>();
+                if seen_fields != actual_fields {
+                    panic!(
+                        "Expected fields {actual_fields:?}, got {seen_fields:?} in struct literal"
+                    );
+                }
+                for (name, expr) in values {
+                    let expr_ty = self.infer_expr(expr);
+                    let field_ty = fields
+                        .iter()
+                        .find(|(field_name, _)| field_name == name)
+                        .map(|(_, ty)| ty.clone())
+                        .expect(&format!("Field {name} not found in struct {def:?}"));
+                    self.add_constraint(Constraint::Eq(expr_ty, field_ty));
+                }
+                ret
+            }
             ast::ExprKind::AdtTupleConstructor {
                 typ,
                 constructor,
@@ -211,7 +265,32 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                 constructor,
                 fields,
             } => todo!(),
-            ast::ExprKind::AdtUnitConstructor { typ, constructor } => todo!(),
+            ast::ExprKind::AdtUnitConstructor { typ, constructor } => {
+                let ret = self.new_fresh_type();
+                let mut strct_t = match typ {
+                    ast::Name::Unresolved { path, identifier } => self
+                        .database
+                        .get_type_by_unresolved_name(&self.current_namespace, path, &identifier)
+                        .cloned()
+                        .expect(&format!(
+                            "Name {path:?}::{identifier} not found in database"
+                        )),
+                    ast::Name::Global {
+                        package,
+                        definition,
+                    } => {
+                        let package = PackageId(*package);
+                        let definition = DefinitionId(*definition);
+                        let id = Id {
+                            package,
+                            id: definition,
+                        };
+                        self.database.get_type(id).cloned().unwrap()
+                    }
+                    ast::Name::Local(name) => panic!("What are you trying to do exaclty?"),
+                };
+                todo!()
+            }
             ast::ExprKind::While { cond, body } => {
                 let cond_ty = self.infer_expr(cond);
                 self.add_constraint(Constraint::Eq(cond_ty, Type::Bool));
@@ -230,7 +309,24 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                 cond,
                 body,
                 else_body,
-            } => todo!(),
+            } => {
+                let cond_ty = self.infer_expr(cond);
+                self.add_constraint(Constraint::Eq(cond_ty, Type::Bool));
+                self.scope.new_scope();
+                let body_ty = self.infer_expr(body);
+                self.scope.pop_scope();
+                if let Some(else_body) = else_body {
+                    self.scope.new_scope();
+                    let else_ty = self.infer_expr(else_body);
+                    self.scope.pop_scope();
+                    self.add_constraint(Constraint::Eq(body_ty, else_ty));
+                }
+                if else_body.is_some() {
+                    body_ty
+                } else {
+                    Type::Unit
+                }
+            }
             ast::ExprKind::Let { name, typ, init } => {
                 let init_ty = self.infer_expr(init);
                 self.scope.add_variable(name.clone(), init_ty.clone());
@@ -286,10 +382,53 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                 method,
                 args,
                 kwargs,
-            } => todo!(),
+            } => {
+                let receiver_ty = self.infer_expr(receiver);
+                let arg_tys = args.iter().map(|arg| self.infer_expr(arg)).collect();
+                let ret_ty = self.new_fresh_type();
+                let inferred_func_ty = Type::Function {
+                    args: arg_tys,
+                    ret: Box::new(ret_ty.clone()),
+                };
+                self.add_constraint(Constraint::HasMethod {
+                    receiver: receiver_ty,
+                    method: method.clone(),
+                    of_type: inferred_func_ty.clone(),
+                });
+                ret_ty
+            }
         };
         self.add_expr_type(ExprId(*id), ty.clone());
         ty
+    }
+
+    fn resolve_type_by_name(&self, name: &ast::Name) -> Type {
+        match name {
+            ast::Name::Unresolved { path, identifier } => self
+                .database
+                .get_type_by_unresolved_name(&self.current_namespace, path, &identifier)
+                .cloned()
+                .expect(&format!(
+                    "Name {path:?}::{identifier} not found in database"
+                )),
+            ast::Name::Global {
+                package,
+                definition,
+            } => {
+                let package = PackageId(*package);
+                let definition = DefinitionId(*definition);
+                let id = Id {
+                    package,
+                    id: definition,
+                };
+                self.database.get_type(id).cloned().unwrap()
+            }
+            ast::Name::Local(name) => self
+                .scope
+                .get_variable(name)
+                .cloned()
+                .expect(&format!("Variable {name} not found in scope")),
+        }
     }
 }
 
