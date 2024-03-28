@@ -28,6 +28,19 @@ pub fn main() {
         constraints: vec![],
         members: vec![],
     });
+    let allow_debug = database.add_class(TypeClass {
+        name: "AllowDebug".to_string(),
+        type_params: vec!["a".into()],
+        constraints: vec![],
+        members: vec![],
+    });
+
+    let allow_debug_instance = database.add_instance(Instance {
+        type_class: allow_debug,
+        args: vec![Ty::Ref(int)],
+        type_params: vec![],
+        constraints: vec![],
+    });
     let debug = database.add_class(TypeClass {
         name: "Debug".to_string(),
         type_params: vec!["a".into()],
@@ -45,13 +58,22 @@ pub fn main() {
             index: 0,
         }],
         type_params: vec!["a".into()],
-        constraints: vec![Constraint::Class(
-            show,
-            vec![Ty::Generic {
-                scopes: 0,
-                index: 0,
-            }],
-        )],
+        constraints: vec![
+            Constraint::Class(
+                show,
+                vec![Ty::Generic {
+                    scopes: 0,
+                    index: 0,
+                }],
+            ),
+            Constraint::Class(
+                allow_debug,
+                vec![Ty::Generic {
+                    scopes: 0,
+                    index: 0,
+                }],
+            ),
+        ],
     });
     database.add_method_block(MethodsBlock {
         name: None,
@@ -179,37 +201,6 @@ pub fn main() {
         name: "debug".into(),
         on_type: Ty::Ref(int),
     });
-    /*
-    What we have:
-
-    ```
-    result 0:
-    yes
-    answer origin: Some(MethodBlock(MethodBlockRef(0)))
-    substitution origins: {9: Some(MethodBlock(MethodBlockRef(0)))}
-    ```
-    This tells us that the method has been found in the method block 0.
-    And that we got substitution for the existential variable 9 from the method block 0.
-    However this method block looks like so.
-
-    methods for { Debug(a) } => a { debug() -> Int }
-
-    So we know we can use this method block, and we could substitute the type for Int
-    but now we need to find Debug(Int) which comes from
-
-    instance for { Show(a) } => Debug(a)
-
-    And this is proven by
-
-    instance for Show(Int)
-
-    Ideally we would like to have evidence chain that tells us that
-
-    *1. Method is in the method block Debug(a) => a (this we have)
-    2. Debug(Int) is proven with instance Show(a) => Debug(a)
-    3. Show(Int) is proven with instance Show(Int)
-
-     */
     let solver = SlgSolver::new(&database, &mut forest, query);
     let results = solver.take(10).collect::<Vec<_>>();
     println!("\n\n\n\n");
@@ -217,6 +208,8 @@ pub fn main() {
     println!("Int -> {int:?}");
     println!("forall a. Debug(a) -> {debug_instanace:?}");
     println!("Show(Int) -> {int_show_instance:?}");
+    println!("AllowDebug(Int) -> {allow_debug_instance:?}");
+
     if results.is_empty() {
         println!("no results");
     }
