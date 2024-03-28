@@ -668,7 +668,7 @@ impl<'db, 'forest> Iterator for SlgSolver<'db, 'forest> {
 pub struct Answer {
     pub subst: Substitution,
     pub origin: Option<GenericRef>,
-    /// Maps constraints to their respective answers the reverse order of their
-    /// appearence at the definition
+    /// Maps constraints to their respective answers in the reverse order of
+    /// their appearence at the definition
     pub evidence: Vec<Answer>,
 }
