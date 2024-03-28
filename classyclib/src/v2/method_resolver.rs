@@ -1,7 +1,9 @@
 use crate::v2::knowledge::DefinitionId;
 
+use classy_blackboard as blackboard;
+
 use super::{
-    knowledge::{GenericConstraint, Id},
+    knowledge::{self, GenericConstraint, Id},
     ty::Type,
 };
 
@@ -9,11 +11,17 @@ struct ResolvedMethod {
     def_id: Id<DefinitionId>,
 }
 
-struct MethodResolutionError;
+#[derive(Debug)]
+pub enum MethodResolutionError {
+    ReceiverNotResolved(Type),
+}
 
-struct MethodResolver;
+struct MethodResolver<'db> {
+    database: &'db knowledge::Database,
+    blackboard_database: blackboard::Database,
+}
 
-impl MethodResolver {
+impl<'db> MethodResolver<'db> {
     pub fn within_function(
         constraints_in_scope: Vec<GenericConstraint>,
         visible_instances: Vec<Id<DefinitionId>>,
@@ -32,12 +40,33 @@ impl MethodResolver {
         receiver: &Type,
         method: &str,
     ) -> Result<ResolvedMethod, MethodResolutionError> {
-        // 1. check if type is concrete (meaning no fresh variables within it)
+        if !self.database.is_resolved_type(receiver) {
+            return Err(MethodResolutionError::ReceiverNotResolved(receiver.clone()));
+        }
+
         // 2. if it is, create a blackboard query
         //   under constraints in scope
         //      find method with the given name for the receiver
         //   if not found, return error
         //   if found find the most specific method and return it
+        let query = self.create_blackboard_query(method, receiver);
+        todo!()
+    }
+
+    fn create_blackboard_query(&self, method: &str, receiver: &Type) -> blackboard::Goal {
+        //   under constraints in scope
+        //      find method with the given name for the receiver
+        //   if not found, return error
+        //   if found find the most specific method and return it
+        let receiver_as_blackboard_type = self.to_blackboard_type(receiver);
+        let query = blackboard::Goal::Domain(blackboard::DomainGoal::FindMethod {
+            name: method.to_owned(),
+            on_type: receiver_as_blackboard_type,
+        });
+        todo!()
+    }
+
+    fn to_blackboard_type(&self, _ty: &Type) -> blackboard::Ty {
         todo!()
     }
 }

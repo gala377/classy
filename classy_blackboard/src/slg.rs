@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 
-use tracing::info;
+use tracing::{debug, info, warn};
 
 use crate::{
     database::{Database, GenericRef, MatchResult, UniverseIndex, VariableContext},
@@ -86,6 +86,7 @@ struct Strand {
     selected_subgoal: Option<SelectedSubgoal>,
     origin: Option<GenericRef>,
     labeling: Vec<UniverseIndex>,
+    evidence: Vec<Answer>,
 }
 
 #[derive(Clone)]
@@ -236,29 +237,36 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
         let max_var = unmap.len();
         let res = self.ensure_answer(self.next_answer, canonical_goal);
         self.next_answer += 1;
-        let res = res.map(|Answer { subst, origin }| {
-            let new_mapping = subst
-                .mapping
-                .iter()
-                .map(|(var, ty)| (var.clone(), ty.clone()))
-                .filter(|(var, val)| {
-                    if var >= &max_var {
-                        return false;
-                    }
-                    if let Ty::SynthesizedConstant(_) = val {
-                        return false;
-                    }
-                    return true;
-                })
-                .collect::<HashMap<_, _>>();
-            Answer {
-                subst: Substitution {
-                    mapping: new_mapping,
-                    origins: subst.origins,
-                },
-                origin,
-            }
-        });
+        let res = res.map(
+            |Answer {
+                 subst,
+                 origin,
+                 evidence,
+             }| {
+                let new_mapping = subst
+                    .mapping
+                    .iter()
+                    .map(|(var, ty)| (var.clone(), ty.clone()))
+                    .filter(|(var, val)| {
+                        if var >= &max_var {
+                            return false;
+                        }
+                        if let Ty::SynthesizedConstant(_) = val {
+                            return false;
+                        }
+                        return true;
+                    })
+                    .collect::<HashMap<_, _>>();
+                Answer {
+                    subst: Substitution {
+                        mapping: new_mapping,
+                        origins: subst.origins,
+                    },
+                    origin,
+                    evidence,
+                }
+            },
+        );
         res
     }
 
@@ -333,6 +341,7 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                 selected_subgoal: None,
                 origin,
                 labeling: goal.labeling_function.clone(),
+                evidence: vec![],
             });
         }
         table_index
@@ -395,12 +404,12 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                 .unwrap();
             // Get the answer to the goal. The answer are substitutions. For example:
             // 1 -> Int, meaning that replacing var 1 for Int is the answer.
-            let subst = match self.ensure_answer_from_table(
+            let answer = match self.ensure_answer_from_table(
                 selected_subgoal.next_answer,
                 selected_subgoal.table_index,
             ) {
                 // We just got an answer to this subgoal, and the answer is this mapping
-                AnswerRes::Answer(subst) => subst,
+                AnswerRes::Answer(answer) => answer,
                 // Skip to the next iteration, new table has been pushed to the stack
                 AnswerRes::SolveUsingStackTop => continue,
                 AnswerRes::NoMoreAnswers => {
@@ -429,9 +438,9 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                 });
             // Remap the answer to the original goal
             let mut generic_mapping = HashMap::new();
-            for (binder_index, ty) in subst.subst.mapping {
-                uncanonilize_mapping.get(binder_index).map(|index| {
-                    generic_mapping.insert(*index, ty);
+            for (binder_index, ty) in &answer.subst.mapping {
+                uncanonilize_mapping.get(*binder_index).map(|index| {
+                    generic_mapping.insert(*index, ty.clone());
                 });
             }
             // Create a new exclause for the table to prove
@@ -448,7 +457,7 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                 &self.forest.tables[stack_entry.table_index].strands[active_strand_index].subst,
                 &generic_mapping,
             );
-            // Create a new strand that has new exclause to prove an well
+            // Create a new strand that has new exclause to prove as well
             // as the new merged substitutions.
             let new_strand = Strand {
                 subst: new_subst,
@@ -461,6 +470,15 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                 labeling: self.forest.tables[stack_entry.table_index].strands[active_strand_index]
                     .labeling
                     .clone(),
+                evidence: {
+                    let mut evidence = self.forest.tables[stack_entry.table_index].strands
+                        [active_strand_index]
+                        .evidence
+                        .clone();
+                    evidence.push(answer.clone());
+                    warn!("Making new strand with evidence: {:?}", evidence);
+                    evidence
+                },
             };
             self.forest.tables[stack_entry.table_index]
                 .strands
@@ -505,6 +523,9 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
             let origin = self.forest.tables[stack_entry.table_index].strands[strand_index]
                 .origin
                 .clone();
+            let evidence = self.forest.tables[stack_entry.table_index].strands[strand_index]
+                .evidence
+                .clone();
             let mut substitutor = VariableSubstitutor {
                 substitutions: &unmap,
             };
@@ -522,7 +543,11 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                 .remove(strand_index)
                 .unwrap();
             // push the substitutions as the answer
-            let answer = Answer { subst, origin };
+            let answer = Answer {
+                subst,
+                origin,
+                evidence,
+            };
             self.forest.tables[stack_entry.table_index]
                 .answers
                 .push(answer.clone());
@@ -643,4 +668,7 @@ impl<'db, 'forest> Iterator for SlgSolver<'db, 'forest> {
 pub struct Answer {
     pub subst: Substitution,
     pub origin: Option<GenericRef>,
+    /// Maps constraints to their respective answers in the order they appeared
+    /// in
+    pub evidence: Vec<Answer>,
 }

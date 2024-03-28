@@ -779,6 +779,11 @@ impl Database {
         }
     }
 
+    pub fn resolve_alias_to_type(&self, typ: Id<TypeId>) -> Result<Type, QueryError> {
+        let resolved = self.resolve_alias(typ)?;
+        self.resolve_tid(resolved)
+    }
+
     /// Check if 2 types are structuraly equal. This means no instantiation or
     /// union is happening. Aliases get resolved before comparison.
     pub fn types_strictly_eq(&self, t1: &Type, t2: &Type) -> Result<bool, QueryError> {
@@ -1841,6 +1846,25 @@ impl Database {
                 typ,
             } => Some((free_variables.as_slice(), bounds.as_slice(), typ)),
             _ => None,
+        }
+    }
+
+    pub fn is_resolved_type(&self, t: &Type) -> bool {
+        match t {
+            Type::Fresh(_) | Type::ToInfere => false,
+            // recursively check if there is Fresh type within the typ
+            Type::Struct { .. } | Type::ADT { .. } => true,
+            Type::Function { args, ret } => {
+                args.iter().all(|t| self.is_resolved_type(t)) && self.is_resolved_type(ret)
+            }
+            Type::Tuple(args) => args.iter().all(|t| self.is_resolved_type(t)),
+            Type::Array(inner) => self.is_resolved_type(inner),
+            Type::Alias(tid) => self.is_resolved_type(&self.resolve_alias_to_type(*tid).unwrap()),
+            Type::App { typ, args } => {
+                self.is_resolved_type(typ) && args.iter().all(|t| self.is_resolved_type(t))
+            }
+            Type::Scheme { typ, .. } => self.is_resolved_type(typ),
+            _ => true,
         }
     }
 }

@@ -31,7 +31,7 @@ impl UniverseIndex {
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct DefId(usize);
+pub struct DefId(pub usize);
 
 /// All type information necessary for inference
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -131,8 +131,9 @@ impl Database {
         ClassRef(self.type_classes.len() - 1)
     }
 
-    pub fn add_instance(&mut self, instance: Instance) {
+    pub fn add_instance(&mut self, instance: Instance) -> InstanceRef {
         self.instances.push(instance);
+        InstanceRef(self.instances.len() - 1)
     }
 
     pub fn add_method_block(&mut self, method_block: MethodsBlock) -> MethodBlockRef {

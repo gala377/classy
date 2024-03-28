@@ -11,6 +11,10 @@ mod fold;
 mod normalizer;
 mod substitutor;
 
+pub use database::Database;
+pub use goal::{DomainGoal, Goal};
+pub use ty::Ty;
+
 #[cfg(test)]
 mod tests {
 
