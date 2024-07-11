@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::v2::knowledge::DefinitionId;
+use crate::{typecheck::types::DeBruijn, v2::knowledge::DefinitionId};
 
 use classy_blackboard as blackboard;
 
@@ -30,6 +30,8 @@ struct MethodResolver<'db> {
 }
 
 impl<'db> MethodResolver<'db> {
+    /// create blackboard database for the given function
+    /// using definitions in scope and function constraints
     pub fn within_function(
         database: &'db knowledge::Database,
         constraints_in_scope: Vec<GenericConstraint>,
@@ -38,8 +40,6 @@ impl<'db> MethodResolver<'db> {
         visible_types: Vec<Id<DefinitionId>>,
         classes: Vec<Id<DefinitionId>>,
     ) -> Self {
-        // create blackboard database for the given function
-        // using visible instances, method blocks and functions
         let mut blackboard_database = blackboard::Database::new();
         let class_to_class_id = Self::reserve_classes(database, &mut blackboard_database, &classes);
         let type_to_type_id =
@@ -113,7 +113,10 @@ impl<'db> MethodResolver<'db> {
                 name: resolved_class.name.clone(),
                 type_params,
                 constraints,
-                members: todo!("RESOLVE MEMBERS"),
+                // ! I am pretty sure this does not matter as we only resolve methods
+                // ! from method blocks and instance definitions so we will never look at
+                // ! the members of the class
+                members: Vec::new(),
             };
             bdb.replace_class(class_ref, class_def);
         }
@@ -169,6 +172,8 @@ impl<'db> MethodResolver<'db> {
                 name: resolved_ty.name.clone(),
                 type_params,
                 constraints,
+                // ! I don't think we will ever look at the fields when resolving
+                // ! methods so this is fine I think
                 fields: Vec::new(),
             };
             bdb.replace_type_impl(type_ref, type_def);
@@ -208,8 +213,68 @@ impl<'db> MethodResolver<'db> {
         todo!()
     }
 
-    fn to_blackboard_type(&self, _ty: &Type) -> blackboard::Ty {
-        todo!()
+    fn to_blackboard_type(&self, ty: &Type) -> blackboard::Ty {
+        match ty {
+            // blackbooard does not know about basic types so we need to
+            // return a type ref to them if we added them before.
+            Type::Int => todo!(),
+            Type::UInt => todo!(),
+            Type::Bool => todo!(),
+            Type::String => todo!(),
+            Type::Float => todo!(),
+            Type::Unit => todo!(),
+            Type::Byte => todo!(),
+            Type::Struct { def, .. } => {
+                blackboard::Ty::Ref(self.type_to_type_id.get(def).unwrap().clone())
+            }
+            Type::ADT { def, .. } => {
+                blackboard::Ty::Ref(self.type_to_type_id.get(def).unwrap().clone())
+            }
+            Type::Function { args, ret } => {
+                let args = args
+                    .iter()
+                    .map(|t| self.to_blackboard_type(t))
+                    .collect::<Vec<_>>();
+                let ret = self.to_blackboard_type(ret);
+                blackboard::Ty::Fn(args, Box::new(ret))
+            }
+            Type::Tuple(inner) => {
+                let inner = inner
+                    .iter()
+                    .map(|t| self.to_blackboard_type(t))
+                    .collect::<Vec<_>>();
+                blackboard::Ty::Tuple(inner)
+            }
+            Type::Array(inner) => {
+                let inner = self.to_blackboard_type(inner);
+                blackboard::Ty::Array(Box::new(inner))
+            }
+            Type::Alias(id) => {
+                let t = self.database.resolve_alias_to_type(id.clone()).unwrap();
+                self.to_blackboard_type(&t)
+            }
+
+            Type::App { typ, args } => {
+                let typ = self.to_blackboard_type(typ);
+                let args = args
+                    .iter()
+                    .map(|t| self.to_blackboard_type(t))
+                    .collect::<Vec<_>>();
+                blackboard::Ty::App(Box::new(typ), args)
+            }
+            Type::Generic(DeBruijn(scopes), index) => blackboard::Ty::Generic {
+                scopes: *scopes as usize,
+                index: *index,
+            },
+            Type::Scheme { typ, .. } => {
+                // ! This is like 99% incorrect to ignore the prefex but oh well.
+                // ! I want to get somewhere, i will fix it later
+                self.to_blackboard_type(typ)
+            }
+            Type::Divergent => panic!("Divergent type should not be resolved"),
+            Type::ToInfere => panic!("ToInfere type should not be resolved"),
+            Type::Fresh(_) => panic!("Fresh type should not be resolved"),
+        }
     }
 }
 
