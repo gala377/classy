@@ -1,7 +1,5 @@
 use classy_blackboard::{
-    database::{
-        Database, DefId, Definition, GenericRef, Instance, MethodsBlock, TypeClass, TypeImpl,
-    },
+    database::{Database, DefId, Definition, Instance, MethodsBlock, TypeClass, TypeImpl},
     goal::{DomainGoal, Goal},
     slg::{Answer, Forest, SlgSolver},
     ty::{Constraint, Ty},

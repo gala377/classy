@@ -200,6 +200,7 @@ pub struct MethodBlockInfo {
     pub receiver: Id<TypeId>,
     /// Methods definitions
     pub methods: Vec<MethodHandle>,
+    pub free_vars: Vec<String>,
 }
 
 impl MethodBlockInfo {
@@ -208,6 +209,7 @@ impl MethodBlockInfo {
             name: None,
             receiver: Id::dummy(),
             methods: Vec::new(),
+            free_vars: Vec::new(),
         }
     }
 }
@@ -271,6 +273,13 @@ impl DefinitionKind {
     pub fn as_instance(&self) -> Option<&InstanceInfo> {
         match self {
             Self::Instance(info) => Some(info),
+            _ => None,
+        }
+    }
+
+    pub fn as_method(&self) -> Option<&MethodInfo> {
+        match self {
+            Self::Method(info) => Some(info),
             _ => None,
         }
     }
@@ -1201,6 +1210,7 @@ impl Database {
                                 name: None,
                                 receiver: receiver.as_global(CURRENT_PACKAGE_ID),
                                 methods: vec![],
+                                free_vars: block_free_vars,
                             }),
                             constraints: vec![],
                             ty: receiver.clone(),
@@ -1333,6 +1343,7 @@ impl Database {
                 kind: DefinitionKind::MethodBlock(MethodBlockInfo {
                     receiver,
                     methods: block_methods,
+                    free_vars: block_free_vars,
                     name: if method_block.name.is_empty() {
                         None
                     } else {
@@ -1444,6 +1455,7 @@ impl Database {
                                 name: None,
                                 receiver: receiver.as_global(CURRENT_PACKAGE_ID),
                                 methods: vec![],
+                                free_vars: block_free_vars,
                             }),
                             constraints: vec![],
                             ty: receiver.clone(),
