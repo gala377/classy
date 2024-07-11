@@ -9,7 +9,8 @@ use super::{
     ty::Type,
 };
 
-struct ResolvedMethod {
+#[derive(Debug)]
+pub struct ResolvedMethod {
     def_id: Id<DefinitionId>,
 }
 
@@ -454,6 +455,16 @@ mod tests {
             baz () {} 
         }
 
+        type Bar(a) {}
+
+        methods for Bar(a) {
+            foo: () -> Bar(a)
+            foo () {}
+
+            bar: () -> a 
+            bar () {}
+        }
+
     "#;
 
     fn prepare_std_package() -> PackageInfo {
@@ -575,6 +586,63 @@ mod tests {
             .get_definition_map(res_id, |def| def.clone())
             .unwrap();
         assert_eq!(definition.name, "baz");
+        assert!(matches!(definition.kind, DefinitionKind::Method(_)));
+    }
+
+    #[test]
+    fn simple_resolve_methods_generic() {
+        let (database, _) = setup_database(SOURCE_1);
+        let types = database
+            .type_definitions
+            .keys()
+            .cloned()
+            .map(|id| id.as_global(CURRENT_PACKAGE_ID))
+            .collect();
+
+        let method_blocks = database
+            .method_blocks_definitions
+            .keys()
+            .cloned()
+            .map(|id| id.as_global(CURRENT_PACKAGE_ID))
+            .collect();
+        let mut resolver = MethodResolver::within_function(
+            &database,
+            Vec::new(),
+            Vec::new(),
+            method_blocks,
+            types,
+            Vec::new(),
+        );
+        let receiver = database
+            .get_type_by_unresolved_name(&[], &[], "Bar")
+            .unwrap();
+        let receiver = Type::App {
+            typ: Box::new(receiver.clone()),
+            args: vec![database
+                .get_type_by_unresolved_name(&[], &[], "Foo")
+                .unwrap()
+                .clone()],
+        };
+        let res = resolver.resolve_method(&receiver, "bar");
+        println!("{:?}", res);
+        let res = res.unwrap();
+        let res_id = res.def_id;
+        let definition = database
+            .get_definition_map(res_id, |def| def.clone())
+            .unwrap();
+        println!("{:?}", definition);
+        assert_eq!(definition.name, "bar");
+        assert!(matches!(definition.kind, DefinitionKind::Method(_)));
+
+        let res = resolver.resolve_method(&receiver, "foo");
+        println!("{:?}", res);
+        let res = res.unwrap();
+        let res_id = res.def_id;
+        let definition = database
+            .get_definition_map(res_id, |def| def.clone())
+            .unwrap();
+        println!("{:?}", definition);
+        assert_eq!(definition.name, "foo");
         assert!(matches!(definition.kind, DefinitionKind::Method(_)));
     }
 }
