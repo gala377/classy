@@ -22,7 +22,7 @@ struct MethodResolver<'db> {
     database: &'db knowledge::Database,
     blackboard_database: blackboard::Database,
 
-    constarints_in_scope: Vec<GenericConstraint>,
+    constarints_in_scope: Vec<blackboard::ty::Constraint>,
 
     class_to_class_id: HashMap<Id<DefinitionId>, blackboard::ty::ClassRef>,
     instance_to_instance_id: HashMap<Id<DefinitionId>, blackboard::ty::InstanceRef>,
@@ -42,20 +42,24 @@ impl<'db> MethodResolver<'db> {
         // using visible instances, method blocks and functions
         let mut blackboard_database = blackboard::Database::new();
         let class_to_class_id = Self::reserve_classes(database, &mut blackboard_database, &classes);
-        let instance_to_instance_id =
-            Self::reserve_types(database, &mut blackboard_database, visible_types);
+        let type_to_type_id =
+            Self::reserve_types(database, &mut blackboard_database, &visible_types);
         Self::add_classes(
             database,
             &mut blackboard_database,
             &classes,
             &class_to_class_id,
         );
-
-        todo!(
-            "1. Add type impls, 2. Add instances, 3. Add method blocks, 4. Translate constraints \
-             and store them"
+        Self::add_types(
+            database,
+            &mut blackboard_database,
+            &visible_types,
+            &type_to_type_id,
+            &class_to_class_id,
         );
+
         blackboard_database.lower_to_clauses();
+        todo!(" 1. Add instances, 2. Add method blocks, 3. Translate constraints and store them");
     }
 
     fn reserve_classes(
@@ -75,18 +79,18 @@ impl<'db> MethodResolver<'db> {
     fn reserve_types(
         db: &knowledge::Database,
         bdb: &mut blackboard::Database,
-        types: Vec<Id<DefinitionId>>,
+        types: &[Id<DefinitionId>],
     ) -> HashMap<Id<DefinitionId>, blackboard::ty::TyRef> {
         let mut type_to_type_id = HashMap::new();
         for ty in types {
             let resolved_ty = db
-                .get_definition_map(ty, |def| {
+                .get_definition_map(ty.clone(), |def| {
                     assert!(matches!(def.kind, knowledge::DefinitionKind::Type));
                     def.name.clone()
                 })
                 .unwrap();
             let type_id = bdb.reserve_type_impl(&resolved_ty);
-            type_to_type_id.insert(ty, type_id);
+            type_to_type_id.insert(ty.clone(), type_id);
         }
         type_to_type_id
     }
@@ -138,6 +142,37 @@ impl<'db> MethodResolver<'db> {
             res.push(blackboard::ty::Constraint::Class(class_ref.clone(), args));
         }
         res
+    }
+
+    fn add_types(
+        db: &knowledge::Database,
+        bdb: &mut blackboard::Database,
+        types: &[Id<DefinitionId>],
+        type_to_type_id: &HashMap<Id<DefinitionId>, blackboard::ty::TyRef>,
+        class_to_class_id: &HashMap<Id<DefinitionId>, blackboard::ty::ClassRef>,
+    ) {
+        for ty in types {
+            let resolved_ty = db
+                .get_definition_map(ty.clone(), |def| def.clone())
+                .unwrap();
+            let type_ref = type_to_type_id.get(ty).unwrap().clone();
+            let type_params = {
+                let t = db.get_type(ty.clone()).unwrap();
+                match t {
+                    Type::Scheme { prefex, .. } => prefex.clone(),
+                    _ => Vec::new(),
+                }
+            };
+            let constraints =
+                Self::translate_constraints(class_to_class_id, &resolved_ty.constraints);
+            let type_def = blackboard::database::TypeImpl {
+                name: resolved_ty.name.clone(),
+                type_params,
+                constraints,
+                fields: Vec::new(),
+            };
+            bdb.replace_type_impl(type_ref, type_def);
+        }
     }
 
     // For free function calls within methods the receiver should
