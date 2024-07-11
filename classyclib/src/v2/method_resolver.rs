@@ -1,9 +1,11 @@
+use std::collections::HashMap;
+
 use crate::v2::knowledge::DefinitionId;
 
 use classy_blackboard as blackboard;
 
 use super::{
-    knowledge::{self, GenericConstraint, Id},
+    knowledge::{self, GenericConstraint, Id, InstanceInfo},
     ty::Type,
 };
 
@@ -19,18 +21,123 @@ pub enum MethodResolutionError {
 struct MethodResolver<'db> {
     database: &'db knowledge::Database,
     blackboard_database: blackboard::Database,
+
+    constarints_in_scope: Vec<GenericConstraint>,
+
+    class_to_class_id: HashMap<Id<DefinitionId>, blackboard::ty::ClassRef>,
+    instance_to_instance_id: HashMap<Id<DefinitionId>, blackboard::ty::InstanceRef>,
+    type_to_type_id: HashMap<Id<DefinitionId>, blackboard::ty::TyRef>,
 }
 
 impl<'db> MethodResolver<'db> {
     pub fn within_function(
+        database: &'db knowledge::Database,
         constraints_in_scope: Vec<GenericConstraint>,
         visible_instances: Vec<Id<DefinitionId>>,
         visible_method_blocks: Vec<Id<DefinitionId>>,
-        visible_functions: Vec<Id<DefinitionId>>,
+        visible_types: Vec<Id<DefinitionId>>,
+        classes: Vec<Id<DefinitionId>>,
     ) -> Self {
         // create blackboard database for the given function
         // using visible instances, method blocks and functions
-        todo!()
+        let mut blackboard_database = blackboard::Database::new();
+        let class_to_class_id = Self::reserve_classes(database, &mut blackboard_database, &classes);
+        let instance_to_instance_id =
+            Self::reserve_types(database, &mut blackboard_database, visible_types);
+        Self::add_classes(
+            database,
+            &mut blackboard_database,
+            &classes,
+            &class_to_class_id,
+        );
+
+        todo!(
+            "1. Add type impls, 2. Add instances, 3. Add method blocks, 4. Translate constraints \
+             and store them"
+        );
+        blackboard_database.lower_to_clauses();
+    }
+
+    fn reserve_classes(
+        db: &knowledge::Database,
+        bdb: &mut blackboard::Database,
+        classes: &[Id<DefinitionId>],
+    ) -> HashMap<Id<DefinitionId>, blackboard::ty::ClassRef> {
+        let mut class_to_class_id = HashMap::new();
+        for class in classes {
+            let resolved_class = db.get_class(class.clone()).unwrap();
+            let class_id = bdb.reserve_class(&resolved_class.name);
+            class_to_class_id.insert(class.clone(), class_id);
+        }
+        class_to_class_id
+    }
+
+    fn reserve_types(
+        db: &knowledge::Database,
+        bdb: &mut blackboard::Database,
+        types: Vec<Id<DefinitionId>>,
+    ) -> HashMap<Id<DefinitionId>, blackboard::ty::TyRef> {
+        let mut type_to_type_id = HashMap::new();
+        for ty in types {
+            let resolved_ty = db
+                .get_definition_map(ty, |def| {
+                    assert!(matches!(def.kind, knowledge::DefinitionKind::Type));
+                    def.name.clone()
+                })
+                .unwrap();
+            let type_id = bdb.reserve_type_impl(&resolved_ty);
+            type_to_type_id.insert(ty, type_id);
+        }
+        type_to_type_id
+    }
+
+    fn add_classes(
+        db: &knowledge::Database,
+        bdb: &mut blackboard::Database,
+        classes: &[Id<DefinitionId>],
+        class_to_class_id: &HashMap<Id<DefinitionId>, blackboard::ty::ClassRef>,
+    ) {
+        for class in classes {
+            let resolved_class = db
+                .get_definition_map(class.clone(), |def| def.clone())
+                .unwrap();
+            let type_params = resolved_class.kind.as_class().unwrap().arguments.clone();
+            let class_ref = class_to_class_id.get(&class).unwrap().clone();
+            let constraints =
+                Self::translate_constraints(class_to_class_id, &resolved_class.constraints);
+            let class_def = blackboard::database::TypeClass {
+                name: resolved_class.name.clone(),
+                type_params,
+                constraints,
+                members: todo!("RESOLVE MEMBERS"),
+            };
+            bdb.replace_class(class_ref, class_def);
+        }
+    }
+
+    fn translate_constraints(
+        class_to_class_id: &HashMap<Id<DefinitionId>, blackboard::ty::ClassRef>,
+        constraints: &[GenericConstraint],
+    ) -> Vec<blackboard::ty::Constraint> {
+        let mut res = Vec::new();
+        for GenericConstraint { class, args } in constraints {
+            let class_ref = class_to_class_id.get(class).unwrap();
+            let args = args
+                .iter()
+                .map(|ty| {
+                    let Type::Generic(scopes, index) = ty else {
+                        panic!();
+                    };
+                    let scopes = scopes.0 as usize;
+                    blackboard::Ty::Generic {
+                        scopes,
+                        index: *index,
+                    }
+                })
+                .collect();
+            res.push(blackboard::ty::Constraint::Class(class_ref.clone(), args));
+        }
+        res
     }
 
     // For free function calls within methods the receiver should

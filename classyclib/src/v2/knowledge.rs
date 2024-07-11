@@ -652,6 +652,34 @@ impl Database {
         self.globals.get(name).cloned()
     }
 
+    pub fn get_instance(&self, id: Id<DefinitionId>) -> Option<InstanceInfo> {
+        self.get_definition_map(id, |def| def.kind.as_instance().cloned().unwrap())
+    }
+
+    pub fn get_class(&self, id: Id<DefinitionId>) -> Option<ClassInfo> {
+        self.get_definition_map(id, |def| def.kind.as_class().cloned().unwrap())
+    }
+
+    pub fn get_definition_map<R>(
+        &self,
+        id: Id<DefinitionId>,
+        func: impl FnOnce(&Definition) -> R,
+    ) -> Option<R> {
+        match id {
+            Id { package, id } if package == CURRENT_PACKAGE_ID => {
+                let id = LocalId::new(id);
+                let def = self.definitions.get(&id)?;
+                Some(func(def))
+            }
+            Id { package, id } => {
+                let id = LocalId::new(id);
+                let package_info = self.get_package(package);
+                let definition = package_info.definition.get(&id)?;
+                Some(func(definition))
+            }
+        }
+    }
+
     pub fn get_type(&self, id: Id<DefinitionId>) -> Option<&Type> {
         match id {
             Id { package, id } if package == CURRENT_PACKAGE_ID => {

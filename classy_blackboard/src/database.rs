@@ -34,7 +34,7 @@ impl UniverseIndex {
 pub struct DefId(pub usize);
 
 /// All type information necessary for inference
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Default)]
 pub struct TypeImpl {
     pub name: String,
     pub type_params: Vec<String>,
@@ -50,6 +50,7 @@ pub struct MethodsBlock {
     pub on_type: Ty,
 }
 
+#[derive(Default)]
 pub struct TypeClass {
     pub name: String,
     pub type_params: Vec<String>,
@@ -57,7 +58,7 @@ pub struct TypeClass {
     pub members: Vec<(String, DefId, Ty)>,
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Default)]
 pub struct Instance {
     pub type_class: ClassRef,
     pub args: Vec<Ty>,
@@ -117,11 +118,31 @@ impl Database {
         Database::default()
     }
 
+    pub fn reserve_type_impl(&mut self, name: &str) -> TyRef {
+        let mut type_impl = TypeImpl::default();
+        type_impl.name = name.to_string();
+        self.add_type_impl(type_impl)
+    }
+
     pub fn add_type_impl(&mut self, type_impl: TypeImpl) -> TyRef {
         self.names_to_ty
             .insert(type_impl.name.clone(), self.type_impls.len());
         self.type_impls.push(type_impl);
         TyRef(self.type_impls.len() - 1)
+    }
+
+    pub fn replace_type_impl(&mut self, ty: TyRef, type_impl: TypeImpl) {
+        self.type_impls[ty.0] = type_impl;
+    }
+
+    pub fn reserve_class(&mut self, name: &str) -> ClassRef {
+        let mut type_class = TypeClass::default();
+        type_class.name = name.to_string();
+        self.add_class(type_class)
+    }
+
+    pub fn replace_class(&mut self, class: ClassRef, type_class: TypeClass) {
+        self.type_classes[class.0] = type_class;
     }
 
     pub fn add_class(&mut self, type_class: TypeClass) -> ClassRef {
@@ -131,9 +152,17 @@ impl Database {
         ClassRef(self.type_classes.len() - 1)
     }
 
+    pub fn reserve_instance(&mut self) -> InstanceRef {
+        self.add_instance(Instance::default())
+    }
+
     pub fn add_instance(&mut self, instance: Instance) -> InstanceRef {
         self.instances.push(instance);
         InstanceRef(self.instances.len() - 1)
+    }
+
+    pub fn replace_instance(&mut self, instance: InstanceRef, instance_def: Instance) {
+        self.instances[instance.0] = instance_def;
     }
 
     pub fn add_method_block(&mut self, method_block: MethodsBlock) -> MethodBlockRef {

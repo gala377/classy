@@ -319,7 +319,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                     self.scope.new_scope();
                     let else_ty = self.infer_expr(else_body);
                     self.scope.pop_scope();
-                    self.add_constraint(Constraint::Eq(body_ty, else_ty));
+                    self.add_constraint(Constraint::Eq(body_ty.clone(), else_ty));
                 }
                 if else_body.is_some() {
                     body_ty
