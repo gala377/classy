@@ -820,11 +820,10 @@ mod tests {
             typ: Box::new(foo.clone()),
             args: vec![Type::Int],
         };
-        let res = resolver.resolve_method(&receiver, "foo");
-        assert!(matches!(res, Err(MethodResolutionError::Ambiguity { .. })));
-        let candidates = match res.unwrap_err() {
-            MethodResolutionError::Ambiguity { candidates } => candidates,
-            _ => panic!(),
+        let Err(MethodResolutionError::Ambiguity { candidates }) =
+            resolver.resolve_method(&receiver, "foo")
+        else {
+            panic!("Fail");
         };
         assert_eq!(candidates.len(), 2);
     }
