@@ -816,6 +816,13 @@ impl Database {
         }
     }
 
+    pub fn resolve_if_alias(&self, typ: &Type) -> Result<Type, QueryError> {
+        match typ {
+            Type::Alias(for_type) => self.resolve_alias_to_type(*for_type),
+            _ => Ok(typ.clone()),
+        }
+    }
+
     pub fn resolve_alias_to_type(&self, typ: Id<TypeId>) -> Result<Type, QueryError> {
         let resolved = self.resolve_alias(typ)?;
         self.resolve_tid(resolved)

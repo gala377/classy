@@ -645,4 +645,81 @@ mod tests {
         assert_eq!(definition.name, "foo");
         assert!(matches!(definition.kind, DefinitionKind::Method(_)));
     }
+
+    const SOURCE_2: &str = r#"
+
+        type Foo(a) {}
+        type Baz {}
+        type Bar {}
+
+        methods for Foo(Baz) {
+            foo: () -> Baz
+            foo () {} 
+        }
+
+        methods for Foo(Bar) {
+            foo: () -> Bar 
+            foo () {} 
+        }
+
+    "#;
+
+    #[test]
+    fn resolve_between_2_overloads() {
+        let (database, _) = setup_database(SOURCE_2);
+        let types = database
+            .type_definitions
+            .keys()
+            .cloned()
+            .map(|id| id.as_global(CURRENT_PACKAGE_ID))
+            .collect();
+
+        let method_blocks = database
+            .method_blocks_definitions
+            .keys()
+            .cloned()
+            .map(|id| id.as_global(CURRENT_PACKAGE_ID))
+            .collect();
+        let mut resolver = MethodResolver::within_function(
+            &database,
+            Vec::new(),
+            Vec::new(),
+            method_blocks,
+            types,
+            Vec::new(),
+        );
+        let receiver = database
+            .get_type_by_unresolved_name(&[], &[], "Foo")
+            .unwrap();
+        let bar = database
+            .get_type_by_unresolved_name(&[], &[], "Bar")
+            .unwrap()
+            .clone();
+        let receiver = Type::App {
+            typ: Box::new(receiver.clone()),
+            args: vec![bar.clone()],
+        };
+        let res = resolver.resolve_method(&receiver, "foo");
+        println!("{:?}", res);
+        let res = res.unwrap();
+        let res_id = res.def_id;
+        let definition = database
+            .get_definition_map(res_id, |def| def.clone())
+            .unwrap();
+        println!("{:?}", definition);
+        let ty = database
+            .resolve_alias_to_type(definition.ty.as_global(CURRENT_PACKAGE_ID))
+            .unwrap();
+        println!("{:?}", ty);
+
+        assert_eq!(definition.name, "foo");
+        assert!(matches!(definition.kind, DefinitionKind::Method(_)));
+        match ty {
+            Type::Function { args, ret } if args.is_empty() => {
+                let t = database.resolve_if_alias(&ret).unwrap();
+                assert_eq!(bar, t);
+            }
+            _ => panic!(),
+        }
+    }
 }
