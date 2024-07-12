@@ -400,6 +400,9 @@ pub struct Database {
     /// All the defnitions within the package, functions, methods, instances,
     /// classes, method blocks, types and so on.
     pub definitions: HashMap<LocalId<DefinitionId>, Definition>,
+
+    /// Mapping of the primitive types to their type ids
+    pub primitive_types: HashMap<Type, Id<DefinitionId>>,
 }
 
 #[derive(Error, Debug)]
@@ -454,7 +457,16 @@ impl Database {
             ))),
             file_info: Default::default(),
             definitions: Default::default(),
+            primitive_types: Default::default(),
         }
+    }
+
+    pub fn add_primitive_type(&mut self, typ: Type, id: Id<DefinitionId>) {
+        self.primitive_types.insert(typ, id);
+    }
+
+    pub fn get_primitive_type(&self, typ: &Type) -> Option<Id<DefinitionId>> {
+        self.primitive_types.get(typ).cloned()
     }
 
     // Package queries

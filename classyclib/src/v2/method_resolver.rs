@@ -5,13 +5,13 @@ use crate::{typecheck::types::DeBruijn, v2::knowledge::DefinitionId};
 use classy_blackboard as blackboard;
 
 use super::{
-    knowledge::{self, GenericConstraint, Id, InstanceInfo, MethodHandle},
+    knowledge::{self, GenericConstraint, Id, MethodHandle},
     ty::Type,
 };
 
 #[derive(Debug)]
 pub struct ResolvedMethod {
-    def_id: Id<DefinitionId>,
+    pub def_id: Id<DefinitionId>,
 }
 
 #[derive(Debug)]
@@ -21,7 +21,7 @@ pub enum MethodResolutionError {
     Ambiguity,
 }
 
-struct MethodResolver<'db> {
+pub struct MethodResolver<'db> {
     database: &'db knowledge::Database,
     blackboard_database: blackboard::Database,
     forest: blackboard::slg::Forest,
@@ -42,6 +42,8 @@ impl<'db> MethodResolver<'db> {
         constraints_in_scope: Vec<GenericConstraint>,
         visible_instances: Vec<Id<DefinitionId>>,
         visible_method_blocks: Vec<Id<DefinitionId>>,
+        // probably all types of the compilation need to be there
+        // as a method can return a type that is not imported
         visible_types: Vec<Id<DefinitionId>>,
         classes: Vec<Id<DefinitionId>>,
     ) -> Self {
@@ -257,12 +259,6 @@ impl<'db> MethodResolver<'db> {
         if !self.database.is_resolved_type(receiver) {
             return Err(MethodResolutionError::ReceiverNotResolved(receiver.clone()));
         }
-
-        // 2. if it is, create a blackboard query
-        //   under constraints in scope
-        //      find method with the given name for the receiver
-        //   if not found, return error
-        //   if found find the most specific method and return it
         let query = self.create_blackboard_query(method, receiver);
 
         let solver =
@@ -331,13 +327,6 @@ impl<'db> MethodResolver<'db> {
         match ty {
             // blackbooard does not know about basic types so we need to
             // return a type ref to them if we added them before.
-            Type::Int => todo!(),
-            Type::UInt => todo!(),
-            Type::Bool => todo!(),
-            Type::String => todo!(),
-            Type::Float => todo!(),
-            Type::Unit => todo!(),
-            Type::Byte => todo!(),
             Type::Struct { def, .. } => {
                 blackboard::Ty::Ref(self.type_to_type_id.get(def).unwrap().clone())
             }
@@ -388,6 +377,13 @@ impl<'db> MethodResolver<'db> {
             Type::Divergent => panic!("Divergent type should not be resolved"),
             Type::ToInfere => panic!("ToInfere type should not be resolved"),
             Type::Fresh(_) => panic!("Fresh type should not be resolved"),
+
+            t => blackboard::Ty::Ref(
+                self.type_to_type_id
+                    .get(&self.database.get_primitive_type(&t).unwrap())
+                    .unwrap()
+                    .clone(),
+            ),
         }
     }
 }
@@ -443,7 +439,7 @@ mod tests {
         type Foo {}
 
         methods for Foo {
-            foo: () -> Foo
+            foo: () -> std::Int
             foo () {} 
 
             bar: () -> Foo 
@@ -519,31 +515,61 @@ mod tests {
 
     fn setup_database(source: &str) -> (Database, Session) {
         let std_package = prepare_std_package();
+        let primitive_types = std_package
+            .definition
+            .iter()
+            .filter_map(|(id, def)| {
+                let t = def.ty;
+                let t = std_package.typeid_to_type.get(&t).unwrap();
+                match t {
+                    crate::v2::ty::Type::Int => Some((id.clone(), t.clone())),
+                    crate::v2::ty::Type::UInt => Some((id.clone(), t.clone())),
+                    crate::v2::ty::Type::Bool => Some((id.clone(), t.clone())),
+                    crate::v2::ty::Type::Float => Some((id.clone(), t.clone())),
+                    crate::v2::ty::Type::Byte => Some((id.clone(), t.clone())),
+                    crate::v2::ty::Type::String => Some((id.clone(), t.clone())),
+                    _ => None,
+                }
+            })
+            .map(|(id, t)| (id.as_global(PackageId(1)), t))
+            .collect::<Vec<_>>();
         let compiler = Compiler::new(
             "test",
             vec![("test".into(), source.into())],
             vec![std_package],
         );
-        let (db, sess) = compiler.make_database();
+        let (mut db, sess) = compiler.make_database();
         for (name, id) in db.globals.iter() {
             println!("{name}: {id:?}");
             let def = db.get_global(name).unwrap();
             let ty = db.get_type(def.as_global(PackageId(0)));
             println!("type: {ty:?}");
         }
+        for (id, ty) in primitive_types {
+            db.add_primitive_type(ty.clone(), id.clone());
+        }
+
         (db, sess)
     }
 
     #[test]
     fn simple_resolve_method() {
         let (database, _) = setup_database(SOURCE_1);
-        let types = database
+        let mut types = database
             .type_definitions
             .keys()
             .cloned()
             .map(|id| id.as_global(CURRENT_PACKAGE_ID))
+            .collect::<Vec<_>>();
+        let mut std_package_types = database.packages[0]
+            .definition
+            .iter()
+            .filter_map(|(id, def)| match def.kind {
+                DefinitionKind::Type => Some(id.as_global(PackageId(1))),
+                _ => None,
+            })
             .collect();
-
+        types.append(&mut std_package_types);
         let method_blocks = database
             .method_blocks_definitions
             .keys()
