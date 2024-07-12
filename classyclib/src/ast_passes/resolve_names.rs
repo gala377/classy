@@ -23,8 +23,8 @@ impl<'db> NameResolver<'db> {
         Self {
             database,
             current_namespace_prefix: String::new(),
-            variable_scope: Scope::new(),
-            type_scope: Scope::new(),
+            variable_scope: Scope::with_empty_scope(),
+            type_scope: Scope::with_empty_scope(),
             dont_resolve_names: false,
         }
     }

@@ -9,7 +9,7 @@ where
     K: Eq + Hash,
 {
     fn default() -> Self {
-        Self::new()
+        Self::with_empty_scope()
     }
 }
 
@@ -17,10 +17,14 @@ impl<K, V> Scope<K, V>
 where
     K: Eq + Hash,
 {
-    pub fn new() -> Self {
+    pub fn with_empty_scope() -> Self {
         Self {
             stack: vec![HashMap::new()],
         }
+    }
+
+    pub fn without_scope() -> Self {
+        Self { stack: Vec::new() }
     }
 
     pub fn new_scope(&mut self) {
@@ -90,5 +94,10 @@ where
 
     pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
         self.stack.iter().rev().flat_map(|s| s.iter())
+    }
+
+    /// Iterate scopes from the innermost to the outermost
+    pub fn iter_scopes(&self) -> impl Iterator<Item = &HashMap<K, V>> {
+        self.stack.iter().rev()
     }
 }

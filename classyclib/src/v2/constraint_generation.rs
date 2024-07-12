@@ -525,7 +525,13 @@ mod tests {
         database: &'db mut Database,
         session: &'sess Session,
     ) -> Inferer<'sess, 'db> {
-        Inferer::new(session, database, &[], PrefexScope::new(), Type::Unit)
+        Inferer::new(
+            session,
+            database,
+            &[],
+            PrefexScope::with_empty_scope(),
+            Type::Unit,
+        )
     }
 
     #[test]
@@ -587,7 +593,7 @@ mod tests {
                 .iter()
                 .map(ToString::to_string)
                 .collect::<Vec<_>>(),
-            PrefexScope::new(),
+            PrefexScope::with_empty_scope(),
             Type::Unit,
         );
         let res = inferer.infer_expr(&ast::Expr {

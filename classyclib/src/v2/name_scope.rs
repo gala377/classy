@@ -12,8 +12,8 @@ pub struct NameScope {
 impl NameScope {
     pub fn new() -> Self {
         Self {
-            variables: Scope::new(),
-            types: Scope::new(),
+            variables: Scope::with_empty_scope(),
+            types: Scope::with_empty_scope(),
         }
     }
 

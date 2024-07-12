@@ -211,7 +211,7 @@ impl<'sess> Inference<'sess> {
             resolved_method_calls: HashMap::new(),
         };
         println!("Generating constraints for {debug_name}");
-        let mut prefex = PrefexScope::new();
+        let mut prefex = PrefexScope::with_empty_scope();
         inferer.generate_constrains_for_function(tctx, global_scope.clone(), &mut prefex, fn_def);
         // if the function should be generalized immiediately it will be removed
         // right after this statement. If not it will be merged with our
@@ -310,7 +310,7 @@ impl<'sess> Inference<'sess> {
         methods_block: &MethodsBlock<FunctionDefinition>,
     ) {
         // TODO: Also do something about the constraints
-        let mut prefex_scope = PrefexScope::new();
+        let mut prefex_scope = PrefexScope::with_empty_scope();
         let scope = global_scope.borrow();
         println!("Infering on ast type {:?}", &methods_block.typ);
         let receiver_t = self.ast_type_to_type(&scope, &mut prefex_scope, &methods_block.typ);
@@ -452,7 +452,7 @@ impl<'sess> Inference<'sess> {
             let const_scope = Scope::new(global_scope.clone());
             inferer.in_scope(const_scope.clone(), |scope| {
                 scope.set_ret_t(Some(t.clone()));
-                let mut prefex_scope = PrefexScope::new();
+                let mut prefex_scope = PrefexScope::with_empty_scope();
                 scope.infer_in_expr(init, &mut prefex_scope, tctx)
             })
         };

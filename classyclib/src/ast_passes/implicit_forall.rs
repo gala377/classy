@@ -18,7 +18,7 @@ impl ImplicitForall {
     pub fn new() -> Self {
         Self {
             prefex: Vec::new(),
-            ignore_names: PrefexScope::new(),
+            ignore_names: PrefexScope::with_empty_scope(),
         }
     }
 }

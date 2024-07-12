@@ -681,6 +681,10 @@ impl Database {
         self.get_definition_map(id, |def| def.kind.as_class().cloned().unwrap())
     }
 
+    pub fn get_definition<'a>(&'a self, id: Id<DefinitionId>) -> Option<Definition> {
+        self.get_definition_map(id, |def| def.clone())
+    }
+
     pub fn get_definition_map<R>(
         &self,
         id: Id<DefinitionId>,
@@ -1055,7 +1059,7 @@ impl Database {
         ) in type_definitions
         {
             let namespace = self.get_namespace(id).to_vec();
-            let mut prefex_scope = PrefexScope::new();
+            let mut prefex_scope = PrefexScope::with_empty_scope();
             prefex_scope.add_type_vars(&type_variables);
             let constraints = constraints
                 .iter()
@@ -1175,7 +1179,7 @@ impl Database {
         {
             let namespace = self.get_namespace(id).to_vec();
             let file = self.definitions.get(&id).unwrap().file;
-            let mut prefex_scope = PrefexScope::new();
+            let mut prefex_scope = PrefexScope::with_empty_scope();
             prefex_scope.add_type_vars(&args);
             let constrains = bounds
                 .iter()
@@ -1315,7 +1319,7 @@ impl Database {
                 block_receiver = typ.clone();
             }
 
-            let mut prefex_scope = PrefexScope::new();
+            let mut prefex_scope = PrefexScope::with_empty_scope();
             prefex_scope.add_type_vars(&block_free_vars);
 
             let block_constraints = block_bounds
@@ -1391,7 +1395,7 @@ impl Database {
             println!("Lowering instance {name:?}");
             let namespace = self.get_namespace(*id).to_vec();
             let file = self.definitions.get(id).unwrap().file;
-            let mut prefex_scope = PrefexScope::new();
+            let mut prefex_scope = PrefexScope::with_empty_scope();
             println!("Free vars are {free_variables:?}");
             prefex_scope.add_type_vars(&free_variables);
             let constrains = bounds
@@ -1598,7 +1602,7 @@ impl Database {
         {
             let namespace = self.get_namespace(*id).to_vec();
             let file = self.definitions.get(id).unwrap().file;
-            let mut prefex_scope = PrefexScope::new();
+            let mut prefex_scope = PrefexScope::with_empty_scope();
             let mut f_bounds = Vec::new();
             let mut f_free_vars = Vec::new();
             let mut f_typ = typ.clone();

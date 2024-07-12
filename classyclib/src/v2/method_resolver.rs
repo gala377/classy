@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use crate::{typecheck::types::DeBruijn, v2::knowledge::DefinitionId};
+use crate::{
+    typecheck::{ast_to_type::PrefexScope, types::DeBruijn},
+    v2::knowledge::DefinitionId,
+};
 
 use classy_blackboard as blackboard;
 
@@ -18,15 +21,16 @@ pub struct ResolvedMethod {
 pub enum MethodResolutionError {
     ReceiverNotResolved(Type),
     MethodNotFound,
-    Ambiguity,
+    Ambiguity { candidates: Vec<ResolvedMethod> },
 }
 
-pub struct MethodResolver<'db> {
+pub struct MethodResolver<'db, 'scope> {
     database: &'db knowledge::Database,
     blackboard_database: blackboard::Database,
     forest: blackboard::slg::Forest,
 
     constarints_in_scope: Vec<blackboard::ty::Constraint>,
+    generics_scope: &'scope PrefexScope,
 
     class_to_class_id: HashMap<Id<DefinitionId>, blackboard::ty::ClassRef>,
     instance_to_instance_id: HashMap<Id<DefinitionId>, blackboard::ty::InstanceRef>,
@@ -34,11 +38,12 @@ pub struct MethodResolver<'db> {
     meth_block_to_meth_block_id: HashMap<Id<DefinitionId>, blackboard::ty::MethodBlockRef>,
 }
 
-impl<'db> MethodResolver<'db> {
+impl<'db, 'scope> MethodResolver<'db, 'scope> {
     /// create blackboard database for the given function
     /// using definitions in scope and function constraints
     pub fn within_function(
         database: &'db knowledge::Database,
+        generics_scope: &'scope PrefexScope,
         constraints_in_scope: Vec<GenericConstraint>,
         visible_instances: Vec<Id<DefinitionId>>,
         visible_method_blocks: Vec<Id<DefinitionId>>,
@@ -56,6 +61,9 @@ impl<'db> MethodResolver<'db> {
             blackboard_database,
             forest: blackboard::slg::Forest::new(),
             constarints_in_scope: Vec::new(),
+
+            generics_scope,
+
             class_to_class_id: HashMap::new(),
             instance_to_instance_id: HashMap::new(),
             type_to_type_id: HashMap::new(),
@@ -77,10 +85,8 @@ impl<'db> MethodResolver<'db> {
     fn add_method_blocks(&mut self, method_blocks: &[Id<DefinitionId>]) {
         for method_block in method_blocks {
             let package = method_block.package.clone();
-            let method_block_definition = self
-                .database
-                .get_definition_map(method_block.clone(), |def| def.clone())
-                .unwrap();
+            let method_block_definition =
+                self.database.get_definition(method_block.clone()).unwrap();
             let constraints = self.translate_constraints(&method_block_definition.constraints);
             let info = method_block_definition
                 .kind
@@ -94,10 +100,7 @@ impl<'db> MethodResolver<'db> {
                 .iter()
                 .map(|MethodHandle { name, definition }| {
                     let definition = definition.as_global(package.clone());
-                    let definition = self
-                        .database
-                        .get_definition_map(definition, |id| id.clone())
-                        .unwrap();
+                    let definition = self.database.get_definition(definition).unwrap();
                     let info = definition.kind.as_method().cloned().unwrap();
                     let method_type = info.ty.as_global(package.clone());
                     let method_type = self.database.resolve_alias_to_type(method_type).unwrap();
@@ -128,10 +131,7 @@ impl<'db> MethodResolver<'db> {
 
     fn add_instances(&mut self, instances: &[Id<DefinitionId>]) {
         for instance in instances {
-            let instance_definition = self
-                .database
-                .get_definition_map(instance.clone(), |def| def.clone())
-                .unwrap();
+            let instance_definition = self.database.get_definition(instance.clone()).unwrap();
             let constraints = self.translate_constraints(&instance_definition.constraints);
             let info = instance_definition.kind.as_instance().cloned().unwrap();
             let GenericConstraint { class, args } = info.receiver;
@@ -176,10 +176,7 @@ impl<'db> MethodResolver<'db> {
 
     fn add_classes(&mut self, classes: &[Id<DefinitionId>]) {
         for class in classes {
-            let resolved_class = self
-                .database
-                .get_definition_map(class.clone(), |def| def.clone())
-                .unwrap();
+            let resolved_class = self.database.get_definition(class.clone()).unwrap();
             let type_params = resolved_class.kind.as_class().unwrap().arguments.clone();
             let class_ref = self.class_to_class_id.get(&class).unwrap().clone();
             let constraints = self.translate_constraints(&resolved_class.constraints);
@@ -223,10 +220,7 @@ impl<'db> MethodResolver<'db> {
 
     fn add_types(&mut self, types: &[Id<DefinitionId>]) {
         for ty in types {
-            let resolved_ty = self
-                .database
-                .get_definition_map(ty.clone(), |def| def.clone())
-                .unwrap();
+            let resolved_ty = self.database.get_definition(ty.clone()).unwrap();
             let type_ref = self.type_to_type_id.get(ty).unwrap().clone();
             let type_params = {
                 let t = self.database.get_type(ty.clone()).unwrap();
@@ -263,22 +257,38 @@ impl<'db> MethodResolver<'db> {
 
         let solver =
             blackboard::slg::SlgSolver::new(&self.blackboard_database, &mut self.forest, query);
-        let answers: Vec<_> = solver.into_iter().take(2).collect();
+        let answers: Vec<_> = solver.into_iter().take(20).collect();
+        println!("answers: {:#?}", answers);
         if answers.len() == 0 {
             return Err(MethodResolutionError::MethodNotFound);
         }
         if answers.len() > 1 {
-            return Err(MethodResolutionError::Ambiguity);
+            let candidates = answers
+                .iter()
+                .map(|a| self.method_from_origin(a, method))
+                .map(|id| ResolvedMethod { def_id: id })
+                .collect();
+            println!("Ambiguity: {:#?}", candidates);
+            return Err(MethodResolutionError::Ambiguity { candidates });
         }
         // ! For now we ignore evidence and so on
-        let blackboard::slg::Answer { origin, .. } = answers[0].clone();
-        let origin = origin.unwrap();
+        let method_id = self.method_from_origin(&answers[0], method);
+        return Ok(ResolvedMethod { def_id: method_id });
+    }
+
+    fn method_from_origin(
+        &self,
+        answers: &blackboard::slg::Answer,
+        method: &str,
+    ) -> Id<DefinitionId> {
+        let blackboard::slg::Answer { origin, .. } = answers;
+        let origin = origin.as_ref().unwrap();
         match origin {
             classy_blackboard::database::GenericRef::MethodBlock(id) => {
                 let id = self
                     .meth_block_to_meth_block_id
                     .iter()
-                    .find_map(|(k, v)| if v == &id { Some(k) } else { None })
+                    .find_map(|(k, v)| if v == id { Some(k) } else { None })
                     .unwrap();
                 let method_block = self
                     .database
@@ -286,7 +296,7 @@ impl<'db> MethodResolver<'db> {
                         def.kind.as_method_block().cloned().unwrap()
                     })
                     .unwrap();
-                let method_id = method_block
+                method_block
                     .methods
                     .iter()
                     .find_map(|MethodHandle { name, definition }| {
@@ -297,24 +307,29 @@ impl<'db> MethodResolver<'db> {
                         }
                     })
                     .map(|mid| mid.as_global(id.package))
-                    .unwrap();
-
-                return Ok(ResolvedMethod { def_id: method_id });
+                    .unwrap()
             }
             _ => todo!("Only method blocks are supported for now"),
         }
     }
 
     fn create_blackboard_query(&self, method: &str, receiver: &Type) -> blackboard::Goal {
-        //   under constraints in scope
-        //      find method with the given name for the receiver
-        //   if not found, return error
-        //   if found find the most specific method and return it
+        // ! We cannot simply translate to blackboard type as we need to
+        // ! Introduce quantifiers for generics. So we need to walk the type
+        // ! and then count the scopes and indexes and introduce the quantifiers based
+        // ! on that TODO
         let receiver_as_blackboard_type = self.to_blackboard_type(receiver);
         let query = blackboard::Goal::Domain(blackboard::DomainGoal::FindMethod {
             name: method.to_owned(),
             on_type: receiver_as_blackboard_type,
         });
+        let query = self
+            .generics_scope
+            .iter_scopes()
+            //.filter(|s| !s.is_empty())
+            .fold(query, |query, scope| {
+                blackboard::Goal::Forall(scope.len(), Box::new(query))
+            });
         if self.constarints_in_scope.is_empty() {
             return query;
         }
@@ -552,9 +567,7 @@ mod tests {
         (db, sess)
     }
 
-    #[test]
-    fn simple_resolve_method() {
-        let (database, _) = setup_database(SOURCE_1);
+    fn get_types(database: &Database) -> Vec<Id<DefinitionId>> {
         let mut types = database
             .type_definitions
             .keys()
@@ -570,106 +583,77 @@ mod tests {
             })
             .collect();
         types.append(&mut std_package_types);
-        let method_blocks = database
+        types
+    }
+
+    fn get_method_blocks(database: &Database) -> Vec<Id<DefinitionId>> {
+        database
             .method_blocks_definitions
             .keys()
             .cloned()
             .map(|id| id.as_global(CURRENT_PACKAGE_ID))
-            .collect();
+            .collect()
+    }
+
+    fn get_type(database: &Database, name: &str) -> Type {
+        database
+            .get_type_by_unresolved_name(&[], &[], name)
+            .unwrap()
+            .clone()
+    }
+
+    #[test]
+    fn simple_resolve_method() {
+        let (database, _) = setup_database(SOURCE_1);
+        let types = get_types(&database);
+        let method_blocks = get_method_blocks(&database);
+        let scope = PrefexScope::with_empty_scope();
         let mut resolver = MethodResolver::within_function(
             &database,
+            &scope,
             Vec::new(),
             Vec::new(),
             method_blocks,
             types,
             Vec::new(),
         );
-        let receiver = database
-            .get_type_by_unresolved_name(&[], &[], "Foo")
-            .unwrap();
-        let res = resolver.resolve_method(receiver, "foo");
-        let res = res.unwrap();
-        let res_id = res.def_id;
-        let definition = database
-            .get_definition_map(res_id, |def| def.clone())
-            .unwrap();
-        assert_eq!(definition.name, "foo");
-        assert!(matches!(definition.kind, DefinitionKind::Method(_)));
-
-        let res = resolver.resolve_method(receiver, "bar");
-        let res = res.unwrap();
-        let res_id = res.def_id;
-        let definition = database
-            .get_definition_map(res_id, |def| def.clone())
-            .unwrap();
-        assert_eq!(definition.name, "bar");
-        assert!(matches!(definition.kind, DefinitionKind::Method(_)));
-
-        let res = resolver.resolve_method(receiver, "baz");
-        let res = res.unwrap();
-        let res_id = res.def_id;
-        let definition = database
-            .get_definition_map(res_id, |def| def.clone())
-            .unwrap();
-        assert_eq!(definition.name, "baz");
-        assert!(matches!(definition.kind, DefinitionKind::Method(_)));
+        let receiver = get_type(&database, "Foo");
+        let methods = vec!["foo", "bar", "baz"];
+        for name in methods {
+            let res_id = resolver.resolve_method(&receiver, name).unwrap().def_id;
+            let definition = database.get_definition(res_id).unwrap();
+            assert_eq!(definition.name, name);
+            assert!(matches!(definition.kind, DefinitionKind::Method(_)));
+        }
     }
 
     #[test]
     fn simple_resolve_methods_generic() {
         let (database, _) = setup_database(SOURCE_1);
-        let types = database
-            .type_definitions
-            .keys()
-            .cloned()
-            .map(|id| id.as_global(CURRENT_PACKAGE_ID))
-            .collect();
-
-        let method_blocks = database
-            .method_blocks_definitions
-            .keys()
-            .cloned()
-            .map(|id| id.as_global(CURRENT_PACKAGE_ID))
-            .collect();
+        let types = get_types(&database);
+        let method_blocks = get_method_blocks(&database);
+        let scope = PrefexScope::with_empty_scope();
         let mut resolver = MethodResolver::within_function(
             &database,
+            &scope,
             Vec::new(),
             Vec::new(),
             method_blocks,
             types,
             Vec::new(),
         );
-        let receiver = database
-            .get_type_by_unresolved_name(&[], &[], "Bar")
-            .unwrap();
+        let bar = get_type(&database, "Bar");
         let receiver = Type::App {
-            typ: Box::new(receiver.clone()),
-            args: vec![database
-                .get_type_by_unresolved_name(&[], &[], "Foo")
-                .unwrap()
-                .clone()],
+            typ: Box::new(bar.clone()),
+            args: vec![get_type(&database, "Foo")],
         };
-        let res = resolver.resolve_method(&receiver, "bar");
-        println!("{:?}", res);
-        let res = res.unwrap();
-        let res_id = res.def_id;
-        let definition = database
-            .get_definition_map(res_id, |def| def.clone())
-            .unwrap();
-        println!("{:?}", definition);
-        assert_eq!(definition.name, "bar");
-        assert!(matches!(definition.kind, DefinitionKind::Method(_)));
-
-        let res = resolver.resolve_method(&receiver, "foo");
-        println!("{:?}", res);
-        let res = res.unwrap();
-        let res_id = res.def_id;
-        let definition = database
-            .get_definition_map(res_id, |def| def.clone())
-            .unwrap();
-        println!("{:?}", definition);
-        assert_eq!(definition.name, "foo");
-        assert!(matches!(definition.kind, DefinitionKind::Method(_)));
+        let methods = vec!["foo", "bar"];
+        for name in methods {
+            let res_id = resolver.resolve_method(&receiver, name).unwrap().def_id;
+            let definition = database.get_definition(res_id).unwrap();
+            assert_eq!(definition.name, name);
+            assert!(matches!(definition.kind, DefinitionKind::Method(_)));
+        }
     }
 
     const SOURCE_2: &str = r#"
@@ -693,51 +677,29 @@ mod tests {
     #[test]
     fn resolve_between_2_overloads() {
         let (database, _) = setup_database(SOURCE_2);
-        let types = database
-            .type_definitions
-            .keys()
-            .cloned()
-            .map(|id| id.as_global(CURRENT_PACKAGE_ID))
-            .collect();
-
-        let method_blocks = database
-            .method_blocks_definitions
-            .keys()
-            .cloned()
-            .map(|id| id.as_global(CURRENT_PACKAGE_ID))
-            .collect();
+        let types = get_types(&database);
+        let method_blocks = get_method_blocks(&database);
+        let scope = PrefexScope::with_empty_scope();
         let mut resolver = MethodResolver::within_function(
             &database,
+            &scope,
             Vec::new(),
             Vec::new(),
             method_blocks,
             types,
             Vec::new(),
         );
-        let receiver = database
-            .get_type_by_unresolved_name(&[], &[], "Foo")
-            .unwrap();
-        let bar = database
-            .get_type_by_unresolved_name(&[], &[], "Bar")
-            .unwrap()
-            .clone();
+        let foo = get_type(&database, "Foo");
+        let bar = get_type(&database, "Bar");
         let receiver = Type::App {
-            typ: Box::new(receiver.clone()),
+            typ: Box::new(foo.clone()),
             args: vec![bar.clone()],
         };
-        let res = resolver.resolve_method(&receiver, "foo");
-        println!("{:?}", res);
-        let res = res.unwrap();
-        let res_id = res.def_id;
-        let definition = database
-            .get_definition_map(res_id, |def| def.clone())
-            .unwrap();
-        println!("{:?}", definition);
+        let res_id = resolver.resolve_method(&receiver, "foo").unwrap().def_id;
+        let definition = database.get_definition(res_id).unwrap();
         let ty = database
             .resolve_alias_to_type(definition.ty.as_global(CURRENT_PACKAGE_ID))
             .unwrap();
-        println!("{:?}", ty);
-
         assert_eq!(definition.name, "foo");
         assert!(matches!(definition.kind, DefinitionKind::Method(_)));
         match ty {
@@ -747,5 +709,86 @@ mod tests {
             }
             _ => panic!(),
         }
+    }
+
+    const SOURCE_3: &str = r#"
+         type Foo(a) {}
+         methods for Foo(a) {
+             foo: () -> a
+             foo () {}
+         }
+
+         methods for Foo(std::Int) {
+             foo: () -> std::Int
+             foo () {}
+         }
+    "#;
+
+    #[test]
+    fn resolve_between_2_overloads_generic() {
+        let (database, _) = setup_database(SOURCE_3);
+        let types = get_types(&database);
+        let method_blocks = get_method_blocks(&database);
+
+        let mut scope = PrefexScope::with_empty_scope();
+        scope.add_type_var("a");
+        let mut resolver = MethodResolver::within_function(
+            &database,
+            &scope,
+            Vec::new(),
+            Vec::new(),
+            method_blocks,
+            types,
+            Vec::new(),
+        );
+        let foo = get_type(&database, "Foo");
+        let receiver = Type::App {
+            typ: Box::new(foo.clone()),
+            args: vec![Type::Generic(DeBruijn::zero(), 0)],
+        };
+        let res_id = resolver.resolve_method(&receiver, "foo").unwrap().def_id;
+        let definition = database.get_definition(res_id).unwrap();
+        let ty = database
+            .resolve_alias_to_type(definition.ty.as_global(CURRENT_PACKAGE_ID))
+            .unwrap();
+        assert_eq!(definition.name, "foo");
+        assert!(matches!(definition.kind, DefinitionKind::Method(_)));
+        match ty {
+            Type::Function { args, ret } if args.is_empty() => {
+                let t = database.resolve_if_alias(&ret).unwrap();
+                assert_eq!(Type::Generic(DeBruijn(0), 0), t);
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn resolve_between_2_overloads_generic_ambiguity() {
+        let (database, _) = setup_database(SOURCE_3);
+        let types = get_types(&database);
+        let method_blocks = get_method_blocks(&database);
+
+        let scope = PrefexScope::with_empty_scope();
+        let mut resolver = MethodResolver::within_function(
+            &database,
+            &scope,
+            Vec::new(),
+            Vec::new(),
+            method_blocks,
+            types,
+            Vec::new(),
+        );
+        let foo = get_type(&database, "Foo");
+        let receiver = Type::App {
+            typ: Box::new(foo.clone()),
+            args: vec![Type::Int],
+        };
+        let res = resolver.resolve_method(&receiver, "foo");
+        assert!(matches!(res, Err(MethodResolutionError::Ambiguity { .. })));
+        let candidates = match res.unwrap_err() {
+            MethodResolutionError::Ambiguity { candidates } => candidates,
+            _ => panic!(),
+        };
+        assert_eq!(candidates.len(), 2);
     }
 }

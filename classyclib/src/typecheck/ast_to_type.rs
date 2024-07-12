@@ -24,7 +24,7 @@ impl PrefexScope {
 
 pub fn resolve_fn_def(typ: &ast::Typ, ctx: &mut TypCtx, name: &String) {
     let mut resolver = TypeResolver::new(ctx);
-    let mut scope = PrefexScope::new();
+    let mut scope = PrefexScope::with_empty_scope();
     let Type::Alias(typ) = resolver.resolve_type(&mut scope, typ) else {
         panic!("Alias resolver should only return aliases")
     };
@@ -47,7 +47,7 @@ pub fn resolve_top_level_type(
         .types
         .get(name)
         .expect(&(format!("the types should have been prepopulated: {name}")));
-    let mut scope = PrefexScope::new();
+    let mut scope = PrefexScope::with_empty_scope();
     scope.add_type_vars(type_variables);
     let prefex = type_variables.clone();
     let mut resolver = TypeResolver::new(ctx);
@@ -146,7 +146,7 @@ pub fn resolve_methods_block(
     methods: &[ast::Method<ast::FunctionDefinition>],
 ) {
     let mut resolver = TypeResolver::new(ctx);
-    let mut scope = PrefexScope::new();
+    let mut scope = PrefexScope::with_empty_scope();
     let Type::Alias(resolved_for_t) = resolver.resolve_type(&mut scope, for_t) else {
         panic!("Alias resolver should only return aliases")
     };
@@ -182,7 +182,7 @@ pub fn resolve_methods_block(
 
 pub fn resolve_const_def(name: &str, typ: &ast::Typ, tctx: &mut TypCtx) {
     let mut resolver = TypeResolver::new(tctx);
-    let mut scope = PrefexScope::new();
+    let mut scope = PrefexScope::with_empty_scope();
     let Type::Alias(typ) = resolver.resolve_type(&mut scope, typ) else {
         panic!("Alias resolver should only return aliases")
     };
