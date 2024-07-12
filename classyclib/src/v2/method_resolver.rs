@@ -13,8 +13,31 @@ use super::{
 };
 
 #[derive(Debug)]
-pub struct ResolvedMethod {
-    pub def_id: Id<DefinitionId>,
+pub enum ResolvedMethod {
+    Static {
+        /// Statically known method.
+        /// Might reference a method within a method block or a global instance.
+        def_id: Id<DefinitionId>,
+    },
+    FromInstanceInScope {
+        /// References method declaration within a class definition.
+        /// As the method implementation is not known at compile time.
+        method_id: Id<DefinitionId>,
+        /// References instance from constraints from an enclosing scopes.
+        ///
+        /// For example:
+        ///   methods for { Read(a), Show(a) } => Foo(a) {
+        ///     foo: () -> String {
+        ///       inner_value.show()
+        ///     }
+        ///   }
+        ///
+        /// In the case above the resolution of `show` should yield `Show(a)`
+        /// instance. This would be represented same as generic types
+        /// indexes. In the above example it would be (0, 1) as `Show`
+        /// is the second constraint in innermost constraint scope.
+        referenced_constraint: (DeBruijn, usize),
+    },
 }
 
 #[derive(Debug)]
@@ -266,21 +289,20 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
             let candidates = answers
                 .iter()
                 .map(|a| self.method_from_origin(a, method))
-                .map(|id| ResolvedMethod { def_id: id })
                 .collect();
             println!("Ambiguity: {:#?}", candidates);
             return Err(MethodResolutionError::Ambiguity { candidates });
         }
         // ! For now we ignore evidence and so on
-        let method_id = self.method_from_origin(&answers[0], method);
-        return Ok(ResolvedMethod { def_id: method_id });
+        let resolved = self.method_from_origin(&answers[0], method);
+        Ok(resolved)
     }
 
     fn method_from_origin(
         &self,
         answers: &blackboard::slg::Answer,
         method: &str,
-    ) -> Id<DefinitionId> {
+    ) -> ResolvedMethod {
         let blackboard::slg::Answer { origin, .. } = answers;
         let origin = origin.as_ref().unwrap();
         match origin {
@@ -301,12 +323,13 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
                     .iter()
                     .find_map(|MethodHandle { name, definition }| {
                         if name == method {
-                            Some(definition)
+                            Some(ResolvedMethod::Static {
+                                def_id: definition.as_global(id.package),
+                            })
                         } else {
                             None
                         }
                     })
-                    .map(|mid| mid.as_global(id.package))
                     .unwrap()
             }
             _ => todo!("Only method blocks are supported for now"),
@@ -620,8 +643,12 @@ mod tests {
         let receiver = get_type(&database, "Foo");
         let methods = vec!["foo", "bar", "baz"];
         for name in methods {
-            let res_id = resolver.resolve_method(&receiver, name).unwrap().def_id;
-            let definition = database.get_definition(res_id).unwrap();
+            let ResolvedMethod::Static { def_id } =
+                resolver.resolve_method(&receiver, name).unwrap()
+            else {
+                panic!("Method not found: {name}");
+            };
+            let definition = database.get_definition(def_id).unwrap();
             assert_eq!(definition.name, name);
             assert!(matches!(definition.kind, DefinitionKind::Method(_)));
         }
@@ -649,8 +676,12 @@ mod tests {
         };
         let methods = vec!["foo", "bar"];
         for name in methods {
-            let res_id = resolver.resolve_method(&receiver, name).unwrap().def_id;
-            let definition = database.get_definition(res_id).unwrap();
+            let ResolvedMethod::Static { def_id } =
+                resolver.resolve_method(&receiver, name).unwrap()
+            else {
+                panic!("Method not found: {name}")
+            };
+            let definition = database.get_definition(def_id).unwrap();
             assert_eq!(definition.name, name);
             assert!(matches!(definition.kind, DefinitionKind::Method(_)));
         }
@@ -695,8 +726,11 @@ mod tests {
             typ: Box::new(foo.clone()),
             args: vec![bar.clone()],
         };
-        let res_id = resolver.resolve_method(&receiver, "foo").unwrap().def_id;
-        let definition = database.get_definition(res_id).unwrap();
+        let ResolvedMethod::Static { def_id } = resolver.resolve_method(&receiver, "foo").unwrap()
+        else {
+            panic!("Method not found")
+        };
+        let definition = database.get_definition(def_id).unwrap();
         let ty = database
             .resolve_alias_to_type(definition.ty.as_global(CURRENT_PACKAGE_ID))
             .unwrap();
@@ -746,8 +780,11 @@ mod tests {
             typ: Box::new(foo.clone()),
             args: vec![Type::Generic(DeBruijn::zero(), 0)],
         };
-        let res_id = resolver.resolve_method(&receiver, "foo").unwrap().def_id;
-        let definition = database.get_definition(res_id).unwrap();
+        let ResolvedMethod::Static { def_id } = resolver.resolve_method(&receiver, "foo").unwrap()
+        else {
+            panic!("Method not found")
+        };
+        let definition = database.get_definition(def_id).unwrap();
         let ty = database
             .resolve_alias_to_type(definition.ty.as_global(CURRENT_PACKAGE_ID))
             .unwrap();
