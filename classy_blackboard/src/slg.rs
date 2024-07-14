@@ -3,7 +3,7 @@ use std::collections::{HashMap, VecDeque};
 use tracing::{debug, info, warn};
 
 use crate::{
-    database::{Database, GenericRef, MatchResult, UniverseIndex, VariableContext},
+    database::{AnswerOrigin, Database, GenericRef, MatchResult, UniverseIndex, VariableContext},
     fold::Folder,
     goal::{CanonicalGoal, ExClause, Goal, LabelingFunction, UnCanonMap},
     normalizer::GoalNormalizer,
@@ -44,11 +44,11 @@ impl Forest {
 #[derive(Clone, Debug)]
 pub struct Substitution {
     pub mapping: HashMap<usize, Ty>,
-    pub origins: HashMap<usize, Option<GenericRef>>,
+    pub origins: HashMap<usize, AnswerOrigin>,
 }
 
 impl Substitution {
-    pub fn add(&mut self, index: usize, ty: Ty, origin: Option<GenericRef>) {
+    pub fn add(&mut self, index: usize, ty: Ty, origin: AnswerOrigin) {
         self.mapping.insert(index, ty);
         self.origins.insert(index, origin);
     }
@@ -84,7 +84,7 @@ struct Strand {
     subst: Substitution,
     exclause: ExClause,
     selected_subgoal: Option<SelectedSubgoal>,
-    origin: Option<GenericRef>,
+    origin: AnswerOrigin,
     labeling: Vec<UniverseIndex>,
     evidence: Vec<Answer>,
 }
@@ -667,7 +667,7 @@ impl<'db, 'forest> Iterator for SlgSolver<'db, 'forest> {
 #[derive(Debug, Clone)]
 pub struct Answer {
     pub subst: Substitution,
-    pub origin: Option<GenericRef>,
+    pub origin: AnswerOrigin,
     /// Maps constraints to their respective answers in the reverse order of
     /// their appearence at the definition
     pub evidence: Vec<Answer>,

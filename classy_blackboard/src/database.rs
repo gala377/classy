@@ -11,6 +11,15 @@ use crate::{
     ty::{ClassRef, Constraint, InstanceRef, MethodBlockRef, Ty, TyRef},
 };
 
+#[derive(Clone, Debug)]
+pub enum AnswerOrigin {
+    FromRef(GenericRef),
+    // Assumption index.
+    // The index comes from flattening all assumptions from goal to a single vector
+    // with outermost at the start and innermost at the end.
+    FromAssumption(usize),
+}
+
 #[derive(Copy, Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct UniverseIndex(usize);
 
@@ -42,6 +51,7 @@ pub struct TypeImpl {
     pub fields: Vec<(String, Ty)>,
 }
 
+#[derive(Debug)]
 pub struct MethodsBlock {
     pub name: Option<String>,
     pub methods: Vec<Definition>,
@@ -50,7 +60,7 @@ pub struct MethodsBlock {
     pub on_type: Ty,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct TypeClass {
     pub name: String,
     pub type_params: Vec<String>,
@@ -66,6 +76,7 @@ pub struct Instance {
     pub constraints: Vec<Constraint>,
 }
 
+#[derive(Debug)]
 pub struct Definition {
     pub type_params: Vec<String>,
     pub name: String,
@@ -465,7 +476,7 @@ pub struct MatchResult {
     /// Exclause derived from the matching clause
     pub exclause: ExClause,
     pub substitution: Substitution,
-    pub origin: Option<GenericRef>,
+    pub origin: AnswerOrigin,
 }
 
 impl Database {
@@ -496,10 +507,16 @@ impl Database {
             g => panic!("Goal is not normalized: {g:?}"),
         };
         let mut results = Vec::new();
-        for clause in &assumptions {
+        for (index, clause) in assumptions.iter().enumerate() {
             info!("Matching assumption: {:?}", clause);
-            self.match_clause(clause, &goal, current_universe, variable_generator, None)
-                .map(|match_result| results.push(match_result));
+            self.match_clause(
+                clause,
+                &goal,
+                current_universe,
+                variable_generator,
+                AnswerOrigin::FromAssumption(index),
+            )
+            .map(|match_result| results.push(match_result));
         }
         for annotated_clause in &self.clauses {
             info!("Matching clause: {:?}", annotated_clause.clause);
@@ -508,7 +525,7 @@ impl Database {
                 &goal,
                 current_universe,
                 variable_generator,
-                Some(annotated_clause.origin.clone()),
+                AnswerOrigin::FromRef(annotated_clause.origin.clone()),
             )
             .map(|mut match_result| {
                 info!("Clause matched");
@@ -529,7 +546,7 @@ impl Database {
         goal: &DomainGoal,
         current_universe: UniverseIndex,
         variable_generator: &mut dyn VariableContext,
-        origin: Option<GenericRef>,
+        origin: AnswerOrigin,
     ) -> Option<MatchResult> {
         let (clause, unmap) = self.normalize_clause(&clause, current_universe, variable_generator);
         // extract the inner domain foal and the body of a clause
@@ -570,7 +587,7 @@ impl Database {
         goal: &DomainGoal,
         clause: &DomainGoal,
         variable_generator: &mut dyn VariableContext,
-        origin: Option<GenericRef>,
+        origin: AnswerOrigin,
     ) -> Option<Substitution> {
         let mut stack = vec![(goal.clone(), clause.clone())];
         let mut substitution = Substitution::new();
@@ -657,7 +674,7 @@ impl Database {
                     },
                 ) => {
                     let method_found = match origin.clone() {
-                        Some(reference @ GenericRef::MethodBlock(_)) => self
+                        AnswerOrigin::FromRef(reference @ GenericRef::MethodBlock(_)) => self
                             .get_method_block(reference)
                             .methods
                             .iter()
@@ -689,7 +706,7 @@ impl Database {
         t2: &Ty,
         substitutions: &mut Substitution,
         variable_generator: &mut dyn VariableContext,
-        origin: Option<GenericRef>,
+        origin: AnswerOrigin,
     ) -> Option<()> {
         let mut stack = vec![(t1.clone(), t2.clone())];
 

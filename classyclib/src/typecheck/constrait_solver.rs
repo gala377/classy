@@ -2,7 +2,7 @@ use core::panic;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
-use classy_blackboard::database::GenericRef;
+use classy_blackboard::database::{AnswerOrigin, GenericRef};
 use classy_blackboard::slg::SlgSolver;
 use classy_blackboard::{goal, slg::Answer};
 
@@ -409,8 +409,13 @@ impl<'ctx, 'solver_db> ConstraintSolver<'ctx, 'solver_db> {
                     panic!("Compilation error");
                 }
                 // TODO: Can we do anything with substitutions?
-                let Answer { origin, .. } = result[0].clone();
-                let origin = origin.unwrap();
+                let Answer {
+                    origin: AnswerOrigin::FromRef(origin),
+                    ..
+                } = result[0].clone()
+                else {
+                    panic!("Cannot get origin from answer ");
+                };
                 let def_id = self.definitions.get(&origin).unwrap();
                 let method_type = {
                     println!("Got definition {def_id:?}");

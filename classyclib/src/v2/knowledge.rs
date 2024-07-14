@@ -1313,12 +1313,13 @@ impl Database {
             let mut block_free_vars = Vec::new();
             let mut block_receiver = typ.clone();
 
+            println!("AAAAAAAA Method block type {typ:?}");
             if let Some((free_variables, bounds, typ)) = self.unwrap_poly_type(typ) {
                 block_bounds = bounds.into();
                 block_free_vars = free_variables.into();
                 block_receiver = typ.clone();
             }
-
+            println!("AAAAAAAAAA Block bounds {block_bounds:?}");
             let mut prefex_scope = PrefexScope::with_empty_scope();
             prefex_scope.add_type_vars(&block_free_vars);
 

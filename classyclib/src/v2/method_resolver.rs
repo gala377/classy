@@ -5,7 +5,9 @@ use crate::{
     v2::knowledge::DefinitionId,
 };
 
-use classy_blackboard as blackboard;
+use classy_blackboard::{
+    self as blackboard, clauses::Clause, database::AnswerOrigin, ty::Constraint, DomainGoal, Goal,
+};
 
 use super::{
     knowledge::{self, GenericConstraint, Id, MethodHandle},
@@ -75,9 +77,6 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
         visible_types: Vec<Id<DefinitionId>>,
         classes: Vec<Id<DefinitionId>>,
     ) -> Self {
-        if !constraints_in_scope.is_empty() {
-            panic!("Constraints in scope are not supported yet");
-        }
         let blackboard_database = blackboard::Database::new();
         let mut resolver = Self {
             database,
@@ -102,6 +101,9 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
 
         resolver.blackboard_database.lower_to_clauses();
 
+        let constraints_in_scope = resolver.translate_constraints(&constraints_in_scope);
+        resolver.constarints_in_scope = constraints_in_scope;
+
         resolver
     }
 
@@ -111,6 +113,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
             let method_block_definition =
                 self.database.get_definition(method_block.clone()).unwrap();
             let constraints = self.translate_constraints(&method_block_definition.constraints);
+            println!("Constraints: {:#?}", constraints);
             let info = method_block_definition
                 .kind
                 .as_method_block()
@@ -148,7 +151,11 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
             };
             let methods_block_ref = self.blackboard_database.add_method_block(b_methods_block);
             self.meth_block_to_meth_block_id
-                .insert(method_block.clone(), methods_block_ref);
+                .insert(method_block.clone(), methods_block_ref.clone());
+            let method_block = self.blackboard_database.get_method_block(
+                classy_blackboard::database::GenericRef::MethodBlock(methods_block_ref),
+            );
+            println!("Method block: {:#?}", method_block);
         }
     }
 
@@ -213,6 +220,8 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
                 members: Vec::new(),
             };
             self.blackboard_database.replace_class(class_ref, class_def);
+            let class = self.blackboard_database.get_class(class_ref);
+            println!("Class: {:#?}", class);
         }
     }
 
@@ -304,9 +313,8 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
         method: &str,
     ) -> ResolvedMethod {
         let blackboard::slg::Answer { origin, .. } = answers;
-        let origin = origin.as_ref().unwrap();
         match origin {
-            classy_blackboard::database::GenericRef::MethodBlock(id) => {
+            AnswerOrigin::FromRef(classy_blackboard::database::GenericRef::MethodBlock(id)) => {
                 let id = self
                     .meth_block_to_meth_block_id
                     .iter()
@@ -342,22 +350,35 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
         // ! and then count the scopes and indexes and introduce the quantifiers based
         // ! on that TODO
         let receiver_as_blackboard_type = self.to_blackboard_type(receiver);
-        let query = blackboard::Goal::Domain(blackboard::DomainGoal::FindMethod {
+        let mut query = blackboard::Goal::Domain(blackboard::DomainGoal::FindMethod {
             name: method.to_owned(),
             on_type: receiver_as_blackboard_type,
         });
+        let constraints = self
+            .constarints_in_scope
+            .iter()
+            .map(|c| match c {
+                Constraint::Class(class, args) => {
+                    Clause::Fact(DomainGoal::InstanceExistsAndWellFormed {
+                        head: class.clone(),
+                        args: args.clone(),
+                    })
+                }
+                Constraint::Eq(_, _) => todo!(),
+            })
+            .collect::<Vec<_>>();
+        if !constraints.is_empty() {
+            query = blackboard::Goal::Implies(constraints, Box::new(query));
+        }
         let query = self
             .generics_scope
             .iter_scopes()
+            // ? Maybe this is should be enabled in the future but with how generic scopes
+            // ? are handled now i don't think we should ever get en empty prefex scope
             //.filter(|s| !s.is_empty())
             .fold(query, |query, scope| {
                 blackboard::Goal::Forall(scope.len(), Box::new(query))
             });
-        if self.constarints_in_scope.is_empty() {
-            return query;
-        }
-        let constraints = self.constarints_in_scope.clone();
-        let query = todo!("change constraints into if {{ constraints }} query");
         query
     }
 
@@ -618,11 +639,35 @@ mod tests {
             .collect()
     }
 
+    fn get_classes(database: &Database) -> Vec<Id<DefinitionId>> {
+        database
+            .class_definitions
+            .keys()
+            .cloned()
+            .map(|id| id.as_global(CURRENT_PACKAGE_ID))
+            .collect()
+    }
+
+    fn get_instances(database: &Database) -> Vec<Id<DefinitionId>> {
+        database
+            .instance_definitions
+            .keys()
+            .cloned()
+            .map(|id| id.as_global(CURRENT_PACKAGE_ID))
+            .collect()
+    }
+
     fn get_type(database: &Database, name: &str) -> Type {
         database
             .get_type_by_unresolved_name(&[], &[], name)
             .unwrap()
             .clone()
+    }
+
+    fn get_class(database: &Database, name: &str) -> Id<DefinitionId> {
+        database
+            .get_definition_id_by_unresolved_name(&[], &[], name)
+            .unwrap()
     }
 
     #[test]
@@ -820,11 +865,105 @@ mod tests {
             typ: Box::new(foo.clone()),
             args: vec![Type::Int],
         };
+
         let Err(MethodResolutionError::Ambiguity { candidates }) =
             resolver.resolve_method(&receiver, "foo")
         else {
             panic!("Fail");
         };
         assert_eq!(candidates.len(), 2);
+    }
+
+    const SOURCE_4: &str = r#"
+         type Foo(a) {}
+         class Debug(a) {}
+         class Clone(a) {}
+
+         instance for Clone(std::String) {}
+
+         methods for { Clone(a) } => Foo(a) {
+             foo: () -> a
+             foo () {}
+         }
+    "#;
+
+    #[test]
+    fn resolve_between_with_class_constraints() {
+        let (database, _) = setup_database(SOURCE_4);
+        let types = get_types(&database);
+        let method_blocks = get_method_blocks(&database);
+        let classes = get_classes(&database);
+        let instances = get_instances(&database);
+        let scope = PrefexScope::with_empty_scope();
+
+        let mut resolver = MethodResolver::within_function(
+            &database,
+            &scope,
+            Vec::new(),
+            instances,
+            method_blocks,
+            types,
+            classes,
+        );
+        let foo = get_type(&database, "Foo");
+        let receiver = Type::App {
+            typ: Box::new(foo.clone()),
+            args: vec![Type::Int],
+        };
+
+        let Err(MethodResolutionError::MethodNotFound) = resolver.resolve_method(&receiver, "foo")
+        else {
+            panic!("Fail");
+        };
+
+        let receiver = Type::App {
+            typ: Box::new(foo.clone()),
+            args: vec![Type::String],
+        };
+        let ResolvedMethod::Static { .. } = resolver.resolve_method(&receiver, "foo").unwrap()
+        else {
+            panic!("Method not found")
+        };
+    }
+
+    #[test]
+    fn resolve_between_within_context() {
+        let (database, _) = setup_database(SOURCE_4);
+        let types = get_types(&database);
+        let method_blocks = get_method_blocks(&database);
+        let classes = get_classes(&database);
+        let instances = get_instances(&database);
+        let mut scope = PrefexScope::with_empty_scope();
+        scope.add_type_var("a");
+
+        let constraints = vec![
+            GenericConstraint {
+                class: get_class(&database, "Debug"),
+                args: vec![Type::Generic(DeBruijn::zero(), 0)],
+            },
+            GenericConstraint {
+                class: get_class(&database, "Clone"),
+                args: vec![Type::Generic(DeBruijn::zero(), 0)],
+            },
+        ];
+        let mut resolver = MethodResolver::within_function(
+            &database,
+            &scope,
+            constraints,
+            instances,
+            method_blocks,
+            types,
+            classes,
+        );
+        let foo = get_type(&database, "Foo");
+        let receiver = Type::App {
+            typ: Box::new(foo.clone()),
+            args: vec![Type::Generic(DeBruijn::zero(), 0)],
+        };
+
+        let ResolvedMethod::Static { .. } = resolver.resolve_method(&receiver, "foo").unwrap()
+        else {
+            panic!("Method not found")
+        };
     }
 }

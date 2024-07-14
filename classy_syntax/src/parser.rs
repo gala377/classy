@@ -2316,6 +2316,18 @@ mod tests {
     }
 
     ptest! {
+        parce_methods_with_bounds,
+        r#"
+            methods for { Show(a) } => Foo {}
+        "#,
+        sexpr!((
+            (methods (
+                poly [] {(Show (poly [] {} a))}
+                Foo) {})
+        ))
+    }
+
+    ptest! {
         parse_class_definition,
         r#"
             class Foo(a, b, c) {}

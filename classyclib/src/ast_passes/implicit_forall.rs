@@ -175,14 +175,19 @@ impl ImplicitForall {
     fn fold_methods_type(&mut self, typ: ast::Typ) -> ast::Typ {
         self.prefex.clear();
         let new_t = self.fold_typ(typ);
-        if !self.prefex.is_empty() {
-            ast::Typ::Poly {
+        println!("AAAAAAAA Folded t: {:?}", new_t);
+        match new_t {
+            ast::Typ::Poly { bounds, typ, .. } if !self.prefex.is_empty() => ast::Typ::Poly {
+                free_variables: self.prefex.to_vec(),
+                bounds,
+                typ,
+            },
+            t if !self.prefex.is_empty() => ast::Typ::Poly {
                 free_variables: self.prefex.to_vec(),
                 bounds: Vec::new(),
-                typ: Box::new(new_t),
-            }
-        } else {
-            new_t
+                typ: Box::new(t),
+            },
+            t => t,
         }
     }
 }

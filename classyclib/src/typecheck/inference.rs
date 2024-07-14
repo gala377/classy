@@ -6,7 +6,7 @@ use std::{
     rc::Rc,
 };
 
-use classy_blackboard::database::{self, Database as BlackboardDatabase, GenericRef};
+use classy_blackboard::database::{self, AnswerOrigin, Database as BlackboardDatabase, GenericRef};
 use classy_syntax::ast::{self, ExprKind, FunctionDefinition, MethodsBlock, Visitor};
 
 use crate::{
@@ -358,7 +358,10 @@ impl<'sess> Inference<'sess> {
             // so we need to do union now with the type of the found method
             // block on the left and the original receiver on the
             // right and see what the substitution should be
-            let def_id = self.definitions[&origin.expect("empty methods block origin")];
+            let AnswerOrigin::FromRef(origin) = origin else {
+                panic!("Expected AnswerOrigin::FromRef got {origin:?}")
+            };
+            let def_id = self.definitions[&origin];
             let methods_block = tctx
                 .get_methods_block(def_id)
                 .expect("could not find methods block");
