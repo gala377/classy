@@ -792,7 +792,7 @@ pub fn walk_class_methods_block<'ast, V: Visitor<'ast>>(
     visitor: &mut V,
     ast::MethodsBlock { name, typ, methods }: &'ast ast::MethodsBlock<ast::FuncDecl>,
 ) {
-    for name in name {
+    if let Some(name) = name {
         visitor.visit_identifier(name);
     }
     visitor.visit_typ(typ);

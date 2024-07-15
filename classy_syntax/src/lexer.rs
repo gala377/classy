@@ -146,7 +146,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(illegal_floating_point_literal_pattern)]
     fn lexing_simple_floats() {
         assert_lex!(
             [

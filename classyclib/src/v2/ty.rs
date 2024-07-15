@@ -1,6 +1,6 @@
 use crate::typecheck::{type_context::Name, types::DeBruijn};
 
-use super::knowledge::{self, DefinitionId, Id, TypeId};
+use super::knowledge::{DefinitionId, Id, TypeId};
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub enum Type {

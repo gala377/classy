@@ -20,6 +20,7 @@ pub struct SyntaxError {
 enum ParseErr {
     /// The rule matched but ended with an error.
     /// The error has already been reported and recovered.
+    #[allow(dead_code)]
     Err(SyntaxError),
     /// Rule could not match.
     WrongRule,

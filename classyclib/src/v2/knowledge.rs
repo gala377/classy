@@ -1590,17 +1590,7 @@ impl Database {
 
     pub fn lower_functions(&mut self, session: &Session) {
         let function_definitions = self.function_definitions.clone();
-        for (
-            id,
-            ast::FunctionDefinition {
-                name,
-                typ,
-                parameters,
-                body,
-                attributes,
-            },
-        ) in function_definitions.iter()
-        {
+        for (id, ast::FunctionDefinition { typ, .. }) in function_definitions.iter() {
             let namespace = self.get_namespace(*id).to_vec();
             let file = self.definitions.get(id).unwrap().file;
             let mut prefex_scope = PrefexScope::with_empty_scope();

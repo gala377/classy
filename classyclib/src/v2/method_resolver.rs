@@ -6,7 +6,7 @@ use crate::{
 };
 
 use classy_blackboard::{
-    self as blackboard, clauses::Clause, database::AnswerOrigin, ty::Constraint, DomainGoal, Goal,
+    self as blackboard, clauses::Clause, database::AnswerOrigin, ty::Constraint, DomainGoal,
 };
 
 use super::{
