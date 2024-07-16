@@ -437,12 +437,15 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
             Type::ToInfere => panic!("ToInfere type should not be resolved"),
             Type::Fresh(_) => panic!("Fresh type should not be resolved"),
 
-            t => blackboard::Ty::Ref(
-                self.type_to_type_id
-                    .get(&self.database.get_primitive_type(&t).unwrap())
-                    .unwrap()
-                    .clone(),
-            ),
+            t => {
+                println!("T is {:#?}", t);
+                blackboard::Ty::Ref(
+                    self.type_to_type_id
+                        .get(&self.database.get_primitive_type(&t).unwrap())
+                        .unwrap()
+                        .clone(),
+                )
+            }
         }
     }
 }
@@ -530,6 +533,7 @@ mod tests {
             ("Float", crate::v2::ty::Type::Float),
             ("Byte", crate::v2::ty::Type::Byte),
             ("UInt", crate::v2::ty::Type::UInt),
+            ("Unit", crate::v2::ty::Type::Unit),
         ];
         PackageInfo {
             name: "std".to_string(),
@@ -587,6 +591,7 @@ mod tests {
                     crate::v2::ty::Type::Float => Some((id.clone(), t.clone())),
                     crate::v2::ty::Type::Byte => Some((id.clone(), t.clone())),
                     crate::v2::ty::Type::String => Some((id.clone(), t.clone())),
+                    crate::v2::ty::Type::Unit => Some((id.clone(), t.clone())),
                     _ => None,
                 }
             })
@@ -963,6 +968,41 @@ mod tests {
 
         let ResolvedMethod::Static { .. } = resolver.resolve_method(&receiver, "foo").unwrap()
         else {
+            panic!("Method not found")
+        };
+    }
+
+    const ADTS_SOURCE: &str = r#"
+    type Foo {
+        A
+        B(std::Int)
+    }
+
+    methods for Foo {
+      foo: () -> () 
+      foo () {}
+    }
+    "#;
+
+    #[test]
+    fn resolve_methods_for_adt_type() {
+        let (database, _) = setup_database(ADTS_SOURCE);
+        let types = get_types(&database);
+        let method_blocks = get_method_blocks(&database);
+        let classes = get_classes(&database);
+        let instances = get_instances(&database);
+        let scope = PrefexScope::with_empty_scope();
+        let mut resolver = MethodResolver::within_function(
+            &database,
+            &scope,
+            Vec::new(),
+            instances,
+            method_blocks,
+            types,
+            classes,
+        );
+        let receiver = get_type(&database, "Foo");
+        let Ok(ResolvedMethod::Static { .. }) = resolver.resolve_method(&receiver, "foo") else {
             panic!("Method not found")
         };
     }
