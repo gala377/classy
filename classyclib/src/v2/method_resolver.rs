@@ -1147,7 +1147,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_instance_methdos_static() {
+    fn resolve_instance_methods_static() {
         tracing_subscriber::fmt().pretty().init();
         let (database, _) = setup_database(METHOD_BLOCKS);
         let types = get_types(&database);
