@@ -236,6 +236,8 @@ dependencies = [
  "serde_json",
  "similar-asserts",
  "thiserror",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

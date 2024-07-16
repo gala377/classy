@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     typecheck::{ast_to_type::PrefexScope, types::DeBruijn},
-    v2::knowledge::DefinitionId,
+    v2::knowledge::{ClassMethodBlock, DefinitionId},
 };
 
 use classy_blackboard::{
@@ -10,7 +10,7 @@ use classy_blackboard::{
 };
 
 use super::{
-    knowledge::{self, GenericConstraint, Id, MethodHandle},
+    knowledge::{self, GenericConstraint, Id, InstanceMethodBlock, MethodHandle},
     ty::Type,
 };
 
@@ -109,62 +109,81 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
 
     fn add_method_blocks(&mut self, method_blocks: &[Id<DefinitionId>]) {
         for method_block in method_blocks {
-            let package = method_block.package.clone();
-            let method_block_definition =
-                self.database.get_definition(method_block.clone()).unwrap();
-            let constraints = self.translate_constraints(&method_block_definition.constraints);
-            println!("Constraints: {:#?}", constraints);
-            let info = method_block_definition
-                .kind
-                .as_method_block()
-                .cloned()
-                .unwrap();
-            let receiver = self.database.resolve_alias_to_type(info.receiver).unwrap();
-            let receiver = self.to_blackboard_type(&receiver);
-            let methods = info
-                .methods
-                .iter()
-                .map(|MethodHandle { name, definition }| {
-                    let definition = definition.as_global(package.clone());
-                    let definition = self.database.get_definition(definition).unwrap();
-                    let info = definition.kind.as_method().cloned().unwrap();
-                    let method_type = info.ty.as_global(package.clone());
-                    let method_type = self.database.resolve_alias_to_type(method_type).unwrap();
-                    let (free_vars, method_type) = match method_type {
-                        Type::Scheme { prefex, typ } => (prefex, *typ),
-                        t => (Vec::new(), t),
-                    };
-                    let method_type = self.to_blackboard_type(&method_type);
-                    blackboard::database::Definition {
-                        type_params: free_vars,
-                        name: name.clone(),
-                        ty: method_type,
-                    }
-                })
-                .collect();
-            let b_methods_block = blackboard::database::MethodsBlock {
-                on_type: receiver,
-                name: None,
-                type_params: info.free_vars,
-                constraints,
-                methods,
-            };
-            let methods_block_ref = self.blackboard_database.add_method_block(b_methods_block);
-            self.meth_block_to_meth_block_id
-                .insert(method_block.clone(), methods_block_ref.clone());
-            let method_block = self.blackboard_database.get_method_block(
-                classy_blackboard::database::GenericRef::MethodBlock(methods_block_ref),
-            );
-            println!("Method block: {:#?}", method_block);
+            self.add_method_block(method_block.clone(), &[], &[]);
         }
+    }
+
+    fn add_method_block(
+        &mut self,
+        method_block: Id<DefinitionId>,
+        additional_constraints: &[GenericConstraint],
+        additional_free_vars: &[String],
+    ) {
+        let package = method_block.package.clone();
+        let method_block_definition = self.database.get_definition(method_block.clone()).unwrap();
+        let constraints = additional_constraints
+            .iter()
+            .chain(&method_block_definition.constraints)
+            .cloned()
+            .collect::<Vec<_>>();
+        let constraints = self.translate_constraints(&constraints);
+        let info = method_block_definition
+            .kind
+            .as_method_block()
+            .cloned()
+            .unwrap();
+        let receiver = self.database.resolve_alias_to_type(info.receiver).unwrap();
+        let receiver = self.to_blackboard_type(&receiver);
+        let methods = info
+            .methods
+            .iter()
+            .map(|MethodHandle { name, definition }| {
+                let definition = definition.as_global(package.clone());
+                let definition = self.database.get_definition(definition).unwrap();
+                let info = definition.kind.as_method().cloned().unwrap();
+                let method_type = info.ty.as_global(package.clone());
+                let method_type = self.database.resolve_alias_to_type(method_type).unwrap();
+                let (free_vars, method_type) = match method_type {
+                    Type::Scheme { prefex, typ } => (prefex, *typ),
+                    t => (Vec::new(), t),
+                };
+                let method_type = self.to_blackboard_type(&method_type);
+                blackboard::database::Definition {
+                    type_params: free_vars,
+                    name: name.clone(),
+                    ty: method_type,
+                }
+            })
+            .collect();
+        let type_params = info
+            .free_vars
+            .iter()
+            .chain(additional_free_vars)
+            .cloned()
+            .collect();
+        let b_methods_block = blackboard::database::MethodsBlock {
+            on_type: receiver,
+            name: None,
+            type_params,
+            constraints,
+            methods,
+        };
+        let methods_block_ref = self.blackboard_database.add_method_block(b_methods_block);
+        self.meth_block_to_meth_block_id
+            .insert(method_block.clone(), methods_block_ref.clone());
+        let method_block = self.blackboard_database.get_method_block(
+            classy_blackboard::database::GenericRef::MethodBlock(methods_block_ref),
+        );
+        println!("Method block: {:#?}", method_block);
     }
 
     fn add_instances(&mut self, instances: &[Id<DefinitionId>]) {
         for instance in instances {
+            let package = instance.package.clone();
             let instance_definition = self.database.get_definition(instance.clone()).unwrap();
             let constraints = self.translate_constraints(&instance_definition.constraints);
             let info = instance_definition.kind.as_instance().cloned().unwrap();
-            let GenericConstraint { class, args } = info.receiver;
+            let GenericConstraint { class, args } = info.receiver.clone();
             let class_ref = self.class_to_class_id.get(&class).unwrap().clone();
             let args = args.iter().map(|ty| self.to_blackboard_type(ty)).collect();
             // ! Why instance does not have members?
@@ -173,12 +192,16 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
             let b_instance = blackboard::database::Instance {
                 type_class: class_ref,
                 args,
-                type_params: info.free_vars,
+                type_params: info.free_vars.clone(),
                 constraints,
             };
             let instance_ref = self.blackboard_database.add_instance(b_instance);
             self.instance_to_instance_id
                 .insert(instance.clone(), instance_ref);
+            for InstanceMethodBlock { id, .. } in &info.method_blocks {
+                let id = id.as_global(package.clone());
+                self.add_method_block(id, &[info.receiver.clone()], &info.free_vars);
+            }
         }
     }
 
@@ -206,6 +229,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
 
     fn add_classes(&mut self, classes: &[Id<DefinitionId>]) {
         for class in classes {
+            let package = class.package.clone();
             let resolved_class = self.database.get_definition(class.clone()).unwrap();
             let type_params = resolved_class.kind.as_class().unwrap().arguments.clone();
             let class_ref = self.class_to_class_id.get(&class).unwrap().clone();
@@ -220,8 +244,23 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
                 members: Vec::new(),
             };
             self.blackboard_database.replace_class(class_ref, class_def);
-            let class = self.blackboard_database.get_class(class_ref);
-            println!("Class: {:#?}", class);
+            let class_info = resolved_class.kind.as_class().unwrap();
+            for ClassMethodBlock { id, .. } in &class_info.method_blocks {
+                let id = id.as_global(package.clone());
+                self.add_method_block(
+                    id,
+                    &[GenericConstraint {
+                        class: class.clone(),
+                        args: class_info
+                            .arguments
+                            .iter()
+                            .enumerate()
+                            .map(|(i, _)| Type::Generic(DeBruijn::zero(), i))
+                            .collect(),
+                    }],
+                    &class_info.arguments,
+                );
+            }
         }
     }
 
@@ -232,19 +271,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
         let mut res = Vec::new();
         for GenericConstraint { class, args } in constraints {
             let class_ref = self.class_to_class_id.get(class).unwrap();
-            let args = args
-                .iter()
-                .map(|ty| {
-                    let Type::Generic(scopes, index) = ty else {
-                        panic!();
-                    };
-                    let scopes = scopes.0 as usize;
-                    blackboard::Ty::Generic {
-                        scopes,
-                        index: *index,
-                    }
-                })
-                .collect();
+            let args = args.iter().map(|ty| self.to_blackboard_type(ty)).collect();
             res.push(blackboard::ty::Constraint::Class(class_ref.clone(), args));
         }
         res
@@ -345,10 +372,6 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
     }
 
     fn create_blackboard_query(&self, method: &str, receiver: &Type) -> blackboard::Goal {
-        // ! We cannot simply translate to blackboard type as we need to
-        // ! Introduce quantifiers for generics. So we need to walk the type
-        // ! and then count the scopes and indexes and introduce the quantifiers based
-        // ! on that TODO
         let receiver_as_blackboard_type = self.to_blackboard_type(receiver);
         let mut query = blackboard::Goal::Domain(blackboard::DomainGoal::FindMethod {
             name: method.to_owned(),
@@ -379,6 +402,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
             .fold(query, |query, scope| {
                 blackboard::Goal::Forall(scope.len(), Box::new(query))
             });
+        println!("Query: {:#?}", query);
         query
     }
 
@@ -636,6 +660,9 @@ mod tests {
     }
 
     fn get_method_blocks(database: &Database) -> Vec<Id<DefinitionId>> {
+        for method_block in database.method_blocks_definitions.keys() {
+            println!("Method block: {method_block:#?}");
+        }
         database
             .method_blocks_definitions
             .keys()
@@ -1002,6 +1029,53 @@ mod tests {
             classes,
         );
         let receiver = get_type(&database, "Foo");
+        let Ok(ResolvedMethod::Static { .. }) = resolver.resolve_method(&receiver, "foo") else {
+            panic!("Method not found")
+        };
+    }
+
+    const METHOD_BLOCKS: &str = r#"
+      class C(a) {
+        methods for a {
+          foo: () -> std::Int
+        }
+      }
+      type Foo {}
+
+      instance for C(Foo) {
+        methods for Foo {
+          foo: () -> std::Int
+          foo () {}
+        }
+      }
+      "#;
+
+    #[test]
+    fn resolve_instance_methdos() {
+        tracing_subscriber::fmt().pretty().init();
+        let (database, _) = setup_database(METHOD_BLOCKS);
+        let types = get_types(&database);
+        let method_blocks = get_method_blocks(&database);
+        let classes = get_classes(&database);
+        let instances = get_instances(&database);
+        let mut scope = PrefexScope::with_empty_scope();
+        scope.add_type_var("a");
+
+        let constraints = vec![GenericConstraint {
+            class: get_class(&database, "C"),
+            args: vec![Type::Generic(DeBruijn::zero(), 0)],
+        }];
+
+        let mut resolver = MethodResolver::within_function(
+            &database,
+            &scope,
+            constraints,
+            instances,
+            method_blocks,
+            types,
+            classes,
+        );
+        let receiver = Type::Generic(DeBruijn::zero(), 0);
         let Ok(ResolvedMethod::Static { .. }) = resolver.resolve_method(&receiver, "foo") else {
             panic!("Method not found")
         };

@@ -266,19 +266,19 @@ impl Database {
             ..
         }: &MethodsBlock,
     ) -> Clause {
-        let constraints_as_clauses = constraints
-            .iter()
-            .map(|c| self.lower_constraint_into_clause(c))
-            .collect::<Vec<_>>();
+        // let constraints_as_clauses = constraints
+        //     .iter()
+        //     .map(|c| self.lower_constraint_into_clause(c))
+        //     .collect::<Vec<_>>();
         let clauses = constraints
             .iter()
             .map(|c| self.lower_constraint(c))
-            .chain(std::iter::once(Goal::Implies(
-                constraints_as_clauses,
-                Box::new(Goal::Domain(DomainGoal::TypeWellFormed {
-                    ty: on_type.clone(),
-                })),
-            )))
+            // .chain(std::iter::once(Goal::Implies(
+            //     constraints_as_clauses,
+            //     Box::new(Goal::Domain(DomainGoal::TypeWellFormed {
+            //         ty: on_type.clone(),
+            //     })),
+            // )))
             .collect::<Vec<_>>();
         Clause::Forall(
             // ! This is fine.
@@ -516,7 +516,8 @@ impl Database {
                 variable_generator,
                 AnswerOrigin::FromAssumption(index),
             )
-            .map(|match_result| results.push(match_result));
+            .into_iter()
+            .for_each(|match_result| results.push(match_result));
         }
         for annotated_clause in &self.clauses {
             info!("Matching clause: {:?}", annotated_clause.clause);
@@ -527,7 +528,8 @@ impl Database {
                 variable_generator,
                 AnswerOrigin::FromRef(annotated_clause.origin.clone()),
             )
-            .map(|mut match_result| {
+            .into_iter()
+            .for_each(|mut match_result| {
                 info!("Clause matched");
                 if !assumptions.is_empty() {
                     match_result.exclause.subgoals.iter_mut().for_each(|goal| {
@@ -547,7 +549,7 @@ impl Database {
         current_universe: UniverseIndex,
         variable_generator: &mut dyn VariableContext,
         origin: AnswerOrigin,
-    ) -> Option<MatchResult> {
+    ) -> Vec<MatchResult> {
         let (clause, unmap) = self.normalize_clause(&clause, current_universe, variable_generator);
         // extract the inner domain foal and the body of a clause
         let (raw_clause, body) = match clause {
@@ -556,15 +558,17 @@ impl Database {
             _ => panic!("Clause is not normalized: {clause:?}"),
         };
         self.unify(goal, &raw_clause, variable_generator, origin.clone())
+            .into_iter()
             .map(|substitution| MatchResult {
                 exclause: ExClause {
-                    head: Goal::Domain(raw_clause),
-                    subgoals: body,
+                    head: Goal::Domain(raw_clause.clone()),
+                    subgoals: body.clone(),
                     unmap: unmap.clone().unwrap_or_default(),
                 },
                 substitution,
                 origin: origin.clone(),
             })
+            .collect()
     }
 
     /// Remove any universal quantifiers and replace their respective variable
@@ -588,7 +592,7 @@ impl Database {
         clause: &DomainGoal,
         variable_generator: &mut dyn VariableContext,
         origin: AnswerOrigin,
-    ) -> Option<Substitution> {
+    ) -> Vec<Substitution> {
         let mut stack = vec![(goal.clone(), clause.clone())];
         let mut substitution = Substitution::new();
         macro_rules! subst_stack {
@@ -606,13 +610,18 @@ impl Database {
             use DomainGoal::*;
             match (g1, g2) {
                 (TypeWellFormed { ty: ty1 }, TypeWellFormed { ty: ty2 }) => {
-                    self.unify_ty(
-                        &ty1,
-                        &ty2,
-                        &mut substitution,
-                        variable_generator,
-                        origin.clone(),
-                    )?;
+                    if self
+                        .unify_ty(
+                            &ty1,
+                            &ty2,
+                            &mut substitution,
+                            variable_generator,
+                            origin.clone(),
+                        )
+                        .is_none()
+                    {
+                        return Vec::new();
+                    }
                     subst_stack!();
                 }
                 (
@@ -626,13 +635,18 @@ impl Database {
                     },
                 ) if head1 == head2 && args1.len() == args2.len() => {
                     for (a1, a2) in args1.iter().zip(args2.iter()) {
-                        self.unify_ty(
-                            a1,
-                            a2,
-                            &mut substitution,
-                            variable_generator,
-                            origin.clone(),
-                        )?;
+                        if self
+                            .unify_ty(
+                                a1,
+                                a2,
+                                &mut substitution,
+                                variable_generator,
+                                origin.clone(),
+                            )
+                            .is_none()
+                        {
+                            return Vec::new();
+                        }
                         subst_stack!();
                     }
                 }
@@ -647,24 +661,34 @@ impl Database {
                     },
                 ) if head1 == head2 && args1.len() == args2.len() => {
                     for (a1, a2) in args1.iter().zip(args2.iter()) {
-                        self.unify_ty(
-                            a1,
-                            a2,
-                            &mut substitution,
-                            variable_generator,
-                            origin.clone(),
-                        )?;
+                        if self
+                            .unify_ty(
+                                a1,
+                                a2,
+                                &mut substitution,
+                                variable_generator,
+                                origin.clone(),
+                            )
+                            .is_none()
+                        {
+                            return Vec::new();
+                        }
                         subst_stack!();
                     }
                 }
                 (MethodBlockExists { on_type: ty1 }, MethodBlockExists { on_type: ty2 }) => {
-                    self.unify_ty(
-                        &ty1,
-                        &ty2,
-                        &mut substitution,
-                        variable_generator,
-                        origin.clone(),
-                    )?;
+                    if self
+                        .unify_ty(
+                            &ty1,
+                            &ty2,
+                            &mut substitution,
+                            variable_generator,
+                            origin.clone(),
+                        )
+                        .is_none()
+                    {
+                        return Vec::new();
+                    }
                     subst_stack!();
                 }
                 (
@@ -683,21 +707,26 @@ impl Database {
                         _ => false,
                     };
                     if !method_found {
-                        return None;
+                        return Vec::new();
                     }
-                    self.unify_ty(
-                        &on_type,
-                        &target_type,
-                        &mut substitution,
-                        variable_generator,
-                        origin.clone(),
-                    )?;
+                    if self
+                        .unify_ty(
+                            &on_type,
+                            &target_type,
+                            &mut substitution,
+                            variable_generator,
+                            origin.clone(),
+                        )
+                        .is_none()
+                    {
+                        return Vec::new();
+                    }
                     subst_stack!();
                 }
-                _ => return None,
+                _ => return Vec::new(),
             }
         }
-        Some(substitution)
+        vec![substitution]
     }
 
     fn unify_ty(
