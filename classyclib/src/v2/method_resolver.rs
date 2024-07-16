@@ -6,7 +6,11 @@ use crate::{
 };
 
 use classy_blackboard::{
-    self as blackboard, clauses::Clause, database::AnswerOrigin, ty::Constraint, DomainGoal,
+    self as blackboard,
+    clauses::Clause,
+    database::{AnswerOrigin, GenericRef},
+    ty::Constraint,
+    DomainGoal,
 };
 
 use super::{
@@ -38,7 +42,7 @@ pub enum ResolvedMethod {
         /// instance. This would be represented same as generic types
         /// indexes. In the above example it would be (0, 1) as `Show`
         /// is the second constraint in innermost constraint scope.
-        referenced_constraint: (DeBruijn, usize),
+        referenced_constraint: usize,
     },
 }
 
@@ -61,6 +65,13 @@ pub struct MethodResolver<'db, 'scope> {
     instance_to_instance_id: HashMap<Id<DefinitionId>, blackboard::ty::InstanceRef>,
     type_to_type_id: HashMap<Id<DefinitionId>, blackboard::ty::TyRef>,
     meth_block_to_meth_block_id: HashMap<Id<DefinitionId>, blackboard::ty::MethodBlockRef>,
+
+    synthetic_method_blocks: HashMap<blackboard::ty::MethodBlockRef, SyntheticData>,
+}
+
+enum SyntheticData {
+    FromInstance(Id<DefinitionId>),
+    FromClass(Id<DefinitionId>),
 }
 
 impl<'db, 'scope> MethodResolver<'db, 'scope> {
@@ -90,6 +101,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
             instance_to_instance_id: HashMap::new(),
             type_to_type_id: HashMap::new(),
             meth_block_to_meth_block_id: HashMap::new(),
+            synthetic_method_blocks: HashMap::new(),
         };
 
         resolver.reserve_classes(&classes);
@@ -109,7 +121,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
 
     fn add_method_blocks(&mut self, method_blocks: &[Id<DefinitionId>]) {
         for method_block in method_blocks {
-            self.add_method_block(method_block.clone(), &[], &[]);
+            self.add_method_block(method_block.clone(), &[], &[], None);
         }
     }
 
@@ -118,6 +130,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
         method_block: Id<DefinitionId>,
         additional_constraints: &[GenericConstraint],
         additional_free_vars: &[String],
+        synthetic: Option<SyntheticData>,
     ) {
         let package = method_block.package.clone();
         let method_block_definition = self.database.get_definition(method_block.clone()).unwrap();
@@ -171,6 +184,11 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
         let methods_block_ref = self.blackboard_database.add_method_block(b_methods_block);
         self.meth_block_to_meth_block_id
             .insert(method_block.clone(), methods_block_ref.clone());
+
+        if let Some(synthetic) = synthetic {
+            self.synthetic_method_blocks
+                .insert(methods_block_ref.clone(), synthetic);
+        }
         let method_block = self.blackboard_database.get_method_block(
             classy_blackboard::database::GenericRef::MethodBlock(methods_block_ref),
         );
@@ -200,7 +218,12 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
                 .insert(instance.clone(), instance_ref);
             for InstanceMethodBlock { id, .. } in &info.method_blocks {
                 let id = id.as_global(package.clone());
-                self.add_method_block(id, &[info.receiver.clone()], &info.free_vars);
+                self.add_method_block(
+                    id,
+                    &[info.receiver.clone()],
+                    &info.free_vars,
+                    Some(SyntheticData::FromInstance(instance.clone())),
+                );
             }
         }
     }
@@ -259,6 +282,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
                             .collect(),
                     }],
                     &class_info.arguments,
+                    Some(SyntheticData::FromClass(class.clone())),
                 );
             }
         }
@@ -316,18 +340,36 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
 
         let solver =
             blackboard::slg::SlgSolver::new(&self.blackboard_database, &mut self.forest, query);
-        let answers: Vec<_> = solver.into_iter().take(20).collect();
+        let mut answers: Vec<_> = solver.into_iter().take(20).collect();
         println!("answers: {:#?}", answers);
         if answers.len() == 0 {
             return Err(MethodResolutionError::MethodNotFound);
         }
         if answers.len() > 1 {
-            let candidates = answers
+            let filtered_out_synthetic_blocks = answers
                 .iter()
-                .map(|a| self.method_from_origin(a, method))
-                .collect();
-            println!("Ambiguity: {:#?}", candidates);
-            return Err(MethodResolutionError::Ambiguity { candidates });
+                .filter(|answer| match &answer.origin {
+                    AnswerOrigin::FromRef(GenericRef::MethodBlock(block_id)) => {
+                        match self.synthetic_method_blocks.get(&block_id) {
+                            Some(SyntheticData::FromClass(_)) => false,
+                            _ => true,
+                        }
+                    }
+                    _ => true,
+                })
+                .collect::<Vec<_>>();
+            if filtered_out_synthetic_blocks.len() != 1 {
+                let candidates = answers
+                    .iter()
+                    .map(|a| self.method_from_origin(a, method))
+                    .collect();
+                println!("Ambiguity: {:#?}", candidates);
+                return Err(MethodResolutionError::Ambiguity { candidates });
+            }
+            answers = filtered_out_synthetic_blocks
+                .into_iter()
+                .cloned()
+                .collect::<Vec<_>>();
         }
         // ! For now we ignore evidence and so on
         let resolved = self.method_from_origin(&answers[0], method);
@@ -339,17 +381,39 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
         answers: &blackboard::slg::Answer,
         method: &str,
     ) -> ResolvedMethod {
-        let blackboard::slg::Answer { origin, .. } = answers;
+        let blackboard::slg::Answer {
+            origin, evidence, ..
+        } = answers;
         match origin {
             AnswerOrigin::FromRef(classy_blackboard::database::GenericRef::MethodBlock(id)) => {
-                let id = self
+                let kid = self
                     .meth_block_to_meth_block_id
                     .iter()
                     .find_map(|(k, v)| if v == id { Some(k) } else { None })
                     .unwrap();
+                if let Some(_) = self.synthetic_method_blocks.get(id) {
+                    println!("EVIDENCE: {:#?}", evidence);
+                    match evidence[0].origin {
+                        AnswerOrigin::FromAssumption(index) => {
+                            let definition = self.database.get_definition(kid.clone()).unwrap();
+                            let info = definition.kind.as_method_block().cloned().unwrap();
+                            let method = info
+                                .methods
+                                .iter()
+                                .find(|MethodHandle { name, .. }| name == method)
+                                .unwrap()
+                                .definition;
+                            return ResolvedMethod::FromInstanceInScope {
+                                method_id: method.as_global(kid.package.clone()),
+                                referenced_constraint: index,
+                            };
+                        }
+                        _ => {}
+                    }
+                }
                 let method_block = self
                     .database
-                    .get_definition_map(id.clone(), |def| {
+                    .get_definition_map(kid.clone(), |def| {
                         def.kind.as_method_block().cloned().unwrap()
                     })
                     .unwrap();
@@ -359,7 +423,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
                     .find_map(|MethodHandle { name, definition }| {
                         if name == method {
                             Some(ResolvedMethod::Static {
-                                def_id: definition.as_global(id.package),
+                                def_id: definition.as_global(kid.package),
                             })
                         } else {
                             None
@@ -1076,8 +1140,35 @@ mod tests {
             classes,
         );
         let receiver = Type::Generic(DeBruijn::zero(), 0);
-        let Ok(ResolvedMethod::Static { .. }) = resolver.resolve_method(&receiver, "foo") else {
-            panic!("Method not found")
-        };
+        match resolver.resolve_method(&receiver, "foo") {
+            Ok(ResolvedMethod::FromInstanceInScope { .. }) => {}
+            err => panic!("Error {err:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_instance_methdos_static() {
+        tracing_subscriber::fmt().pretty().init();
+        let (database, _) = setup_database(METHOD_BLOCKS);
+        let types = get_types(&database);
+        let method_blocks = get_method_blocks(&database);
+        let classes = get_classes(&database);
+        let instances = get_instances(&database);
+        let scope = PrefexScope::with_empty_scope();
+
+        let mut resolver = MethodResolver::within_function(
+            &database,
+            &scope,
+            Vec::new(),
+            instances,
+            method_blocks,
+            types,
+            classes,
+        );
+        let receiver = get_type(&database, "Foo");
+        match resolver.resolve_method(&receiver, "foo") {
+            Ok(ResolvedMethod::Static { .. }) => {}
+            err => panic!("Error {err:?}"),
+        }
     }
 }
