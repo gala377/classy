@@ -3,6 +3,7 @@ use std::ptr::NonNull;
 use crate::runtime::class::{header::Header, Class};
 
 #[derive(Debug)]
+#[repr(transparent)]
 pub struct Ptr<T>(pub Option<NonNull<T>>);
 
 impl<T> Ptr<T> {
@@ -72,6 +73,7 @@ impl<T> Clone for Ptr<T> {
 impl<T> Copy for Ptr<T> {}
 
 #[derive(Debug)]
+#[repr(transparent)]
 pub struct NonNullPtr<T>(pub NonNull<T>);
 
 impl<T> NonNullPtr<T> {

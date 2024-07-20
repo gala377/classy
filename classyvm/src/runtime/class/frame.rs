@@ -79,7 +79,7 @@ unsafe fn frame_trace(frame_inst: *mut (), tracer: &mut dyn Tracer) {
     for (i, reference) in stack_map.iter().enumerate() {
         let stack_entry = frame.stack.get_unchecked(i);
         if *reference {
-            let forward = tracer.trace_pointer(std::mem::transmute(*stack_entry));
+            let forward = tracer.trace_pointer(std::mem::transmute::<u64, ErasedPtr>(*stack_entry));
             frame.stack[i] = forward as u64;
         }
     }

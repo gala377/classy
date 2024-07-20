@@ -68,16 +68,12 @@ impl<T> LocalId<T> {
 }
 
 /// Id that identifies a definition within a package
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy, Default)]
 pub struct DefinitionId(pub UniqueId);
 
-
 /// Id that identifies a type
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy, Default)]
 pub struct TypeId(pub UniqueId);
-
 
 /// Id that identifies a package
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy, Default)]
@@ -1519,6 +1515,7 @@ impl Database {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn lower_method(
         &mut self,
         prefex_scope: &mut PrefexScope,

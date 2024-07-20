@@ -215,8 +215,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
                 constraints,
             };
             let instance_ref = self.blackboard_database.add_instance(b_instance);
-            self.instance_to_instance_id
-                .insert(*instance, instance_ref);
+            self.instance_to_instance_id.insert(*instance, instance_ref);
             for InstanceMethodBlock { id, .. } in &info.method_blocks {
                 let id = id.as_global(package);
                 self.add_method_block(
@@ -350,12 +349,10 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
             let filtered_out_synthetic_blocks = answers
                 .iter()
                 .filter(|answer| match &answer.origin {
-                    AnswerOrigin::FromRef(GenericRef::MethodBlock(block_id)) => {
-                        match self.synthetic_method_blocks.get(block_id) {
-                            Some(SyntheticData::FromClass(_)) => false,
-                            _ => true,
-                        }
-                    }
+                    AnswerOrigin::FromRef(GenericRef::MethodBlock(block_id)) => !matches!(
+                        self.synthetic_method_blocks.get(block_id),
+                        Some(SyntheticData::FromClass(_))
+                    ),
                     _ => true,
                 })
                 .collect::<Vec<_>>();
@@ -392,7 +389,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
                     .iter()
                     .find_map(|(k, v)| if v == id { Some(k) } else { None })
                     .unwrap();
-                if self.synthetic_method_blocks.get(id).is_some() {
+                if self.synthetic_method_blocks.contains_key(id) {
                     println!("EVIDENCE: {:#?}", evidence);
                     if let AnswerOrigin::FromAssumption(index) = evidence[0].origin {
                         let definition = self.database.get_definition(*kid).unwrap();
@@ -411,9 +408,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
                 }
                 let method_block = self
                     .database
-                    .get_definition_map(*kid, |def| {
-                        def.kind.as_method_block().cloned().unwrap()
-                    })
+                    .get_definition_map(*kid, |def| def.kind.as_method_block().cloned().unwrap())
                     .unwrap();
                 method_block
                     .methods
@@ -475,9 +470,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
             Type::Struct { def, .. } => {
                 blackboard::Ty::Ref(*self.type_to_type_id.get(def).unwrap())
             }
-            Type::ADT { def, .. } => {
-                blackboard::Ty::Ref(*self.type_to_type_id.get(def).unwrap())
-            }
+            Type::ADT { def, .. } => blackboard::Ty::Ref(*self.type_to_type_id.get(def).unwrap()),
             Type::Function { args, ret } => {
                 let args = args
                     .iter()
@@ -526,7 +519,8 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
             t => {
                 println!("T is {:#?}", t);
                 blackboard::Ty::Ref(
-                    *self.type_to_type_id
+                    *self
+                        .type_to_type_id
                         .get(&self.database.get_primitive_type(t).unwrap())
                         .unwrap(),
                 )

@@ -2,7 +2,7 @@ use colored::Colorize;
 
 use super::{constant_pool, OpCode};
 
-pub fn debug_print_code(instrs: &Vec<u8>, cp: &constant_pool::ConstantPool) {
+pub fn debug_print_code(instrs: &[u8], cp: &constant_pool::ConstantPool) {
     const WORD_SIZE: usize = std::mem::size_of::<u64>();
 
     fn read_word(index: &mut usize, instr: &[u8]) -> usize {

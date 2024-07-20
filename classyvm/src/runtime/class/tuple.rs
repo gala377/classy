@@ -1,6 +1,9 @@
 use std::mem::{align_of, size_of};
 
-use crate::{mem::ptr::Ptr, runtime::trace::Tracer};
+use crate::{
+    mem::ptr::{ErasedPtr, Ptr},
+    runtime::trace::Tracer,
+};
 
 use super::{header::Header, Class, Kind};
 
@@ -57,7 +60,8 @@ fn tuple_trace(obj: *mut (), tracer: &mut dyn Tracer) {
         for (i, field) in map.into_iter().enumerate() {
             if field {
                 let field_ptr = *(obj.cast::<u64>().add(i));
-                let forward = tracer.trace_pointer(std::mem::transmute(field_ptr));
+                let forward =
+                    tracer.trace_pointer(std::mem::transmute::<u64, ErasedPtr>(field_ptr));
                 *(obj.cast::<u64>().add(i)) = forward as u64;
             }
         }

@@ -130,8 +130,10 @@ impl Database {
     }
 
     pub fn reserve_type_impl(&mut self, name: &str) -> TyRef {
-        let mut type_impl = TypeImpl::default();
-        type_impl.name = name.to_string();
+        let type_impl = TypeImpl {
+            name: name.to_string(),
+            ..Default::default()
+        };
         self.add_type_impl(type_impl)
     }
 
@@ -147,8 +149,10 @@ impl Database {
     }
 
     pub fn reserve_class(&mut self, name: &str) -> ClassRef {
-        let mut type_class = TypeClass::default();
-        type_class.name = name.to_string();
+        let type_class = TypeClass {
+            name: name.to_string(),
+            ..Default::default()
+        };
         self.add_class(type_class)
     }
 

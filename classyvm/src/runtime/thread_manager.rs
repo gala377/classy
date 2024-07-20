@@ -366,7 +366,6 @@ mod test {
         let tm = ThreadManager::new();
         println!("New thread");
         for i in 0..3 {
-            let i = i;
             let worker_tm = tm.clone();
             tm.new_thread(move || {
                 println!("Thread {i} waiting for should stop for gc");

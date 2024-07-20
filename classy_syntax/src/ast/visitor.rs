@@ -654,7 +654,7 @@ pub fn walk_anon_struct_pattern<'ast, V: Visitor<'ast>>(
     v: &mut V,
     fields: &'ast HashMap<String, ast::Pattern>,
 ) {
-    for (_name, pattern) in fields {
+    for pattern in fields.values() {
         v.visit_pattern(pattern);
     }
 }
@@ -732,7 +732,9 @@ pub fn walk_instance_definition<'ast, V: Visitor<'ast>>(
     }: &'ast ast::TypeBound,
     body: &'ast [ast::InstanceDefinitionItem],
 ) {
-    if let Some(n) = name { visitor.visit_identifier(n) }
+    if let Some(n) = name {
+        visitor.visit_identifier(n)
+    }
     for ast::TypeBound { head, args } in bounds {
         visitor.visit_type_bound(head, args);
     }

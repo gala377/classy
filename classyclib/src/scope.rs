@@ -39,10 +39,10 @@ where
         self.stack.last_mut().unwrap().insert(key, value);
     }
 
-    pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V>
+    pub fn get<Q>(&self, key: &Q) -> Option<&V>
     where
         K: Borrow<Q>,
-        Q: Eq + Hash,
+        Q: Eq + Hash + ?Sized,
     {
         for scope in self.stack.iter().rev() {
             if let Some(value) = scope.get(key) {

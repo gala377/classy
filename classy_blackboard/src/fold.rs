@@ -85,7 +85,7 @@ pub trait Folder: Sized {
         walk_ty_fn(self, args, ret)
     }
 
-    fn fold_ty_app(&mut self, head: Box<Ty>, args: Vec<Ty>) -> Ty {
+    fn fold_ty_app(&mut self, head: Ty, args: Vec<Ty>) -> Ty {
         walk_ty_app(self, head, args)
     }
 
@@ -213,7 +213,7 @@ pub fn walk_ty(folder: &mut impl Folder, ty: Ty) -> Ty {
         Ty::Array(ty) => folder.fold_ty_array(*ty),
         Ty::Tuple(tys) => folder.fold_ty_tuple(tys),
         Ty::Fn(args, ret) => folder.fold_ty_fn(args, *ret),
-        Ty::App(head, args) => folder.fold_ty_app(head, args),
+        Ty::App(head, args) => folder.fold_ty_app(*head, args),
         Ty::Variable(idx) => folder.fold_ty_variable(idx),
         Ty::SynthesizedConstant(idx) => folder.fold_ty_synthesized_constant(idx),
         Ty::Generic { scopes, index } => folder.fold_ty_generic(scopes, index),
@@ -239,9 +239,9 @@ pub fn walk_ty_fn(folder: &mut impl Folder, args: Vec<Ty>, ret: Ty) -> Ty {
     )
 }
 
-pub fn walk_ty_app(folder: &mut impl Folder, head: Box<Ty>, args: Vec<Ty>) -> Ty {
+pub fn walk_ty_app(folder: &mut impl Folder, head: Ty, args: Vec<Ty>) -> Ty {
     Ty::App(
-        Box::new(folder.fold_ty(*head)),
+        Box::new(folder.fold_ty(head)),
         args.into_iter().map(|ty| folder.fold_ty(ty)).collect(),
     )
 }

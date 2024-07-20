@@ -62,11 +62,11 @@ impl ConstantPool {
                     let offset = self.strings.len();
                     let len = val.as_bytes().len();
                     assert!(
-                        offset <= std::u32::MAX as usize,
+                        offset <= u32::MAX as usize,
                         "string table cannot be larger than max of u32"
                     );
                     assert!(
-                        len <= std::u32::MAX as usize,
+                        len <= u32::MAX as usize,
                         "string literal cannot be longer than max of u32"
                     );
                     let string_word = offset | len << 32;

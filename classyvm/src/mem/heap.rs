@@ -118,6 +118,7 @@ impl Heap {
             from_space,
             to_space,
             options,
+            #[allow(clippy::arc_with_non_send_sync)]
             handles: Arc::new(Mutex::new(None)),
         }
     }

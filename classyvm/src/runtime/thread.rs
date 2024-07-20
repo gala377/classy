@@ -446,20 +446,28 @@ impl Thread {
                     safepoint!();
                     instr += 1;
                     let class = read_word!();
-                    let mut inst: Ptr<()> =
-                        unsafe { self.allocate_instance(std::mem::transmute(class)) };
+                    let mut inst: Ptr<()> = unsafe {
+                        self.allocate_instance(std::mem::transmute::<u64, NonNullPtr<Class>>(class))
+                    };
                     if inst.is_null() {
                         // we need to gc
                         let mut frames = frames.iter_mut().map(|f| f as *mut _).collect::<Vec<_>>();
                         unsafe {
-                            self.heap.run_gc(std::mem::transmute(class), &mut frames);
+                            self.heap.run_gc(
+                                std::mem::transmute::<u64, NonNullPtr<Class>>(class),
+                                &mut frames,
+                            );
                         }
-                        inst = unsafe { self.allocate_instance(std::mem::transmute(class)) };
+                        inst = unsafe {
+                            self.allocate_instance(std::mem::transmute::<u64, NonNullPtr<Class>>(
+                                class,
+                            ))
+                        };
                         if inst.is_null() {
                             panic!("Out of memory");
                         }
                     }
-                    push!(std::mem::transmute(inst));
+                    push!(std::mem::transmute::<Ptr<()>, u64>(inst));
                     instr += OpCode::AllocHeap.argument_size();
                 }
                 OpCode::AllocArray => {
@@ -477,7 +485,7 @@ impl Thread {
                             panic!("Out of memory");
                         }
                     }
-                    push!(std::mem::transmute(arr));
+                    push!(std::mem::transmute::<Ptr<()>, u64>(arr));
                     instr += OpCode::AllocArray.argument_size();
                 }
                 OpCode::SetOffset => {

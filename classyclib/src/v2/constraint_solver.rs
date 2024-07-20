@@ -396,7 +396,7 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
             Constraint::HasMethod {
                 receiver,
                 method,
-                of_type,
+                of_type: _,
             } => {
                 let generic_constraints = Vec::new();
                 let types_in_scope = Vec::new();
@@ -417,12 +417,12 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
                 // Honestly the best thing that could happen is if in the blackboard we
                 // could with the answer also give back the type of the method
                 match method_resolver.resolve_method(&receiver, &method) {
-                    Ok(ResolvedMethod::Static { def_id }) => {
+                    Ok(ResolvedMethod::Static { def_id: _ }) => {
                         todo!()
                     }
                     Ok(ResolvedMethod::FromInstanceInScope {
-                        method_id,
-                        referenced_constraint,
+                        method_id: _,
+                        referenced_constraint: _,
                     }) => {
                         todo!()
                     }

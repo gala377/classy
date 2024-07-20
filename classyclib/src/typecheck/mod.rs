@@ -46,6 +46,7 @@ pub fn prepare_for_typechecking(program: &classy_syntax::ast::SourceFile) -> Typ
 /// 2. Then add type to resolve aliases shallow for type
 /// 3. Then add for replace aliases with map
 /// 4. Also add a type for equality
+///
 /// Actually resolve aliases and replace aliases with map should be
 /// a special case of fold but well.
 pub fn resolve_type_names(mut ctx: TypCtx) -> TypCtx {

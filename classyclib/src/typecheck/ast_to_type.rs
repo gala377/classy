@@ -40,7 +40,7 @@ pub fn resolve_top_level_type(
     name: &String,
     definition: &ast::DefinedType,
     def_id: &usize,
-    type_variables: &Vec<String>,
+    type_variables: &[String],
     updates: &mut HashMap<usize, Type>,
 ) {
     let type_id = *ctx
@@ -49,7 +49,7 @@ pub fn resolve_top_level_type(
         .unwrap_or_else(|| panic!("the types should have been prepopulated: {name}"));
     let mut scope = PrefexScope::with_empty_scope();
     scope.add_type_vars(type_variables);
-    let prefex = type_variables.clone();
+    let prefex = type_variables.to_vec();
     let mut resolver = TypeResolver::new(ctx);
     let resolved_type = match definition {
         ast::DefinedType::Alias(ast::Alias { for_type: inner }) => {

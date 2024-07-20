@@ -138,7 +138,7 @@ impl ast::Folder for ImplicitForall {
         &mut self,
         ast::InstanceDefinition {
             name,
-            free_variables,
+            free_variables: _,
             bounds,
             instanced_class: ast::TypeBound { head, args },
             body,

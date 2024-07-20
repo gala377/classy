@@ -8,7 +8,7 @@ use classy_blackboard::{
 pub fn main() {
     tracing_subscriber::fmt().pretty().init();
     let mut database = Database::new();
-    let foo = database.add_type_impl(TypeImpl {
+    let foo_t = database.add_type_impl(TypeImpl {
         name: "Foo".to_string(),
         type_params: vec!["a".into()],
         constraints: vec![],
@@ -102,7 +102,7 @@ pub fn main() {
     database.add_instance(Instance {
         type_class: show,
         args: vec![Ty::App(
-            Box::new(Ty::Ref(foo)),
+            Box::new(Ty::Ref(foo_t)),
             vec![Ty::Generic {
                 scopes: 0,
                 index: 0,
@@ -191,7 +191,7 @@ pub fn main() {
         Box::new(Goal::Domain(DomainGoal::InstanceExistsAndWellFormed {
             head: show,
             args: vec![Ty::App(
-                Box::new(Ty::Ref(foo)),
+                Box::new(Ty::Ref(foo_t)),
                 vec![Ty::Generic {
                     scopes: 0,
                     index: 0,

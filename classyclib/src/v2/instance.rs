@@ -51,14 +51,14 @@ pub fn instance(
     let new_t = args
         .into_iter()
         .enumerate()
-        .fold(Ok(scheme_t), |acc, (i, t)| {
+        .try_fold(scheme_t, |acc, (i, t)| {
             let mut replacer = Instatiator {
                 for_gen: i,
                 instatiated: t,
                 db,
                 deruijn: DeBruijn(-1),
             };
-            replacer.fold_type(acc?)
+            replacer.fold_type(acc)
         })?;
     Ok(ShiftDebruijn.fold_type(new_t).unwrap())
 }
