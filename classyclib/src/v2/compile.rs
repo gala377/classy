@@ -62,6 +62,10 @@ impl Compiler {
         self.database.lower_functions(&self.session);
         self.database.dump_all();
         //render::render_db(&self.database, "./render");
+        // generate constraints for all functions and methods in the database
+        // solve the constraints
+        // create resolved syntax tree for function and methods calls
+        // do more lowering later.
         Ok(())
     }
 

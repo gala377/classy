@@ -1,9 +1,9 @@
 use std::collections::{HashMap, VecDeque};
 
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 use crate::{
-    database::{AnswerOrigin, Database, GenericRef, MatchResult, UniverseIndex, VariableContext},
+    database::{AnswerOrigin, Database, MatchResult, UniverseIndex, VariableContext},
     fold::Folder,
     goal::{CanonicalGoal, ExClause, Goal, LabelingFunction, UnCanonMap},
     normalizer::GoalNormalizer,
@@ -232,6 +232,8 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
             next_variable: &mut next_variable,
         };
         let mut normalizer = GoalNormalizer::new(&mut var_ctx, UniverseIndex::ROOT);
+        // TODO: Use normalizer unmap to map over answer and replace variables with
+        // TODO: and constants back into generics
         let goal = normalizer.fold_goal(goal);
         let (canonical_goal, unmap) = CanonicalGoal::new(goal, &labeling);
         let max_var = unmap.len();
@@ -281,6 +283,7 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
         }
     }
 
+    #[tracing::instrument(skip(self))]
     fn ensure_answer_from_table(&mut self, answer: usize, table_idx: usize) -> AnswerRes {
         let table = &mut self.forest.tables[table_idx];
         let answer_opt = table.answers.get(answer);
@@ -393,7 +396,7 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                         unreachable!("This should not be returned by select_subgoal")
                     }
                     // subgoal has been selected, we can continue with the loop
-                    SubgoalSelection::Subgoal(_) => {}
+                    SubgoalSelection::Subgoal => {}
                 };
             }
             // We are now sure there exists a subgoal to solve
@@ -425,7 +428,7 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                     continue;
                 }
             };
-            // This maps variables from the subgoal to the generics in the original goal
+            // This maps variables from the subgoal to variables in the original goal
             let uncanonilize_mapping = selected_subgoal.uncanonilize_mapping.clone();
             // We got an answer from the subgoal, but there might be more. So we
             // need to set the subgoal to gives is the next answer when we query it the
@@ -436,7 +439,7 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                     next_answer: selected_subgoal.next_answer + 1,
                     ..selected_subgoal
                 });
-            // Remap the answer to the original goal
+            // Remap the answer to the original goal variables
             let mut generic_mapping = HashMap::new();
             for (binder_index, ty) in &answer.subst.mapping {
                 uncanonilize_mapping.get(*binder_index).map(|index| {
@@ -445,7 +448,7 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
             }
             // Create a new exclause for the table to prove
             // This is achieved by removing the subgoal we just proven from it
-            // And applyign the substitution we got to the head and rest of the subgoals
+            // And applying the substitution we got to the head and rest of the subgoals
             let new_ex_clause = prepare_exclause_from_an_answer(
                 &self.forest.tables[stack_entry.table_index].strands[active_strand_index].exclause,
                 &generic_mapping,
@@ -463,7 +466,6 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                 subst: new_subst,
                 exclause: new_ex_clause,
                 selected_subgoal: None,
-                // TODO: Is this correct? We should probably forward origin from the answer
                 origin: self.forest.tables[stack_entry.table_index].strands[active_strand_index]
                     .origin
                     .clone(),
@@ -476,7 +478,6 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                         .evidence
                         .clone();
                     evidence.push(answer.clone());
-                    warn!("Making new strand with evidence: {:?}", evidence);
                     evidence
                 },
             };
@@ -507,18 +508,13 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                 .subst
                 .clone();
 
-            // unmap answer to have generics instead of variables
+            // unmap variables and constants back to the ones from the goal
             let unmap = self.forest.tables[stack_entry.table_index].strands[strand_index]
                 .exclause
                 .unmap
                 .iter()
                 .cloned()
                 .enumerate()
-                .filter_map(|(index, ty)| match ty {
-                    Ty::Variable(var) => Some((var, Ty::Generic { scopes: 0, index })),
-                    Ty::SynthesizedConstant(var) => Some((var, Ty::Generic { scopes: 0, index })),
-                    _ => None,
-                })
                 .collect::<HashMap<_, _>>();
             let origin = self.forest.tables[stack_entry.table_index].strands[strand_index]
                 .origin
@@ -592,7 +588,7 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                 table_index,
                 uncanonilize_mapping: unmap_variables,
             });
-        SubgoalSelection::Subgoal(subgoal_index)
+        SubgoalSelection::Subgoal
     }
 }
 
@@ -605,7 +601,9 @@ enum AnswerRes {
 #[derive(Debug)]
 enum SubgoalSelection {
     Answer(Answer),
-    Subgoal(usize),
+    /// Subgoal has been selected, a new loop over the stack
+    /// should now select it
+    Subgoal,
     NoMoreSubgoals,
 }
 

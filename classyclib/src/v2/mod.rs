@@ -3,6 +3,7 @@ pub mod instance;
 pub mod knowledge;
 //pub mod render;
 pub mod constraint_generation;
+pub mod constraint_solver;
 pub mod method_resolver;
 pub mod name_scope;
 pub mod ty;

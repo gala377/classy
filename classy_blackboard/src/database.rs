@@ -542,6 +542,7 @@ impl Database {
         results
     }
 
+    #[tracing::instrument(skip(self, variable_generator))]
     fn match_clause(
         &self,
         clause: &Clause,
@@ -550,7 +551,9 @@ impl Database {
         variable_generator: &mut dyn VariableContext,
         origin: AnswerOrigin,
     ) -> Vec<MatchResult> {
+        println!("\n\nBEFORE NORMALIZATION: {clause:#?}\n");
         let (clause, unmap) = self.normalize_clause(&clause, current_universe, variable_generator);
+        println!("\n\nAFTER NORMALIZATION: {clause:#?}\n");
         // extract the inner domain foal and the body of a clause
         let (raw_clause, body) = match clause {
             Clause::Implies(box Clause::Fact(fact), body) => (fact, body),
@@ -573,6 +576,7 @@ impl Database {
 
     /// Remove any universal quantifiers and replace their respective variable
     /// uses with a variable in the given universe.
+    #[tracing::instrument(skip(self, variable_generator))]
     fn normalize_clause(
         &self,
         clause: &Clause,
@@ -586,6 +590,7 @@ impl Database {
         )
     }
 
+    #[tracing::instrument(skip(self, variable_generator))]
     fn unify(
         &self,
         goal: &DomainGoal,
@@ -729,6 +734,7 @@ impl Database {
         vec![substitution]
     }
 
+    #[tracing::instrument(skip(self, variable_generator))]
     fn unify_ty(
         &self,
         t1: &Ty,
@@ -756,6 +762,7 @@ impl Database {
             };
         }
         while let Some((t1, t2)) = stack.pop() {
+            info!("Unifying {:?} with {:?}", t1, t2);
             use Ty::*;
             match (t1, t2) {
                 (Ref(r1), Ref(r2)) if r1 == r2 => {}
@@ -840,5 +847,11 @@ impl Database {
             }
         }
         Some(())
+    }
+
+    pub fn dump_clauses(&self) {
+        for (i, clause) in self.clauses.iter().enumerate() {
+            println!("\n{i} {:#?}", clause.clause);
+        }
     }
 }

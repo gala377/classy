@@ -69,6 +69,7 @@ pub struct MethodResolver<'db, 'scope> {
     synthetic_method_blocks: HashMap<blackboard::ty::MethodBlockRef, SyntheticData>,
 }
 
+#[allow(dead_code)]
 enum SyntheticData {
     FromInstance(Id<DefinitionId>),
     FromClass(Id<DefinitionId>),

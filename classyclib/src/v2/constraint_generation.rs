@@ -2,20 +2,16 @@ use std::collections::{HashMap, HashSet};
 
 use classy_syntax::ast;
 
-use crate::{
-    scope::Scope,
-    session::{self, Session},
-    typecheck::ast_to_type::PrefexScope,
-    v2::knowledge::Database,
-};
+use crate::{session::Session, typecheck::ast_to_type::PrefexScope, v2::knowledge::Database};
 
 use super::{
-    knowledge::{self, DefinitionId, Id, PackageId, CURRENT_PACKAGE_ID},
+    knowledge::{DefinitionId, Id, PackageId},
     name_scope::NameScope,
     ty::Type,
 };
 
-enum Constraint {
+#[derive(Debug)]
+pub enum Constraint {
     Eq(Type, Type),
     HasProperty {
         ty: Type,
@@ -32,48 +28,66 @@ enum Constraint {
         method: String,
         of_type: Type,
     },
+    MethodOrGlobal {
+        receiver: Type,
+        name: String,
+        of_ty: Type,
+    },
 }
 
 #[repr(transparent)]
 #[derive(Clone, Copy, Hash, Eq, PartialEq)]
-struct ExprId(usize);
+pub struct ExprId(usize);
 
-struct Inferer<'sess, 'db> {
+pub struct Inferer<'sess, 'db> {
     constraints: Vec<Constraint>,
     expr_types: HashMap<ExprId, Type>,
     scope: NameScope,
     session: &'sess Session,
     database: &'db mut Database,
     current_namespace: Vec<String>,
+    receiver: Option<Type>,
     prefex_scope: PrefexScope,
     function_return_type: Type,
+    /* TODO:
+    - Add constraints in scope, that takes into account function and
+        outer block constraints (method blocks, instances)
+    - Add receiver type, this is important for method blocks.
+    */
 }
 
 impl<'sess, 'db> Inferer<'sess, 'db> {
-    fn new(
+    pub fn new(
         session: &'sess Session,
         database: &'db mut Database,
         current_namespace: &[String],
         prefex_scope: PrefexScope,
+        receiver: Option<Type>,
+        function_args: &[(String, Type)],
         function_return_type: Type,
     ) -> Self {
+        let mut scope = NameScope::new();
+        for (name, ty) in function_args {
+            scope.add_variable(name.clone(), ty.clone());
+        }
         Self {
             constraints: Vec::new(),
             expr_types: HashMap::new(),
-            scope: NameScope::new(),
+            scope,
             session,
             database,
             current_namespace: current_namespace.to_vec(),
             prefex_scope,
             function_return_type,
+            receiver,
         }
     }
 
-    fn add_constraint(&mut self, constraint: Constraint) {
+    pub fn add_constraint(&mut self, constraint: Constraint) {
         self.constraints.push(constraint);
     }
 
-    fn add_expr_type(&mut self, expr: ExprId, ty: Type) {
+    pub fn add_expr_type(&mut self, expr: ExprId, ty: Type) {
         self.expr_types.insert(expr, ty);
     }
 
@@ -81,7 +95,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
         Type::Fresh(self.session.id_provider().next())
     }
 
-    fn infer_expr(&mut self, ast::Expr { id, kind }: &ast::Expr) -> Type {
+    pub fn infer_expr(&mut self, ast::Expr { id, kind }: &ast::Expr) -> Type {
         let ty: Type = match kind {
             ast::ExprKind::Unit => Type::Unit,
             ast::ExprKind::Sequence(exprs) => exprs
@@ -100,6 +114,11 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
             ast::ExprKind::FloatConst(_) => Type::Float,
             ast::ExprKind::BoolConst(_) => Type::Bool,
             ast::ExprKind::Name(name) => match name {
+                ast::Name::Unresolved { path, identifier }
+                    if path.is_empty() && identifier == "this" && self.receiver.is_some() =>
+                {
+                    self.receiver.clone().unwrap()
+                }
                 ast::Name::Unresolved { path, identifier } if path.is_empty() => {
                     let possibly_local = self.scope.get_variable(&identifier).cloned();
                     match possibly_local {
@@ -138,7 +157,34 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                     .cloned()
                     .expect(&format!("Variable {name} not found in scope")),
             },
-            ast::ExprKind::FunctionCall { func, args, kwargs } => {
+            ast::ExprKind::FunctionCall {
+                func:
+                    box ast::Expr {
+                        id: _,
+                        kind: ast::ExprKind::Name(ast::Name::Unresolved { path, identifier }),
+                    },
+                args,
+                kwargs: _,
+            } if path.is_empty() && self.receiver.is_some() => {
+                // possibly a method call
+                let arg_tys = args.iter().map(|arg| self.infer_expr(arg)).collect();
+                let ret_ty = self.new_fresh_type();
+                let inferred_func_ty = Type::Function {
+                    args: arg_tys,
+                    ret: Box::new(ret_ty.clone()),
+                };
+                self.add_constraint(Constraint::MethodOrGlobal {
+                    receiver: self.receiver.clone().unwrap(),
+                    name: identifier.clone(),
+                    of_ty: inferred_func_ty.clone(),
+                });
+                ret_ty
+            }
+            ast::ExprKind::FunctionCall {
+                func,
+                args,
+                kwargs: _,
+            } => {
                 let func_ty = self.infer_expr(func);
                 let arg_tys = args.iter().map(|arg| self.infer_expr(arg)).collect();
                 let ret_ty = self.new_fresh_type();
@@ -207,28 +253,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
             }
             ast::ExprKind::StructLiteral { strct, values } => {
                 let ret = self.new_fresh_type();
-                let mut strct_t = match strct {
-                    ast::Name::Unresolved { path, identifier } => self
-                        .database
-                        .get_type_by_unresolved_name(&self.current_namespace, path, &identifier)
-                        .cloned()
-                        .expect(&format!(
-                            "Name {path:?}::{identifier} not found in database"
-                        )),
-                    ast::Name::Global {
-                        package,
-                        definition,
-                    } => {
-                        let package = PackageId(*package);
-                        let definition = DefinitionId(*definition);
-                        let id = Id {
-                            package,
-                            id: definition,
-                        };
-                        self.database.get_type(id).cloned().unwrap()
-                    }
-                    ast::Name::Local(name) => panic!("What are you trying to do exaclty?"),
-                };
+                let mut strct_t = self.resolve_type_name(strct);
                 self.add_constraint(Constraint::Eq(ret.clone(), strct_t.clone()));
                 if let Type::Alias(for_t) = strct_t {
                     let tid = self.database.resolve_alias(for_t).unwrap();
@@ -259,37 +284,53 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                 typ,
                 constructor,
                 args,
-            } => todo!(),
+            } => {
+                let ret = self.new_fresh_type();
+                let strct_t = self.resolve_type_name(typ);
+                let inferred_args = args.iter().map(|arg| self.infer_expr(arg)).collect();
+                self.add_constraint(Constraint::HasCase {
+                    ty: ret.clone(),
+                    case: constructor.clone(),
+                    of_type: Type::Tuple(inferred_args),
+                });
+                self.add_constraint(Constraint::Eq(ret.clone(), strct_t.clone()));
+                ret
+            }
             ast::ExprKind::AdtStructConstructor {
                 typ,
                 constructor,
                 fields,
-            } => todo!(),
+            } => {
+                let ret = self.new_fresh_type();
+                let inferred_fields = fields
+                    .iter()
+                    .map(|(name, t)| {
+                        let t = self.infer_expr(t);
+                        (name.clone(), t)
+                    })
+                    .collect();
+                self.add_constraint(Constraint::HasCase {
+                    ty: ret.clone(),
+                    case: constructor.clone(),
+                    of_type: Type::Struct {
+                        def: Id::dummy(),
+                        fields: inferred_fields,
+                    },
+                });
+                let strct_t = self.resolve_type_name(typ);
+                self.add_constraint(Constraint::Eq(ret.clone(), strct_t));
+                ret
+            }
             ast::ExprKind::AdtUnitConstructor { typ, constructor } => {
                 let ret = self.new_fresh_type();
-                let mut strct_t = match typ {
-                    ast::Name::Unresolved { path, identifier } => self
-                        .database
-                        .get_type_by_unresolved_name(&self.current_namespace, path, &identifier)
-                        .cloned()
-                        .expect(&format!(
-                            "Name {path:?}::{identifier} not found in database"
-                        )),
-                    ast::Name::Global {
-                        package,
-                        definition,
-                    } => {
-                        let package = PackageId(*package);
-                        let definition = DefinitionId(*definition);
-                        let id = Id {
-                            package,
-                            id: definition,
-                        };
-                        self.database.get_type(id).cloned().unwrap()
-                    }
-                    ast::Name::Local(name) => panic!("What are you trying to do exaclty?"),
-                };
-                todo!()
+                self.add_constraint(Constraint::HasCase {
+                    ty: ret.clone(),
+                    case: constructor.clone(),
+                    of_type: Type::Unit,
+                });
+                let strct_t = self.resolve_type_name(typ);
+                self.add_constraint(Constraint::Eq(ret.clone(), strct_t));
+                ret
             }
             ast::ExprKind::While { cond, body } => {
                 let cond_ty = self.infer_expr(cond);
@@ -341,8 +382,8 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                 }
                 init_ty
             }
-            ast::ExprKind::LetRec { definitions } => todo!(),
-            ast::ExprKind::AnonType { fields } => todo!(),
+            ast::ExprKind::LetRec { .. } => todo!(),
+            ast::ExprKind::AnonType { .. } => todo!(),
             ast::ExprKind::ArrayLiteral { typ, size, init } => {
                 let init_ty = init
                     .iter()
@@ -376,12 +417,12 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                 self.add_constraint(Constraint::Eq(index_ty, Type::Int));
                 inner_ty
             }
-            ast::ExprKind::Match { expr, cases } => todo!(),
+            ast::ExprKind::Match { expr: _, cases: _ } => todo!(),
             ast::ExprKind::MethodCall {
                 receiver,
                 method,
                 args,
-                kwargs,
+                kwargs: _,
             } => {
                 let receiver_ty = self.infer_expr(receiver);
                 let arg_tys = args.iter().map(|arg| self.infer_expr(arg)).collect();
@@ -401,8 +442,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
         self.add_expr_type(ExprId(*id), ty.clone());
         ty
     }
-
-    fn resolve_type_by_name(&self, name: &ast::Name) -> Type {
+    fn resolve_type_name(&self, name: &ast::Name) -> Type {
         match name {
             ast::Name::Unresolved { path, identifier } => self
                 .database
@@ -423,18 +463,14 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                 };
                 self.database.get_type(id).cloned().unwrap()
             }
-            ast::Name::Local(name) => self
-                .scope
-                .get_variable(name)
-                .cloned()
-                .expect(&format!("Variable {name} not found in scope")),
+            ast::Name::Local(_) => panic!("What are you trying to do exaclty?"),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use self::knowledge::{Definition, DefinitionKind, LocalId, PackageInfo, TypeId};
+    use crate::v2::knowledge::{Definition, DefinitionKind, LocalId, PackageInfo, TypeId};
 
     use super::*;
     use crate::util::composition::Pipe;
@@ -530,6 +566,8 @@ mod tests {
             database,
             &[],
             PrefexScope::with_empty_scope(),
+            None,
+            &[],
             Type::Unit,
         )
     }
@@ -594,6 +632,8 @@ mod tests {
                 .map(ToString::to_string)
                 .collect::<Vec<_>>(),
             PrefexScope::with_empty_scope(),
+            None,
+            &[],
             Type::Unit,
         );
         let res = inferer.infer_expr(&ast::Expr {

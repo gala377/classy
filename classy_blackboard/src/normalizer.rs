@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::clauses::Clause;
 use crate::database::{UniverseIndex, VariableContext};
 use crate::fold::{walk_clause, walk_goal, Folder};
@@ -77,6 +79,9 @@ pub struct GoalNormalizer<'ctx> {
     variable_context: &'ctx mut dyn VariableContext,
     substitutions: Vec<Vec<Ty>>,
     universe: UniverseIndex,
+    /// Maps synthesized variables and constants into generic types they
+    /// were derived from.
+    pub unmap_into_generics: HashMap<Ty, Ty>,
 }
 
 impl<'ctx> GoalNormalizer<'ctx> {
@@ -88,6 +93,7 @@ impl<'ctx> GoalNormalizer<'ctx> {
             variable_context,
             substitutions: vec![],
             universe,
+            unmap_into_generics: HashMap::new(),
         }
     }
 }
@@ -103,6 +109,16 @@ impl Folder for GoalNormalizer<'_> {
                 })
                 .collect(),
         );
+        let scopes = self.substitutions.len() - 1;
+        self.substitutions
+            .last()
+            .unwrap()
+            .iter()
+            .enumerate()
+            .for_each(|(i, t)| {
+                self.unmap_into_generics
+                    .insert(t.clone(), Ty::Generic { scopes, index: i });
+            });
         let res = walk_goal(self, goal);
         self.substitutions.pop();
         self.universe = last_universe;
@@ -114,6 +130,16 @@ impl Folder for GoalNormalizer<'_> {
                 .map(|_| self.variable_context.next_variable(self.universe))
                 .collect(),
         );
+        let scopes = self.substitutions.len() - 1;
+        self.substitutions
+            .last()
+            .unwrap()
+            .iter()
+            .enumerate()
+            .for_each(|(i, t)| {
+                self.unmap_into_generics
+                    .insert(t.clone(), Ty::Generic { scopes, index: i });
+            });
         let res = walk_goal(self, goal);
         self.substitutions.pop();
         res

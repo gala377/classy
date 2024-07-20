@@ -165,7 +165,8 @@ pub fn main() {
         }],
     });
     database.lower_to_clauses();
-    let query = Goal::Exists(
+    database.dump_clauses();
+    let _query = Goal::Exists(
         1,
         Box::new(Goal::Domain(DomainGoal::InstanceExistsAndWellFormed {
             head: convert,
@@ -185,29 +186,42 @@ pub fn main() {
             Ty::Ref(int),
         ],
     });
+    let query = Goal::Exists(
+        1,
+        Box::new(Goal::Domain(DomainGoal::InstanceExistsAndWellFormed {
+            head: show,
+            args: vec![Ty::App(
+                Box::new(Ty::Ref(foo)),
+                vec![Ty::Generic {
+                    scopes: 0,
+                    index: 0,
+                }],
+            )],
+        })),
+    );
 
     let mut forest = Forest::new();
-    println!("\n\n\n\n\n\n\n\n");
-    let solver = SlgSolver::new(&database, &mut forest, query);
-    let results = solver.take(10).collect::<Vec<_>>();
-    println!("\n\n\n\n");
-    for (i, result) in results.iter().enumerate() {
-        print!("result {}: ", i);
-        print_result(result);
-    }
-    let query = Goal::Domain(DomainGoal::FindMethod {
-        name: "debug".into(),
-        on_type: Ty::Ref(int),
-    });
-    let solver = SlgSolver::new(&database, &mut forest, query);
-    let results = solver.take(10).collect::<Vec<_>>();
+    // println!("\n\n\n\n\n\n\n\n");
+    let solver = SlgSolver::new(&database, &mut forest, query.clone());
+    // let results = solver.take(10).collect::<Vec<_>>();
+    // println!("\n\n\n\n");
+    // for (i, result) in results.iter().enumerate() {
+    //     print!("result {}: ", i);
+    //     print_result(result);
+    // }
+    // let query = Goal::Domain(DomainGoal::FindMethod {
+    //     name: "debug".into(),
+    //     on_type: Ty::Ref(int),
+    // });
+    // let solver = SlgSolver::new(&database, &mut forest, query.clone());
+    let results = solver.take(2).collect::<Vec<_>>();
     println!("\n\n\n\n");
 
     println!("Int -> {int:?}");
     println!("forall a. Debug(a) -> {debug_instanace:?}");
     println!("Show(Int) -> {int_show_instance:?}");
     println!("AllowDebug(Int) -> {allow_debug_instance:?}");
-
+    println!("Original query: {query:?}");
     if results.is_empty() {
         println!("no results");
     }
