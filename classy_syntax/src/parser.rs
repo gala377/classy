@@ -120,7 +120,7 @@ impl<'source> Parser<'source> {
                     export,
                     kind: import,
                 })
-            } else if let Ok(_) = self.match_token(TokenType::Semicolon) {
+            } else if self.match_token(TokenType::Semicolon).is_ok() {
                 // just do nothing, eat hanging semicolons
             } else {
                 self.error(
@@ -678,7 +678,7 @@ impl<'source> Parser<'source> {
             cases,
         });
         // chaining matches
-        while let Ok(_) = self.match_token(TokenType::Match) {
+        while self.match_token(TokenType::Match).is_ok() {
             let _ = self.expect_token(TokenType::LBrace);
             let mut cases = Vec::new();
             while self.lexer.current().typ != TokenType::RBrace {
@@ -1109,7 +1109,7 @@ impl<'source> Parser<'source> {
             TokenType::LParen => {
                 self.lexer.advance();
                 if self.match_token(TokenType::RParen).is_ok() {
-                    if !self.match_token(TokenType::FatArrow).is_ok() {
+                    if self.match_token(TokenType::FatArrow).is_err() {
                         return Ok(mk_expr(ast::ExprKind::Unit));
                     }
                     let body = self.parse_expr().error(

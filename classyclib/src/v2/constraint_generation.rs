@@ -120,25 +120,21 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                     self.receiver.clone().unwrap()
                 }
                 ast::Name::Unresolved { path, identifier } if path.is_empty() => {
-                    let possibly_local = self.scope.get_variable(&identifier).cloned();
+                    let possibly_local = self.scope.get_variable(identifier).cloned();
                     match possibly_local {
                         Some(ty) => ty,
                         None => self
                             .database
-                            .get_type_by_unresolved_name(&self.current_namespace, path, &identifier)
+                            .get_type_by_unresolved_name(&self.current_namespace, path, identifier)
                             .cloned()
-                            .expect(&format!(
-                                "Name {path:?}::{identifier} not found in database"
-                            )),
+                            .unwrap_or_else(|| panic!("Name {path:?}::{identifier} not found in database")),
                     }
                 }
                 ast::Name::Unresolved { path, identifier } => self
                     .database
-                    .get_type_by_unresolved_name(&self.current_namespace, path, &identifier)
+                    .get_type_by_unresolved_name(&self.current_namespace, path, identifier)
                     .cloned()
-                    .expect(&format!(
-                        "Name {path:?}::{identifier} not found in database"
-                    )),
+                    .unwrap_or_else(|| panic!("Name {path:?}::{identifier} not found in database")),
                 ast::Name::Global {
                     package,
                     definition,
@@ -155,7 +151,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                     .scope
                     .get_variable(name)
                     .cloned()
-                    .expect(&format!("Variable {name} not found in scope")),
+                    .unwrap_or_else(|| panic!("Variable {name} not found in scope")),
             },
             ast::ExprKind::FunctionCall {
                 func:
@@ -275,7 +271,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                         .iter()
                         .find(|(field_name, _)| field_name == name)
                         .map(|(_, ty)| ty.clone())
-                        .expect(&format!("Field {name} not found in struct {def:?}"));
+                        .unwrap_or_else(|| panic!("Field {name} not found in struct {def:?}"));
                     self.add_constraint(Constraint::Eq(expr_ty, field_ty));
                 }
                 ret
@@ -446,11 +442,9 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
         match name {
             ast::Name::Unresolved { path, identifier } => self
                 .database
-                .get_type_by_unresolved_name(&self.current_namespace, path, &identifier)
+                .get_type_by_unresolved_name(&self.current_namespace, path, identifier)
                 .cloned()
-                .expect(&format!(
-                    "Name {path:?}::{identifier} not found in database"
-                )),
+                .unwrap_or_else(|| panic!("Name {path:?}::{identifier} not found in database")),
             ast::Name::Global {
                 package,
                 definition,
@@ -584,7 +578,7 @@ mod tests {
     }
 
     fn assert_types_eq(database: &Database, res: &Type, expected: &Type) {
-        if !database.types_strictly_eq(&res, &expected).unwrap() {
+        if !database.types_strictly_eq(res, expected).unwrap() {
             let resolved = if let Type::Alias(for_t) = res {
                 let id = database.resolve_alias(*for_t).unwrap();
                 database.resolve_tid(id).unwrap()

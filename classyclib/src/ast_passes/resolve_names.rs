@@ -196,8 +196,8 @@ impl<'db> Folder for NameResolver<'db> {
         for def in definitions.iter() {
             self.variable_scope.add(def.name.clone(), ());
         }
-        let res = ast::fold::fold_let_rec(self, definitions);
-        res
+        
+        ast::fold::fold_let_rec(self, definitions)
     }
 
     fn fold_local_function_def(&mut self, def: ast::FunctionDefinition) -> ast::FunctionDefinition {
@@ -262,19 +262,17 @@ fn resolve_name(
         } else {
             format!("{}::{}", current_namespace_prefix, identifier)
         };
-        let definition = database.get_global(&full_name).expect(&format!(
-            "Could not find global definition with name {full_name}"
-        ));
+        let definition = database.get_global(&full_name).unwrap_or_else(|| panic!("Could not find global definition with name {full_name}"));
         return ast::Name::Global {
             package: CURRENT_PACKAGE_ID.0,
             definition: definition.0 .0,
         };
     }
-    let possible_package = path.first().clone().unwrap();
-    let possible_package = database.package_id(&possible_package);
+    let possible_package = path.first().unwrap();
+    let possible_package = database.package_id(possible_package);
     match possible_package {
         Some(package_id) => {
-            let package = database.get_package(package_id.clone());
+            let package = database.get_package(package_id);
             path.push(identifier);
             let full_name = path[1..].join("::");
             let definition = package.globals.get(&full_name).unwrap();

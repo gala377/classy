@@ -41,7 +41,7 @@ pub fn instance(
             );
         }
         Type::Alias(id) => {
-            let resolved = db.resolve_tid(id.clone())?;
+            let resolved = db.resolve_tid(*id)?;
             return instance(db, resolved, args);
         }
         t => {
@@ -249,8 +249,8 @@ fn union_slices(
             Type::Tuple(b.to_vec()),
         ));
     }
-    a.into_iter()
-        .zip(b.into_iter())
+    a.iter()
+        .zip(b)
         .map(|(a, b)| union(db, a.clone(), b.clone(), subs))
         .collect::<Result<Vec<_>, _>>()
 }

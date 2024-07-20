@@ -30,6 +30,12 @@ macro_rules! expand_namespace {
     }};
 }
 
+impl Default for ExpandNamespace {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ExpandNamespace {
     pub fn new() -> Self {
         Self { namespace: None }

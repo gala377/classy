@@ -7,6 +7,12 @@ pub struct IdProvider {
     id: Rc<Cell<usize>>,
 }
 
+impl Default for IdProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IdProvider {
     pub fn new() -> Self {
         Self {

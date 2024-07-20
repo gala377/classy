@@ -69,23 +69,15 @@ impl<T> LocalId<T> {
 
 /// Id that identifies a definition within a package
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
+#[derive(Default)]
 pub struct DefinitionId(pub UniqueId);
 
-impl Default for DefinitionId {
-    fn default() -> Self {
-        Self(0)
-    }
-}
 
 /// Id that identifies a type
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
+#[derive(Default)]
 pub struct TypeId(pub UniqueId);
 
-impl Default for TypeId {
-    fn default() -> Self {
-        Self(0)
-    }
-}
 
 /// Id that identifies a package
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy, Default)]
@@ -1228,7 +1220,7 @@ impl Database {
                                 free_vars: block_free_vars,
                             }),
                             constraints: vec![],
-                            ty: receiver.clone(),
+                            ty: receiver,
                             file,
                             implicit_imports: vec![],
                             parent: Some(id),
@@ -1390,7 +1382,7 @@ impl Database {
             let file = self.definitions.get(id).unwrap().file;
             let mut prefex_scope = PrefexScope::with_empty_scope();
             println!("Free vars are {free_variables:?}");
-            prefex_scope.add_type_vars(&free_variables);
+            prefex_scope.add_type_vars(free_variables);
             let constrains = bounds
                 .iter()
                 .map(|bound| {
@@ -1443,7 +1435,7 @@ impl Database {
                         let mut block_bounds = Vec::new();
                         let mut block_free_vars = Vec::new();
                         let mut block_receiver = typ.clone();
-                        if let Some((free_variables, bounds, typ)) = self.unwrap_poly_type(&typ) {
+                        if let Some((free_variables, bounds, typ)) = self.unwrap_poly_type(typ) {
                             block_bounds = bounds.into();
                             block_free_vars = free_variables.into();
                             block_receiver = typ.clone();
@@ -1474,7 +1466,7 @@ impl Database {
                                 free_vars: block_free_vars,
                             }),
                             constraints: vec![],
-                            ty: receiver.clone(),
+                            ty: receiver,
                             file,
                             implicit_imports: vec![],
                             parent: Some(*id),
@@ -1540,7 +1532,7 @@ impl Database {
         let mut f_bounds = Vec::new();
         let mut f_free_vars = Vec::new();
         let mut f_typ = typ.clone();
-        if let Some((free_variables, bounds, typ)) = self.unwrap_poly_type(&typ) {
+        if let Some((free_variables, bounds, typ)) = self.unwrap_poly_type(typ) {
             f_bounds = bounds.into();
             f_free_vars = free_variables.into();
             f_typ = typ.clone();
@@ -1549,7 +1541,7 @@ impl Database {
             prefex_scope.new_scope();
             prefex_scope.add_type_vars(&f_free_vars);
         }
-        let f_typ = self.ast_type_to_type_shallow(session, prefex_scope, &namespace, &f_typ);
+        let f_typ = self.ast_type_to_type_shallow(session, prefex_scope, namespace, &f_typ);
         let f_constraints = f_bounds
             .iter()
             .map(|bound| {
@@ -1557,7 +1549,7 @@ impl Database {
                     session,
                     prefex_scope,
                     bound,
-                    &namespace,
+                    namespace,
                 )
             })
             .collect::<Vec<_>>();
@@ -1589,7 +1581,7 @@ impl Database {
             let mut f_bounds = Vec::new();
             let mut f_free_vars = Vec::new();
             let mut f_typ = typ.clone();
-            if let Some((free_variables, bounds, typ)) = self.unwrap_poly_type(&typ) {
+            if let Some((free_variables, bounds, typ)) = self.unwrap_poly_type(typ) {
                 f_bounds = bounds.into();
                 f_free_vars = free_variables.into();
                 f_typ = typ.clone();
@@ -1866,7 +1858,7 @@ impl Database {
             Definition {
                 kind: DefinitionKind::Class(c),
                 ..
-            } => Some((id.clone(), c)),
+            } => Some((*id, c)),
             _ => None,
         })
     }
@@ -1876,7 +1868,7 @@ impl Database {
             Definition {
                 kind: DefinitionKind::Instance(c),
                 ..
-            } => Some((id.clone(), c)),
+            } => Some((*id, c)),
             _ => None,
         })
     }

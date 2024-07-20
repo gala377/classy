@@ -412,9 +412,7 @@ impl<'vm, 'pool> Linker<'vm, 'pool> {
             // TODO: ugly, make interner point to runtime classes as well
             "Tuple" => self.vm.runtime.classes.tuple,
             str => {
-                let type_name = *self.vm.interned_strings.get(str).expect(&format!(
-                    "expected type symbols to already be allocated {str}"
-                ));
+                let type_name = *self.vm.interned_strings.get(str).unwrap_or_else(|| panic!("expected type symbols to already be allocated {str}"));
                 self.vm
                     .runtime
                     .user_classes

@@ -423,7 +423,7 @@ impl<'ctx, 'solver_db> ConstraintSolver<'ctx, 'solver_db> {
                     for (def_id, path) in self.tctx.method_blocks_by_def_id.iter() {
                         println!("  {def_id:?} -> {path:?}");
                     }
-                    let path = self.tctx.method_blocks_by_def_id[&def_id];
+                    let path = self.tctx.method_blocks_by_def_id[def_id];
                     println!("All sets");
                     for (t_id, set) in &self.tctx.methods {
                         println!("  {t_id:?} -> {set:?}");

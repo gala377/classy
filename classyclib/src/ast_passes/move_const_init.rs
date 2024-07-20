@@ -10,6 +10,12 @@ pub struct MoveConstInit {
     const_vars: HashMap<String, ast::Expr>,
 }
 
+impl Default for MoveConstInit {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MoveConstInit {
     pub fn new() -> Self {
         Self {
@@ -62,10 +68,10 @@ impl ast::fold::Folder for MoveConstInit {
             id,
             kind: ast::ExprKind::Sequence(inits),
         };
-        let new_def = ast::FunctionDefinition {
+        
+        ast::FunctionDefinition {
             body: new_body,
             ..def
-        };
-        new_def
+        }
     }
 }

@@ -44,8 +44,8 @@ fn get_base_type(tctx: &TypCtx, t: &Type, previous_alias_id: usize) -> usize {
     println!("Getting base type for: {t:?}");
     match t {
         Type::Alias(tid) => get_base_type(tctx, &tctx.resolve_alias(*tid), *tid),
-        Type::Scheme { typ, .. } => get_base_type(tctx, &*typ, previous_alias_id),
-        Type::App { typ, .. } => get_base_type(tctx, &*typ, previous_alias_id),
+        Type::Scheme { typ, .. } => get_base_type(tctx, typ, previous_alias_id),
+        Type::App { typ, .. } => get_base_type(tctx, typ, previous_alias_id),
         Type::Int
         | Type::UInt
         | Type::Bool

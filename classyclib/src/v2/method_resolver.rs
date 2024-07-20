@@ -122,7 +122,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
 
     fn add_method_blocks(&mut self, method_blocks: &[Id<DefinitionId>]) {
         for method_block in method_blocks {
-            self.add_method_block(method_block.clone(), &[], &[], None);
+            self.add_method_block(*method_block, &[], &[], None);
         }
     }
 
@@ -133,8 +133,8 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
         additional_free_vars: &[String],
         synthetic: Option<SyntheticData>,
     ) {
-        let package = method_block.package.clone();
-        let method_block_definition = self.database.get_definition(method_block.clone()).unwrap();
+        let package = method_block.package;
+        let method_block_definition = self.database.get_definition(method_block).unwrap();
         let constraints = additional_constraints
             .iter()
             .chain(&method_block_definition.constraints)
@@ -152,10 +152,10 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
             .methods
             .iter()
             .map(|MethodHandle { name, definition }| {
-                let definition = definition.as_global(package.clone());
+                let definition = definition.as_global(package);
                 let definition = self.database.get_definition(definition).unwrap();
                 let info = definition.kind.as_method().cloned().unwrap();
-                let method_type = info.ty.as_global(package.clone());
+                let method_type = info.ty.as_global(package);
                 let method_type = self.database.resolve_alias_to_type(method_type).unwrap();
                 let (free_vars, method_type) = match method_type {
                     Type::Scheme { prefex, typ } => (prefex, *typ),
@@ -184,7 +184,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
         };
         let methods_block_ref = self.blackboard_database.add_method_block(b_methods_block);
         self.meth_block_to_meth_block_id
-            .insert(method_block.clone(), methods_block_ref.clone());
+            .insert(method_block, methods_block_ref.clone());
 
         if let Some(synthetic) = synthetic {
             self.synthetic_method_blocks
@@ -198,12 +198,12 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
 
     fn add_instances(&mut self, instances: &[Id<DefinitionId>]) {
         for instance in instances {
-            let package = instance.package.clone();
-            let instance_definition = self.database.get_definition(instance.clone()).unwrap();
+            let package = instance.package;
+            let instance_definition = self.database.get_definition(*instance).unwrap();
             let constraints = self.translate_constraints(&instance_definition.constraints);
             let info = instance_definition.kind.as_instance().cloned().unwrap();
             let GenericConstraint { class, args } = info.receiver.clone();
-            let class_ref = self.class_to_class_id.get(&class).unwrap().clone();
+            let class_ref = *self.class_to_class_id.get(&class).unwrap();
             let args = args.iter().map(|ty| self.to_blackboard_type(ty)).collect();
             // ! Why instance does not have members?
             // ! Looking for methods in instances is not supported yet.
@@ -216,14 +216,14 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
             };
             let instance_ref = self.blackboard_database.add_instance(b_instance);
             self.instance_to_instance_id
-                .insert(instance.clone(), instance_ref);
+                .insert(*instance, instance_ref);
             for InstanceMethodBlock { id, .. } in &info.method_blocks {
-                let id = id.as_global(package.clone());
+                let id = id.as_global(package);
                 self.add_method_block(
                     id,
                     &[info.receiver.clone()],
                     &info.free_vars,
-                    Some(SyntheticData::FromInstance(instance.clone())),
+                    Some(SyntheticData::FromInstance(*instance)),
                 );
             }
         }
@@ -231,9 +231,9 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
 
     fn reserve_classes(&mut self, classes: &[Id<DefinitionId>]) {
         for class in classes {
-            let resolved_class = self.database.get_class(class.clone()).unwrap();
+            let resolved_class = self.database.get_class(*class).unwrap();
             let class_id = self.blackboard_database.reserve_class(&resolved_class.name);
-            self.class_to_class_id.insert(class.clone(), class_id);
+            self.class_to_class_id.insert(*class, class_id);
         }
     }
 
@@ -241,22 +241,22 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
         for ty in types {
             let resolved_ty = self
                 .database
-                .get_definition_map(ty.clone(), |def| {
+                .get_definition_map(*ty, |def| {
                     assert!(matches!(def.kind, knowledge::DefinitionKind::Type));
                     def.name.clone()
                 })
                 .unwrap();
             let type_id = self.blackboard_database.reserve_type_impl(&resolved_ty);
-            self.type_to_type_id.insert(ty.clone(), type_id);
+            self.type_to_type_id.insert(*ty, type_id);
         }
     }
 
     fn add_classes(&mut self, classes: &[Id<DefinitionId>]) {
         for class in classes {
-            let package = class.package.clone();
-            let resolved_class = self.database.get_definition(class.clone()).unwrap();
+            let package = class.package;
+            let resolved_class = self.database.get_definition(*class).unwrap();
             let type_params = resolved_class.kind.as_class().unwrap().arguments.clone();
-            let class_ref = self.class_to_class_id.get(&class).unwrap().clone();
+            let class_ref = *self.class_to_class_id.get(class).unwrap();
             let constraints = self.translate_constraints(&resolved_class.constraints);
             let class_def = blackboard::database::TypeClass {
                 name: resolved_class.name.clone(),
@@ -270,11 +270,11 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
             self.blackboard_database.replace_class(class_ref, class_def);
             let class_info = resolved_class.kind.as_class().unwrap();
             for ClassMethodBlock { id, .. } in &class_info.method_blocks {
-                let id = id.as_global(package.clone());
+                let id = id.as_global(package);
                 self.add_method_block(
                     id,
                     &[GenericConstraint {
-                        class: class.clone(),
+                        class: *class,
                         args: class_info
                             .arguments
                             .iter()
@@ -283,7 +283,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
                             .collect(),
                     }],
                     &class_info.arguments,
-                    Some(SyntheticData::FromClass(class.clone())),
+                    Some(SyntheticData::FromClass(*class)),
                 );
             }
         }
@@ -297,17 +297,17 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
         for GenericConstraint { class, args } in constraints {
             let class_ref = self.class_to_class_id.get(class).unwrap();
             let args = args.iter().map(|ty| self.to_blackboard_type(ty)).collect();
-            res.push(blackboard::ty::Constraint::Class(class_ref.clone(), args));
+            res.push(blackboard::ty::Constraint::Class(*class_ref, args));
         }
         res
     }
 
     fn add_types(&mut self, types: &[Id<DefinitionId>]) {
         for ty in types {
-            let resolved_ty = self.database.get_definition(ty.clone()).unwrap();
-            let type_ref = self.type_to_type_id.get(ty).unwrap().clone();
+            let resolved_ty = self.database.get_definition(*ty).unwrap();
+            let type_ref = *self.type_to_type_id.get(ty).unwrap();
             let type_params = {
-                let t = self.database.get_type(ty.clone()).unwrap();
+                let t = self.database.get_type(*ty).unwrap();
                 match t {
                     Type::Scheme { prefex, .. } => prefex.clone(),
                     _ => Vec::new(),
@@ -343,7 +343,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
             blackboard::slg::SlgSolver::new(&self.blackboard_database, &mut self.forest, query);
         let mut answers: Vec<_> = solver.into_iter().collect();
         println!("answers: {:#?}", answers);
-        if answers.len() == 0 {
+        if answers.is_empty() {
             return Err(MethodResolutionError::MethodNotFound);
         }
         if answers.len() > 1 {
@@ -351,7 +351,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
                 .iter()
                 .filter(|answer| match &answer.origin {
                     AnswerOrigin::FromRef(GenericRef::MethodBlock(block_id)) => {
-                        match self.synthetic_method_blocks.get(&block_id) {
+                        match self.synthetic_method_blocks.get(block_id) {
                             Some(SyntheticData::FromClass(_)) => false,
                             _ => true,
                         }
@@ -392,29 +392,26 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
                     .iter()
                     .find_map(|(k, v)| if v == id { Some(k) } else { None })
                     .unwrap();
-                if let Some(_) = self.synthetic_method_blocks.get(id) {
+                if self.synthetic_method_blocks.get(id).is_some() {
                     println!("EVIDENCE: {:#?}", evidence);
-                    match evidence[0].origin {
-                        AnswerOrigin::FromAssumption(index) => {
-                            let definition = self.database.get_definition(kid.clone()).unwrap();
-                            let info = definition.kind.as_method_block().cloned().unwrap();
-                            let method = info
-                                .methods
-                                .iter()
-                                .find(|MethodHandle { name, .. }| name == method)
-                                .unwrap()
-                                .definition;
-                            return ResolvedMethod::FromInstanceInScope {
-                                method_id: method.as_global(kid.package.clone()),
-                                referenced_constraint: index,
-                            };
-                        }
-                        _ => {}
+                    if let AnswerOrigin::FromAssumption(index) = evidence[0].origin {
+                        let definition = self.database.get_definition(*kid).unwrap();
+                        let info = definition.kind.as_method_block().cloned().unwrap();
+                        let method = info
+                            .methods
+                            .iter()
+                            .find(|MethodHandle { name, .. }| name == method)
+                            .unwrap()
+                            .definition;
+                        return ResolvedMethod::FromInstanceInScope {
+                            method_id: method.as_global(kid.package),
+                            referenced_constraint: index,
+                        };
                     }
                 }
                 let method_block = self
                     .database
-                    .get_definition_map(kid.clone(), |def| {
+                    .get_definition_map(*kid, |def| {
                         def.kind.as_method_block().cloned().unwrap()
                     })
                     .unwrap();
@@ -448,7 +445,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
             .map(|c| match c {
                 Constraint::Class(class, args) => {
                     Clause::Fact(DomainGoal::InstanceExistsAndWellFormed {
-                        head: class.clone(),
+                        head: *class,
                         args: args.clone(),
                     })
                 }
@@ -476,10 +473,10 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
             // blackbooard does not know about basic types so we need to
             // return a type ref to them if we added them before.
             Type::Struct { def, .. } => {
-                blackboard::Ty::Ref(self.type_to_type_id.get(def).unwrap().clone())
+                blackboard::Ty::Ref(*self.type_to_type_id.get(def).unwrap())
             }
             Type::ADT { def, .. } => {
-                blackboard::Ty::Ref(self.type_to_type_id.get(def).unwrap().clone())
+                blackboard::Ty::Ref(*self.type_to_type_id.get(def).unwrap())
             }
             Type::Function { args, ret } => {
                 let args = args
@@ -501,7 +498,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
                 blackboard::Ty::Array(Box::new(inner))
             }
             Type::Alias(id) => {
-                let t = self.database.resolve_alias_to_type(id.clone()).unwrap();
+                let t = self.database.resolve_alias_to_type(*id).unwrap();
                 self.to_blackboard_type(&t)
             }
 
@@ -529,10 +526,9 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
             t => {
                 println!("T is {:#?}", t);
                 blackboard::Ty::Ref(
-                    self.type_to_type_id
-                        .get(&self.database.get_primitive_type(&t).unwrap())
-                        .unwrap()
-                        .clone(),
+                    *self.type_to_type_id
+                        .get(&self.database.get_primitive_type(t).unwrap())
+                        .unwrap(),
                 )
             }
         }
@@ -674,13 +670,13 @@ mod tests {
                 let t = def.ty;
                 let t = std_package.typeid_to_type.get(&t).unwrap();
                 match t {
-                    crate::v2::ty::Type::Int => Some((id.clone(), t.clone())),
-                    crate::v2::ty::Type::UInt => Some((id.clone(), t.clone())),
-                    crate::v2::ty::Type::Bool => Some((id.clone(), t.clone())),
-                    crate::v2::ty::Type::Float => Some((id.clone(), t.clone())),
-                    crate::v2::ty::Type::Byte => Some((id.clone(), t.clone())),
-                    crate::v2::ty::Type::String => Some((id.clone(), t.clone())),
-                    crate::v2::ty::Type::Unit => Some((id.clone(), t.clone())),
+                    crate::v2::ty::Type::Int => Some((*id, t.clone())),
+                    crate::v2::ty::Type::UInt => Some((*id, t.clone())),
+                    crate::v2::ty::Type::Bool => Some((*id, t.clone())),
+                    crate::v2::ty::Type::Float => Some((*id, t.clone())),
+                    crate::v2::ty::Type::Byte => Some((*id, t.clone())),
+                    crate::v2::ty::Type::String => Some((*id, t.clone())),
+                    crate::v2::ty::Type::Unit => Some((*id, t.clone())),
                     _ => None,
                 }
             })
@@ -699,7 +695,7 @@ mod tests {
             println!("type: {ty:?}");
         }
         for (id, ty) in primitive_types {
-            db.add_primitive_type(ty.clone(), id.clone());
+            db.add_primitive_type(ty.clone(), id);
         }
 
         (db, sess)

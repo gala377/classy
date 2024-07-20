@@ -102,7 +102,7 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
 
             Constraint::Eq(Type::App { typ, args }, app2 @ Type::App { .. }) => {
                 self.constraints
-                    .push_back(Constraint::Eq(instance(&self.database, args, *typ), app2));
+                    .push_back(Constraint::Eq(instance(self.database, args, *typ), app2));
             }
             Constraint::Eq(app @ Type::App { .. }, t) => {
                 self.constraints.push_back(Constraint::Eq(t, app));
@@ -113,7 +113,7 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
             }
             Constraint::Eq(t, Type::App { typ: app_t, args }) => {
                 self.constraints
-                    .push_back(Constraint::Eq(t, instance(&self.database, args, *app_t)));
+                    .push_back(Constraint::Eq(t, instance(self.database, args, *app_t)));
             }
             Constraint::Eq(Type::Fresh(id1), other) => {
                 self.substitutions.push((id1, other.clone()));
@@ -206,7 +206,7 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
                 of_type,
             } => {
                 self.constraints.push_back(Constraint::HasProperty {
-                    ty: instance(&self.database, args, *typ),
+                    ty: instance(self.database, args, *typ),
                     property,
                     of_type,
                 });
@@ -324,7 +324,7 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
                 of_type,
             } => {
                 self.constraints.push_back(Constraint::HasCase {
-                    ty: instance(&self.database, args, *typ),
+                    ty: instance(self.database, args, *typ),
                     case,
                     of_type,
                 });
@@ -373,7 +373,7 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
                 of_type,
             } => {
                 self.constraints.push_back(Constraint::HasMethod {
-                    receiver: instance(&self.database, args, *typ),
+                    receiver: instance(self.database, args, *typ),
                     method,
                     of_type,
                 });
@@ -404,7 +404,7 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
                 let instances_in_scope = Vec::new();
                 let classes_in_scope = Vec::new();
                 let mut method_resolver = MethodResolver::within_function(
-                    &self.database,
+                    self.database,
                     &self.prefex_scope,
                     generic_constraints,
                     instances_in_scope,

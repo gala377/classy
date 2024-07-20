@@ -46,7 +46,7 @@ pub fn resolve_top_level_type(
     let type_id = *ctx
         .types
         .get(name)
-        .expect(&(format!("the types should have been prepopulated: {name}")));
+        .unwrap_or_else(|| panic!("the types should have been prepopulated: {name}"));
     let mut scope = PrefexScope::with_empty_scope();
     scope.add_type_vars(type_variables);
     let prefex = type_variables.clone();
@@ -247,10 +247,10 @@ impl<'ctx> TypeResolver<'ctx> {
             ast::Typ::Function { args, ret } => {
                 let resolved_ars = args.iter().map(|t| self.resolve_type(prefex, t)).collect();
                 let resolved_ret = self.resolve_type(prefex, ret);
-                return self.add_definition(Type::Function {
+                self.add_definition(Type::Function {
                     args: resolved_ars,
                     ret: Box::new(resolved_ret),
-                });
+                })
             }
             ast::Typ::Unit => Type::Alias(self.unit_id),
             ast::Typ::ToInfere => Type::Alias(self.to_infere_id),
@@ -276,8 +276,8 @@ impl<'ctx> TypeResolver<'ctx> {
                     return self.resolve_type(prefex, typ);
                 }
                 let t = prefex.with_scope(|scope| {
-                    scope.add_type_vars(&free_variables);
-                    self.resolve_type(scope, &typ)
+                    scope.add_type_vars(free_variables);
+                    self.resolve_type(scope, typ)
                 });
                 self.add_definition(Type::Scheme {
                     prefex: free_variables.clone(),

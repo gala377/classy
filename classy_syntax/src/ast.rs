@@ -399,7 +399,7 @@ impl Expr {
                     res.push_str(&expr.pretty());
                     res.push_str("; ");
                 }
-                res.push_str("}");
+                res.push('}');
                 res
             }
             ExprKind::Assignment { lval, rval } => {
@@ -408,22 +408,22 @@ impl Expr {
             ExprKind::IntConst(i) => i.to_string(),
             ExprKind::StringConst(s) => {
                 let mut res = "\"".to_string();
-                res.push_str(&s);
-                res.push_str("\"");
+                res.push_str(s);
+                res.push('"');
                 res
             }
             ExprKind::FloatConst(f) => {
-                let res = f.to_string();
-                res
+                
+                f.to_string()
             }
             ExprKind::BoolConst(b) => {
-                let res = b.to_string();
-                res
+                
+                b.to_string()
             }
             ExprKind::Name(n) => n.pretty(),
             ExprKind::FunctionCall { func, args, kwargs } => {
                 let mut res = func.pretty();
-                res.push_str("(");
+                res.push('(');
                 for arg in args {
                     res.push_str(&arg.pretty());
                     res.push_str(", ");
@@ -431,13 +431,13 @@ impl Expr {
                 for (name, arg) in kwargs {
                     res.push_str(&format!("{} = {}, ", name, arg.pretty()));
                 }
-                res.push_str(")");
+                res.push(')');
                 res
             }
             ExprKind::Access { val, field } => {
                 let mut res = val.pretty();
-                res.push_str(".");
-                res.push_str(&field);
+                res.push('.');
+                res.push_str(field);
                 res
             }
             ExprKind::Tuple(args) => {
@@ -446,13 +446,13 @@ impl Expr {
                     res.push_str(&arg.pretty());
                     res.push_str(", ");
                 }
-                res.push_str(")");
+                res.push(')');
                 res
             }
             ExprKind::Lambda { parameters, body } => {
                 let mut res = "fn (".to_string();
                 for TypedIdentifier { name, .. } in parameters {
-                    res.push_str(&name);
+                    res.push_str(name);
                 }
                 res.push_str(") ");
                 res.push_str(&body.pretty());
@@ -465,7 +465,7 @@ impl Expr {
                 for (name, val) in values {
                     res.push_str(&format!("{} = {}, ", name, val.pretty()));
                 }
-                res.push_str("}");
+                res.push('}');
                 res
             }
             ExprKind::AdtTupleConstructor {
@@ -474,12 +474,12 @@ impl Expr {
                 args,
             } => {
                 let mut res = format!("{}.{}", typ.pretty(), constructor);
-                res.push_str("(");
+                res.push('(');
                 for arg in args {
                     res.push_str(&arg.pretty());
                     res.push_str(", ");
                 }
-                res.push_str(")");
+                res.push(')');
                 res
             }
             ExprKind::AdtStructConstructor {
@@ -492,7 +492,7 @@ impl Expr {
                 for (name, val) in fields {
                     res.push_str(&format!("{} = {}, ", name, val.pretty()));
                 }
-                res.push_str("}");
+                res.push('}');
                 res
             }
             ExprKind::AdtUnitConstructor { typ, constructor } => {
@@ -501,7 +501,7 @@ impl Expr {
             ExprKind::While { cond, body } => {
                 let mut res = "while ".to_string();
                 res.push_str(&format!("({})", &cond.pretty()));
-                res.push_str(" ");
+                res.push(' ');
                 res.push_str(&body.pretty());
                 res
             }
@@ -517,7 +517,7 @@ impl Expr {
             } => {
                 let mut res = "if ".to_string();
                 res.push_str(&cond.pretty());
-                res.push_str(" ");
+                res.push(' ');
                 res.push_str(&body.pretty());
                 if let Some(else_body) = else_body {
                     res.push_str(" else ");
@@ -527,7 +527,7 @@ impl Expr {
             }
             ExprKind::Let { name, init, .. } => {
                 let mut res = "let ".to_string();
-                res.push_str(&name);
+                res.push_str(name);
                 res.push_str(" = ");
                 res.push_str(&init.pretty());
                 res
@@ -546,7 +546,7 @@ impl Expr {
                 for (name, val) in fields {
                     res.push_str(&format!("{} = {}, ", name, val.pretty()));
                 }
-                res.push_str("}");
+                res.push('}');
                 res
             }
             ExprKind::ArrayLiteral { size, init, .. } => {
@@ -557,14 +557,14 @@ impl Expr {
                     res.push_str(&val.pretty());
                     res.push_str(", ");
                 }
-                res.push_str("]");
+                res.push(']');
                 res
             }
             ExprKind::IndexAccess { lhs, index } => {
                 let mut res = lhs.pretty();
-                res.push_str("[");
+                res.push('[');
                 res.push_str(&index.pretty());
-                res.push_str("]");
+                res.push(']');
                 res
             }
             ExprKind::Match { expr, cases } => {
@@ -579,7 +579,7 @@ impl Expr {
                     }
                     res.push_str("; ");
                 }
-                res.push_str("}");
+                res.push('}');
                 res
             }
             ExprKind::MethodCall {
@@ -598,7 +598,7 @@ impl Expr {
                 for (name, arg) in kwargs {
                     res.push_str(&format!("{} = {}, ", name, arg.pretty()));
                 }
-                res.push_str(")");
+                res.push(')');
                 res
             }
         }

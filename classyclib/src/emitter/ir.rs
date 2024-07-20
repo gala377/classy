@@ -376,7 +376,7 @@ impl<'ctx, 'pool> FunctionEmitter<'ctx, 'pool> {
                     }
                     let mut data = size as isize;
                     for (i, v) in refmap.iter().enumerate() {
-                        data = data | ((*v as isize) << (i + TAG_SHIFT))
+                        data |= (*v as isize) << (i + TAG_SHIFT)
                     }
                     self.push_address(&mut code, res.clone());
                     let id = self.constant_pool.add_entry(data.into());

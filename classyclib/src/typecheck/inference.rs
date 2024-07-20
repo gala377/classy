@@ -235,7 +235,7 @@ impl<'sess> Inference<'sess> {
             let mut solver = ConstraintSolver::new(
                 tctx,
                 self.id_provider.clone(),
-                &*inferer.blackboard_database,
+                &inferer.blackboard_database,
                 self.definitions.clone(),
             );
             let constraints = inferer.constraints.clone();
@@ -465,14 +465,14 @@ impl<'sess> Inference<'sess> {
         let mut solver = ConstraintSolver::new(
             tctx,
             self.id_provider.clone(),
-            &*inferer.blackboard_database,
+            &inferer.blackboard_database,
             inferer.definitions.clone(),
         );
         let constraints = inferer.constraints.clone();
         solver.solve(constraints);
         let mut substitutions = solver.substitutions.into_iter().collect();
         fix_fresh::fix_types_after_inference(&mut substitutions, tctx, &mut inferer.env);
-        generalize_types(tctx, &name, global_scope.clone(), &mut inferer.env);
+        generalize_types(tctx, name, global_scope.clone(), &mut inferer.env);
         // discard constraints as we alrady solved them
         self.merge_without_constraints(inferer);
     }
@@ -544,11 +544,11 @@ impl<'sess> Inference<'sess> {
                 let mut typ = {
                     println!("Checking name {name}");
                     let scope = self.scope.borrow();
-                    let typ = scope.type_of(name).unwrap_or_else(|| {
+                    
+                    scope.type_of(name).unwrap_or_else(|| {
                         println!("Expression checked:\n{expr:?}");
                         panic!("Unknown variable {name}")
-                    });
-                    typ
+                    })
                 };
                 if self.scope.borrow().is_global(name) && requires_typechecking(typ.clone()) {
                     println!("Name {name} is global and requires typechecking. {typ:?}");
@@ -1119,7 +1119,7 @@ impl<'sess> Inference<'sess> {
         let mut solver = ConstraintSolver::new(
             tctx,
             self.id_provider.clone(),
-            &*inferer.blackboard_database,
+            &inferer.blackboard_database,
             inferer.definitions.clone(),
         );
         let constraints = inferer.constraints.clone();
@@ -1213,13 +1213,13 @@ impl<'sess> Inference<'sess> {
                 typ,
             } => {
                 if free_variables.is_empty() {
-                    return self.ast_type_to_type(scope, prefex_scope, &typ);
+                    return self.ast_type_to_type(scope, prefex_scope, typ);
                 }
                 prefex_scope.with_scope(|prefex_scope| {
-                    prefex_scope.add_type_vars(&free_variables);
+                    prefex_scope.add_type_vars(free_variables);
                     Type::Scheme {
                         prefex: free_variables.clone(),
-                        typ: Box::new(self.ast_type_to_type(scope, prefex_scope, &typ)),
+                        typ: Box::new(self.ast_type_to_type(scope, prefex_scope, typ)),
                     }
                 })
             }
@@ -1233,7 +1233,7 @@ impl<'sess> Inference<'sess> {
                     .map(|typ| self.ast_type_to_type(scope, prefex_scope, typ))
                     .collect::<Vec<_>>();
                 let ret = Box::new(self.ast_type_to_type(scope, prefex_scope, ret));
-                return Type::Function { args, ret };
+                Type::Function { args, ret }
             }
             ast::Typ::Tuple(types) => {
                 let types = types

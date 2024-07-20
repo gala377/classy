@@ -225,18 +225,18 @@ impl Database {
     pub fn lower_to_clauses(&mut self) {
         for (type_ref, type_impl) in self.type_impls.iter().enumerate() {
             let type_ref = TyRef(type_ref);
-            let clause = self.lower_type_impl(type_ref.clone(), type_impl);
+            let clause = self.lower_type_impl(type_ref, type_impl);
             self.clauses.push(AnnotatedClause {
                 clause,
-                origin: GenericRef::Type(type_ref.clone()),
+                origin: GenericRef::Type(type_ref),
             });
         }
         for (class_ref, class) in self.type_classes.iter().enumerate() {
             let class_ref = ClassRef(class_ref);
-            let clause = self.lower_class(class_ref.clone(), class);
+            let clause = self.lower_class(class_ref, class);
             self.clauses.push(AnnotatedClause {
                 clause,
-                origin: GenericRef::Class(class_ref.clone()),
+                origin: GenericRef::Class(class_ref),
             });
         }
         for (instance_ref, instance) in self.instances.iter().enumerate() {
@@ -309,7 +309,7 @@ impl Database {
                 "if there are no type params there are no types to constraint"
             );
             return Clause::Fact(DomainGoal::ClassWellFormed {
-                head: class_ref.clone(),
+                head: class_ref,
                 args: Vec::new(),
             });
         }
@@ -382,7 +382,7 @@ impl Database {
             type_params.len(),
             Box::new(Clause::Implies(
                 Box::new(Clause::Fact(DomainGoal::InstanceExistsAndWellFormed {
-                    head: type_class.clone(),
+                    head: *type_class,
                     args: args.clone(),
                 })),
                 clauses,
@@ -452,7 +452,7 @@ impl Database {
             Constraint::Eq(..) => unimplemented!(),
             Constraint::Class(class, args) => {
                 Clause::Fact(DomainGoal::InstanceExistsAndWellFormed {
-                    head: class.clone(),
+                    head: *class,
                     args: args.clone(),
                 })
             }
@@ -464,7 +464,7 @@ impl Database {
             Constraint::Eq(..) => unimplemented!(),
             Constraint::Class(class, args) => {
                 Goal::Domain(DomainGoal::InstanceExistsAndWellFormed {
-                    head: class.clone(),
+                    head: *class,
                     args: args.clone(),
                 })
             }
@@ -552,7 +552,7 @@ impl Database {
         origin: AnswerOrigin,
     ) -> Vec<MatchResult> {
         println!("\n\nBEFORE NORMALIZATION: {clause:#?}\n");
-        let (clause, unmap) = self.normalize_clause(&clause, current_universe, variable_generator);
+        let (clause, unmap) = self.normalize_clause(clause, current_universe, variable_generator);
         println!("\n\nAFTER NORMALIZATION: {clause:#?}\n");
         // extract the inner domain foal and the body of a clause
         let (raw_clause, body) = match clause {
@@ -707,8 +707,7 @@ impl Database {
                             .get_method_block(reference)
                             .methods
                             .iter()
-                            .find(|def| def.name == *name)
-                            .is_some(),
+                            .any(|def| def.name == *name),
                         _ => false,
                     };
                     if !method_found {

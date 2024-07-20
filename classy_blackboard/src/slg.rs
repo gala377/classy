@@ -23,6 +23,12 @@ pub struct Forest {
     table_goals: HashMap<Goal, usize>,
 }
 
+impl Default for Forest {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Forest {
     pub fn new() -> Self {
         Self {
@@ -45,6 +51,12 @@ impl Forest {
 pub struct Substitution {
     pub mapping: HashMap<usize, Ty>,
     pub origins: HashMap<usize, AnswerOrigin>,
+}
+
+impl Default for Substitution {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Substitution {
@@ -250,7 +262,7 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                     .iter()
                     .filter_map(|(var, ty)| {
                         (!(ty.is_constant() || var >= &max_var))
-                            .then_some((var.clone(), ty.clone()))
+                            .then_some((*var, ty.clone()))
                     })
                     .collect::<HashMap<_, _>>();
                 Answer {
@@ -436,9 +448,7 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
             // Remap the answer to the original goal variables
             let mut generic_mapping = HashMap::new();
             for (binder_index, ty) in &answer.subst.mapping {
-                uncanonilize_mapping.get(*binder_index).map(|index| {
-                    generic_mapping.insert(*index, ty.clone());
-                });
+                if let Some(index) = uncanonilize_mapping.get(*binder_index) { generic_mapping.insert(*index, ty.clone()); }
             }
             // Create a new exclause for the table to prove
             // This is achieved by removing the subgoal we just proven from it

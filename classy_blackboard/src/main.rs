@@ -226,7 +226,7 @@ pub fn main() {
         println!("no results");
     }
     for (i, result) in results.iter().enumerate() {
-        print!("result {}: \n", i);
+        println!("result {}: ", i);
         print_result(result);
     }
 }

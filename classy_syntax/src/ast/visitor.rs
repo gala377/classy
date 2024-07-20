@@ -703,7 +703,7 @@ pub fn walk_local_function_def<'ast, V: Visitor<'ast>>(
     v.visit_identifier(&def.name);
     v.visit_typ(&def.typ);
     for name in &def.parameters {
-        v.visit_identifier(&name);
+        v.visit_identifier(name);
     }
     v.visit_expr(&def.body);
 }
@@ -732,7 +732,7 @@ pub fn walk_instance_definition<'ast, V: Visitor<'ast>>(
     }: &'ast ast::TypeBound,
     body: &'ast [ast::InstanceDefinitionItem],
 ) {
-    name.map(|n| visitor.visit_identifier(n));
+    if let Some(n) = name { visitor.visit_identifier(n) }
     for ast::TypeBound { head, args } in bounds {
         visitor.visit_type_bound(head, args);
     }

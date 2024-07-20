@@ -1,8 +1,8 @@
 use core::panic;
 
-use classy_syntax::ast::{self, fold, visitor, Folder};
+use classy_syntax::ast::{self, Folder};
 
-use crate::{scope::Scope, session::Session, v2::instance};
+use crate::{scope::Scope, session::Session};
 
 use super::AstPass;
 

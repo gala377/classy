@@ -4,6 +4,12 @@ pub struct ChainMap<K, V> {
     chain: Vec<HashMap<K, V>>,
 }
 
+impl<K: Hash + Eq, V> Default for ChainMap<K, V> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<K: Hash + Eq, V> ChainMap<K, V> {
     pub fn new() -> Self {
         ChainMap {

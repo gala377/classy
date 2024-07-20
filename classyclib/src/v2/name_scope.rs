@@ -9,6 +9,12 @@ pub struct NameScope {
     types: Scope<String, Type>,
 }
 
+impl Default for NameScope {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NameScope {
     pub fn new() -> Self {
         Self {

@@ -8,6 +8,12 @@ pub struct AssignAstIds {
     id_provider: Option<SharedIdProvider>,
 }
 
+impl Default for AssignAstIds {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AssignAstIds {
     pub fn new() -> Self {
         Self { id_provider: None }
