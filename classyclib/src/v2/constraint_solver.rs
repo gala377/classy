@@ -415,7 +415,7 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
                 // we need to have the return type of the method.
                 // but this depend on the instance and method block and substitutions.
                 // Honestly the best thing that could happen is if in the blackboard we
-                // could with the answet also give back the type of the method
+                // could with the answer also give back the type of the method
                 match method_resolver.resolve_method(&receiver, &method) {
                     Ok(ResolvedMethod::Static { def_id }) => {
                         todo!()

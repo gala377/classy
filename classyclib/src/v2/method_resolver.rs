@@ -341,7 +341,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
 
         let solver =
             blackboard::slg::SlgSolver::new(&self.blackboard_database, &mut self.forest, query);
-        let mut answers: Vec<_> = solver.into_iter().take(20).collect();
+        let mut answers: Vec<_> = solver.into_iter().collect();
         println!("answers: {:#?}", answers);
         if answers.len() == 0 {
             return Err(MethodResolutionError::MethodNotFound);

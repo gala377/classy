@@ -24,6 +24,12 @@ pub enum Ty {
     },
 }
 
+impl Ty {
+    pub fn is_constant(&self) -> bool {
+        matches!(self, Ty::SynthesizedConstant(_))
+    }
+}
+
 /// A reference to a type into a
 /// type table
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

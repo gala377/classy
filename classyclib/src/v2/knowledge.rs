@@ -88,14 +88,8 @@ impl Default for TypeId {
 }
 
 /// Id that identifies a package
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy, Default)]
 pub struct PackageId(pub UniqueId);
-
-impl Default for PackageId {
-    fn default() -> Self {
-        Self(0)
-    }
-}
 
 pub const CURRENT_PACKAGE_ID: PackageId = PackageId(0);
 
@@ -681,7 +675,7 @@ impl Database {
         self.get_definition_map(id, |def| def.kind.as_class().cloned().unwrap())
     }
 
-    pub fn get_definition<'a>(&'a self, id: Id<DefinitionId>) -> Option<Definition> {
+    pub fn get_definition(&self, id: Id<DefinitionId>) -> Option<Definition> {
         self.get_definition_map(id, |def| def.clone())
     }
 
@@ -745,9 +739,7 @@ impl Database {
         expanded_name.push(name.to_string());
         let expand_name = expanded_name.join("::");
         println!("Expanded name {expand_name}");
-        let Some(definition_id) = self.globals.get(&expand_name) else {
-            return None;
-        };
+        let definition_id = self.globals.get(&expand_name)?;
         self.get_type((*definition_id).as_global(CURRENT_PACKAGE_ID))
     }
 
@@ -1207,7 +1199,7 @@ impl Database {
                         let mut block_bounds = Vec::new();
                         let mut block_free_vars = Vec::new();
                         let mut block_receiver = typ.clone();
-                        if let Some((free_variables, bounds, typ)) = self.unwrap_poly_type(&typ) {
+                        if let Some((free_variables, bounds, typ)) = self.unwrap_poly_type(typ) {
                             block_bounds = bounds.into();
                             block_free_vars = free_variables.into();
                             block_receiver = typ.clone();

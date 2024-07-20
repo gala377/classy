@@ -248,15 +248,9 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                 let new_mapping = subst
                     .mapping
                     .iter()
-                    .map(|(var, ty)| (var.clone(), ty.clone()))
-                    .filter(|(var, val)| {
-                        if var >= &max_var {
-                            return false;
-                        }
-                        if let Ty::SynthesizedConstant(_) = val {
-                            return false;
-                        }
-                        return true;
+                    .filter_map(|(var, ty)| {
+                        (!(ty.is_constant() || var >= &max_var))
+                            .then_some((var.clone(), ty.clone()))
                     })
                     .collect::<HashMap<_, _>>();
                 Answer {
