@@ -227,6 +227,7 @@ impl Database {
     /// all the declarations. It will lower all the declarations into clauses
     /// that they can be used by the solver.
     pub fn lower_to_clauses(&mut self) {
+        println!("Lowering to clauses");
         for (type_ref, type_impl) in self.type_impls.iter().enumerate() {
             let type_ref = TyRef(type_ref);
             let clause = self.lower_type_impl(type_ref, type_impl);
@@ -555,9 +556,7 @@ impl Database {
         variable_generator: &mut dyn VariableContext,
         origin: AnswerOrigin,
     ) -> Vec<MatchResult> {
-        println!("\n\nBEFORE NORMALIZATION: {clause:#?}\n");
         let (clause, unmap) = self.normalize_clause(clause, current_universe, variable_generator);
-        println!("\n\nAFTER NORMALIZATION: {clause:#?}\n");
         // extract the inner domain foal and the body of a clause
         let (raw_clause, body) = match clause {
             Clause::Implies(box Clause::Fact(fact), body) => (fact, body),

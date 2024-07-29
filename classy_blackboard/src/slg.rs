@@ -80,11 +80,12 @@ impl Substitution {
     }
 }
 
+#[derive(Debug)]
 struct Stack {
     entries: Vec<StackEntry>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct StackEntry {
     table_index: usize,
     active_strand_index: Option<usize>,
@@ -261,8 +262,7 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                     .mapping
                     .iter()
                     .filter_map(|(var, ty)| {
-                        (!(ty.is_constant() || var >= &max_var))
-                            .then_some((*var, ty.clone()))
+                        (!(ty.is_constant() || var >= &max_var)).then_some((*var, ty.clone()))
                     })
                     .collect::<HashMap<_, _>>();
                 Answer {
@@ -361,6 +361,7 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
             // get the current stack frame, this stack frame needs to be solved
             // in this iteration
             let mut stack_entry = self.stack.entries.last()?.clone();
+            println!("Stack entry {:?}", self.stack);
             // No strand is active for the given stack frame
             // we need to activate it to have something to solve
             if stack_entry.active_strand_index.is_none() {
@@ -448,7 +449,9 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
             // Remap the answer to the original goal variables
             let mut generic_mapping = HashMap::new();
             for (binder_index, ty) in &answer.subst.mapping {
-                if let Some(index) = uncanonilize_mapping.get(*binder_index) { generic_mapping.insert(*index, ty.clone()); }
+                if let Some(index) = uncanonilize_mapping.get(*binder_index) {
+                    generic_mapping.insert(*index, ty.clone());
+                }
             }
             // Create a new exclause for the table to prove
             // This is achieved by removing the subgoal we just proven from it
