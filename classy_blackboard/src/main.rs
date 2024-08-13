@@ -4,9 +4,13 @@ use classy_blackboard::{
     slg::{Answer, Forest, SlgSolver},
     ty::{Constraint, Ty},
 };
+use tracing::Level;
 
 pub fn main() {
-    tracing_subscriber::fmt().pretty().init();
+    tracing_subscriber::fmt()
+        .pretty()
+        .with_max_level(Level::DEBUG)
+        .init();
     let mut database = Database::new();
     // let foo_t = database.add_type_impl(TypeImpl {
     //     name: "Foo".to_string(),
@@ -64,48 +68,48 @@ pub fn main() {
     //     constraints: vec![],
     // });
 
-    // let _friends_generic = database.add_instance(Instance {
-    //     type_class: friends,
-    //     args: vec![
-    //         Ty::Generic {
-    //             scopes: 0,
-    //             index: 0,
-    //         },
-    //         Ty::Generic {
-    //             scopes: 0,
-    //             index: 2,
-    //         },
-    //     ],
-    //     type_params: vec!["a".into(), "b".into(), "c".into()],
-    //     constraints: vec![
-    //         Constraint::Class(
-    //             friends,
-    //             vec![
-    //                 Ty::Generic {
-    //                     scopes: 0,
-    //                     index: 0,
-    //                 },
-    //                 Ty::Generic {
-    //                     scopes: 0,
-    //                     index: 1,
-    //                 },
-    //             ],
-    //         ),
-    //         Constraint::Class(
-    //             friends,
-    //             vec![
-    //                 Ty::Generic {
-    //                     scopes: 0,
-    //                     index: 1,
-    //                 },
-    //                 Ty::Generic {
-    //                     scopes: 0,
-    //                     index: 2,
-    //                 },
-    //             ],
-    //         ),
-    //     ],
-    // });
+    let _friends_generic = database.add_instance(Instance {
+        type_class: friends,
+        args: vec![
+            Ty::Generic {
+                scopes: 0,
+                index: 0,
+            },
+            Ty::Generic {
+                scopes: 0,
+                index: 2,
+            },
+        ],
+        type_params: vec!["a".into(), "b".into(), "c".into()],
+        constraints: vec![
+            Constraint::Class(
+                friends,
+                vec![
+                    Ty::Generic {
+                        scopes: 0,
+                        index: 0,
+                    },
+                    Ty::Generic {
+                        scopes: 0,
+                        index: 1,
+                    },
+                ],
+            ),
+            Constraint::Class(
+                friends,
+                vec![
+                    Ty::Generic {
+                        scopes: 0,
+                        index: 1,
+                    },
+                    Ty::Generic {
+                        scopes: 0,
+                        index: 2,
+                    },
+                ],
+            ),
+        ],
+    });
     let _alice_bob_instance = database.add_instance(Instance {
         type_class: friends,
         args: vec![Ty::Ref(alise), Ty::Ref(bob)],
@@ -280,7 +284,7 @@ pub fn main() {
     // );
     let query = Goal::Domain(DomainGoal::InstanceExistsAndWellFormed {
         head: friends,
-        args: vec![Ty::Ref(alise), Ty::Ref(bob)],
+        args: vec![Ty::Ref(alise), Ty::Ref(charlie)],
     });
 
     let mut forest = Forest::new();

@@ -1,4 +1,7 @@
-use std::collections::{HashMap, VecDeque};
+use std::{
+    collections::{HashMap, VecDeque},
+    usize,
+};
 
 use tracing::{info, warn};
 
@@ -21,6 +24,9 @@ pub struct Forest {
     /// So given a goal we this holds:
     /// tables[table_goals[goal]].goal == goal
     table_goals: HashMap<Goal, usize>,
+    /// Number of times a goal has been pushed on top of the stack.
+    /// Important for recursive goals to not recurse forever.
+    clock: TimeStamp,
 }
 
 impl Default for Forest {
@@ -34,6 +40,7 @@ impl Forest {
         Self {
             tables: vec![],
             table_goals: HashMap::new(),
+            clock: 0,
         }
     }
 
@@ -43,6 +50,11 @@ impl Forest {
         self.tables.push(table);
         self.table_goals.insert(goal, index);
         index
+    }
+
+    pub fn increment_clock(&mut self) -> TimeStamp {
+        self.clock += 1;
+        self.clock
     }
 }
 
@@ -85,11 +97,23 @@ struct Stack {
     entries: Vec<StackEntry>,
 }
 
+impl Stack {
+    pub fn is_active(&self, table_index: usize) -> Option<usize> {
+        self.entries
+            .iter()
+            .position(|entry| entry.table_index == table_index)
+    }
+}
+
 #[derive(Clone, Debug)]
 struct StackEntry {
     table_index: usize,
     active_strand_index: Option<usize>,
+    clock: TimeStamp,
+    mimimum: TimeStamp,
 }
+
+type TimeStamp = usize;
 
 struct Strand {
     /// Substitution applied to a tables goal
@@ -100,9 +124,10 @@ struct Strand {
     origin: AnswerOrigin,
     labeling: Vec<UniverseIndex>,
     evidence: Vec<Answer>,
+    last_pursued_time: TimeStamp,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct SelectedSubgoal {
     subgoal_index: usize,
     /// Next answer to request
@@ -138,6 +163,10 @@ impl Table {
             strands: VecDeque::new(),
             answers: vec![],
         }
+    }
+
+    pub fn take_strands(&mut self) -> Vec<Strand> {
+        std::mem::take(&mut self.strands).into()
     }
 }
 
@@ -284,7 +313,7 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
         let table_index = self.get_or_create_table_for_goal(goal);
         match self.ensure_answer_from_table(answer, table_index) {
             AnswerRes::Answer(subst) => Some(subst),
-            AnswerRes::SolveUsingStackTop => self.solve_using_stack_top(),
+            AnswerRes::Pending { table_index } => self.solve_using_stack_top(table_index),
             AnswerRes::NoMoreAnswers => None,
         }
     }
@@ -300,12 +329,9 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                 if self.forest.tables[table_idx].strands.is_empty() {
                     return AnswerRes::NoMoreAnswers;
                 }
-                // new answer has to be computed
-                self.stack.entries.push(StackEntry {
+                AnswerRes::Pending {
                     table_index: table_idx,
-                    active_strand_index: None,
-                });
-                AnswerRes::SolveUsingStackTop
+                }
             }
             Some(substitutions) => AnswerRes::Answer(substitutions.clone()),
         }
@@ -351,80 +377,160 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                 origin,
                 labeling: goal.labeling_function.clone(),
                 evidence: vec![],
+                last_pursued_time: 0,
             });
         }
         table_index
     }
 
-    fn solve_using_stack_top(&mut self) -> Option<Answer> {
+    fn solve_using_stack_top(&mut self, first_table: usize) -> Option<Answer> {
+        // check for cached answers
+        if let Some(answer) = self.forest.tables[first_table]
+            .answers
+            .get(self.next_answer)
+        {
+            return Some(answer.clone());
+        }
+        self.stack.entries.push(StackEntry {
+            table_index: first_table,
+            active_strand_index: None,
+            clock: self.forest.increment_clock(),
+            mimimum: usize::MAX,
+        });
         loop {
             // get the current stack frame, this stack frame needs to be solved
             // in this iteration
             let mut stack_entry = self.stack.entries.last()?.clone();
-            println!("Stack entry {:?}", self.stack);
+            let clock = stack_entry.clock;
+            info!("Stack entry {:?}", self.stack);
             // No strand is active for the given stack frame
             // we need to activate it to have something to solve
-            if stack_entry.active_strand_index.is_none() {
-                // activate first strands
-                let Some(strand_index) = self.select_strand(stack_entry.table_index) else {
-                    // Strand could not be selected so we just pop, no more answers can be computed
+            let active_strand_index = stack_entry
+                .active_strand_index
+                .clone()
+                .take()
+                .or_else(|| self.select_strand(stack_entry.table_index, clock));
+            match active_strand_index {
+                // Strand could not be selected so we just pop, no more answers can be computed
+                None if self.forest.tables[stack_entry.table_index]
+                    .strands
+                    .is_empty() =>
+                {
+                    info!(
+                        "Path 1. No more strands for table {}. Pop",
+                        stack_entry.table_index
+                    );
                     self.stack.entries.pop();
                     continue;
-                };
+                }
+                // We did not select a strand but there are still some to select.
+                // that means this is a cycle for all strands in this table
+                None => {
+                    info!(
+                        "Path 2. No strand selected for table {}. Cycle detected",
+                        stack_entry.table_index
+                    );
+                    let cyclic_mimimum = stack_entry.mimimum;
+                    if cyclic_mimimum >= clock {
+                        info!("Positive cycle detected. Clearing strands and pop");
+                        let table = stack_entry.table_index;
+                        let strands = self.forest.tables[table].take_strands();
+                        self.clear_strands_after_cycle(strands);
+                        self.stack.entries.pop();
+                        continue;
+                    } else {
+                        info!("Don't know what is this one but chaning minimums and pop");
+                        self.stack.entries.pop();
+                        if let Some(entry) = self.stack.entries.last_mut() {
+                            entry.mimimum = std::cmp::min(entry.mimimum, cyclic_mimimum);
+                            entry.active_strand_index = None;
+                        };
+                        continue;
+                    }
+                }
                 // Save the active strand index in the stack entry
                 // and continue the loop
-                self.stack.entries.last_mut().unwrap().active_strand_index = Some(strand_index);
-                stack_entry.active_strand_index = Some(strand_index);
+                Some(index) => {
+                    info!(
+                        "Path 3. Selected strand {} for table {}",
+                        index, stack_entry.table_index
+                    );
+                    self.stack.entries.last_mut().unwrap().active_strand_index = Some(index);
+                    stack_entry.active_strand_index = Some(index);
+                    self.forest.tables[stack_entry.table_index].strands[index].last_pursued_time =
+                        clock;
+                }
             }
             // Now we know that for sure some strand is active so we can take it
             let active_strand_index = stack_entry.active_strand_index.unwrap();
-            let no_subgoal_selected = self.forest.tables[stack_entry.table_index].strands
-                [active_strand_index]
-                .selected_subgoal
-                .is_none();
-            // We check if the active strand has a subgoal selected if not
-            // we need to select one to solve in this iteration
-            if no_subgoal_selected {
-                match self.select_subgoal(&stack_entry, active_strand_index) {
-                    // We selected the subgoal that already has an answer computed
-                    // (it has been cashed by previous iterations)
-                    SubgoalSelection::Answer(subst) => {
-                        // we got an answer pop the stack
-                        self.stack.entries.pop();
-                        if self.stack.entries.is_empty() {
-                            // the stack is empty so we are done with the whole query
-                            return Some(subst);
-                        }
-                        // in the next iteration we will ask this table again
-                        // and this will be the next answer it will get
-                        continue;
+            // If the subgoal is selected this will just return the subgoal.
+            // Otherwise it will select new subgoal to prove.
+            let selected_subgoal = match self.select_subgoal(&stack_entry, active_strand_index) {
+                // We selected the subgoal that already has an answer computed
+                // (it has been cashed by previous iterations)
+                SubgoalSelection::Answer(subst) => {
+                    info!("Path 4. Got answer {:?}. Pop", subst);
+                    // we got an answer pop the stack
+                    self.stack.entries.pop();
+                    if self.stack.entries.is_empty() {
+                        // the stack is empty so we are done with the whole query
+                        return Some(subst);
                     }
-                    SubgoalSelection::NoMoreSubgoals => {
-                        unreachable!("This should not be returned by select_subgoal")
-                    }
-                    // subgoal has been selected, we can continue with the loop
-                    SubgoalSelection::Subgoal => {}
-                };
-            }
+                    // in the next iteration we will ask this table again
+                    // and this will be the next answer it will get
+                    continue;
+                }
+                SubgoalSelection::NoMoreSubgoals => {
+                    unreachable!("This should not be returned by select_subgoal")
+                }
+                // subgoal has been selected, we can continue with the loop
+                SubgoalSelection::Subgoal => self.forest.tables[stack_entry.table_index].strands
+                    [active_strand_index]
+                    .selected_subgoal
+                    .clone()
+                    .unwrap(),
+            };
+            info!("Path 5. Selected subgoal {:?}", selected_subgoal);
             // We are now sure there exists a subgoal to solve
-            let selected_subgoal = self.forest.tables[stack_entry.table_index].strands
-                [active_strand_index]
-                .selected_subgoal
-                .clone()
-                .unwrap();
             // Get the answer to the goal. The answer are substitutions. For example:
             // 1 -> Int, meaning that replacing var 1 for Int is the answer.
-            let answer = match self.ensure_answer_from_table(
+            match self.ensure_answer_from_table(
                 selected_subgoal.next_answer,
                 selected_subgoal.table_index,
             ) {
                 // We just got an answer to this subgoal, and the answer is this mapping
-                AnswerRes::Answer(answer) => answer,
+                AnswerRes::Answer(answer) => self.on_answer(
+                    stack_entry.table_index,
+                    active_strand_index,
+                    answer,
+                    selected_subgoal,
+                ),
                 // Skip to the next iteration, new table has been pushed to the stack
-                AnswerRes::SolveUsingStackTop => continue,
+                AnswerRes::Pending {
+                    table_index: subgoal_table,
+                } => {
+                    info!("Path 7. Pending for {}", subgoal_table);
+                    if let Some(cyclic_depth) = self.stack.is_active(subgoal_table) {
+                        info!("Path 8. Positive cycle detected");
+                        let minimum = self.stack.entries[cyclic_depth].clock;
+                        self.on_positive_cycle(minimum);
+                        continue;
+                    }
+                    info!("Path 9. Pushing table {}", subgoal_table);
+                    self.stack.entries.push(StackEntry {
+                        table_index: subgoal_table,
+                        active_strand_index: None,
+                        clock: self.forest.increment_clock(),
+                        mimimum: usize::MAX,
+                    });
+                }
                 AnswerRes::NoMoreAnswers => {
                     // no more answers can be derived from this table
                     // we need to pop the strand from the table and select the next one
+                    info!(
+                        "Path 10. No more answers for table {}",
+                        stack_entry.table_index
+                    );
                     self.forest.tables[stack_entry.table_index]
                         .strands
                         .remove(active_strand_index)
@@ -432,74 +538,88 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
                     // we just remove the active strand so the next iteration of the loop
                     // will select the next one and return if there are no more strands
                     self.stack.entries.last_mut().unwrap().active_strand_index = None;
-                    continue;
                 }
             };
-            // This maps variables from the subgoal to variables in the original goal
-            let uncanonilize_mapping = selected_subgoal.uncanonilize_mapping.clone();
-            // We got an answer from the subgoal, but there might be more. So we
-            // need to set the subgoal to gives is the next answer when we query it the
-            // next time.
-            self.forest.tables[stack_entry.table_index].strands[active_strand_index]
-                .selected_subgoal
-                .replace(SelectedSubgoal {
-                    next_answer: selected_subgoal.next_answer + 1,
-                    ..selected_subgoal
-                });
-            // Remap the answer to the original goal variables
-            let mut generic_mapping = HashMap::new();
-            for (binder_index, ty) in &answer.subst.mapping {
-                if let Some(index) = uncanonilize_mapping.get(*binder_index) {
-                    generic_mapping.insert(*index, ty.clone());
-                }
-            }
-            // Create a new exclause for the table to prove
-            // This is achieved by removing the subgoal we just proven from it
-            // And applying the substitution we got to the head and rest of the subgoals
-            let new_ex_clause = prepare_exclause_from_an_answer(
-                &self.forest.tables[stack_entry.table_index].strands[active_strand_index].exclause,
-                &generic_mapping,
-                selected_subgoal.subgoal_index,
-            );
-            // Merge substitutions we already got within this strand with the new
-            // substitutions we got from the subgoal.
-            let new_subst = merge_subtitutions_with_generics_substitution(
-                &self.forest.tables[stack_entry.table_index].strands[active_strand_index].subst,
-                &generic_mapping,
-            );
-            // Create a new strand that has new exclause to prove as well
-            // as the new merged substitutions.
-            let new_strand = Strand {
-                subst: new_subst,
-                exclause: new_ex_clause,
-                selected_subgoal: None,
-                origin: self.forest.tables[stack_entry.table_index].strands[active_strand_index]
-                    .origin
-                    .clone(),
-                labeling: self.forest.tables[stack_entry.table_index].strands[active_strand_index]
-                    .labeling
-                    .clone(),
-                evidence: {
-                    let mut evidence = self.forest.tables[stack_entry.table_index].strands
-                        [active_strand_index]
-                        .evidence
-                        .clone();
-                    evidence.push(answer.clone());
-                    evidence
-                },
-            };
-            self.forest.tables[stack_entry.table_index]
-                .strands
-                .push_back(new_strand);
-            let new_strand_index = self.forest.tables[stack_entry.table_index].strands.len() - 1;
-            self.stack.entries.pop();
-            // To prove the previous strand we need to prove the new one
-            // so we push it on top fo the stack to solve
-            self.stack.entries.push(StackEntry {
-                table_index: stack_entry.table_index,
-                active_strand_index: Some(new_strand_index),
-            });
         }
+    }
+
+    fn on_answer(
+        &mut self,
+        table_index: usize,
+        active_strand_index: usize,
+        answer: Answer,
+        selected_subgoal: SelectedSubgoal,
+    ) {
+        info!(
+            "Path 6. Got answer {:?} for table {} and strand {}",
+            answer, table_index, active_strand_index
+        );
+        // This maps variables from the subgoal to variables in the original goal
+        let uncanonilize_mapping = selected_subgoal.uncanonilize_mapping.clone();
+        // We got an answer from the subgoal, but there might be more. So we
+        // need to set the subgoal to gives is the next answer when we query it the
+        // next time.
+        self.forest.tables[table_index].strands[active_strand_index]
+            .selected_subgoal
+            .replace(SelectedSubgoal {
+                next_answer: selected_subgoal.next_answer + 1,
+                ..selected_subgoal
+            });
+        // Remap the answer to the original goal variables
+        let mut generic_mapping = HashMap::new();
+        for (binder_index, ty) in &answer.subst.mapping {
+            if let Some(index) = uncanonilize_mapping.get(*binder_index) {
+                generic_mapping.insert(*index, ty.clone());
+            }
+        }
+        // Create a new exclause for the table to prove
+        // This is achieved by removing the subgoal we just proven from it
+        // And applying the substitution we got to the head and rest of the subgoals
+        let new_ex_clause = prepare_exclause_from_an_answer(
+            &self.forest.tables[table_index].strands[active_strand_index].exclause,
+            &generic_mapping,
+            selected_subgoal.subgoal_index,
+        );
+        // Merge substitutions we already got within this strand with the new
+        // substitutions we got from the subgoal.
+        let new_subst = merge_subtitutions_with_generics_substitution(
+            &self.forest.tables[table_index].strands[active_strand_index].subst,
+            &generic_mapping,
+        );
+        // Create a new strand that has new exclause to prove as well
+        // as the new merged substitutions.
+        let new_strand = Strand {
+            subst: new_subst,
+            exclause: new_ex_clause,
+            selected_subgoal: None,
+            origin: self.forest.tables[table_index].strands[active_strand_index]
+                .origin
+                .clone(),
+            labeling: self.forest.tables[table_index].strands[active_strand_index]
+                .labeling
+                .clone(),
+            evidence: {
+                let mut evidence = self.forest.tables[table_index].strands[active_strand_index]
+                    .evidence
+                    .clone();
+                evidence.push(answer.clone());
+                evidence
+            },
+            last_pursued_time: 0,
+        };
+        self.forest.tables[table_index]
+            .strands
+            .push_back(new_strand);
+        let new_strand_index = self.forest.tables[table_index].strands.len() - 1;
+        self.stack.entries.pop();
+        // To prove the previous strand we need to prove the new one
+        // so we push it on top fo the stack to solve
+        self.stack.entries.push(StackEntry {
+            table_index: table_index,
+            active_strand_index: Some(new_strand_index),
+            clock: self.forest.increment_clock(),
+            mimimum: usize::MAX,
+        });
     }
 
     fn select_subgoal(
@@ -507,6 +627,11 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
         stack_entry: &StackEntry,
         strand_index: usize,
     ) -> SubgoalSelection {
+        if let Some(_) =
+            self.forest.tables[stack_entry.table_index].strands[strand_index].selected_subgoal
+        {
+            return SubgoalSelection::Subgoal;
+        }
         let next_subgoal = self.select_next_subgoal(stack_entry.table_index, strand_index);
         if let SubgoalSelection::NoMoreSubgoals = next_subgoal {
             info!("No more subgoals for table {}", stack_entry.table_index);
@@ -564,11 +689,14 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
         next_subgoal
     }
 
-    fn select_strand(&self, table: usize) -> Option<usize> {
-        if self.forest.tables[table].strands.is_empty() {
-            return None;
-        }
-        Some(0)
+    fn select_strand(&self, table: usize, current_timestamp: TimeStamp) -> Option<usize> {
+        self.forest.tables[table]
+            .strands
+            .iter()
+            .enumerate()
+            .find_map(|(index, strand)| {
+                (strand.last_pursued_time < current_timestamp).then_some(index)
+            })
     }
 
     #[allow(unreachable_code, unused_variables)]
@@ -597,11 +725,26 @@ impl<'db, 'forest> SlgSolver<'db, 'forest> {
             });
         SubgoalSelection::Subgoal
     }
+
+    fn on_positive_cycle(&mut self, minimum: TimeStamp) {
+        let current_minimum = self.stack.entries.last().unwrap().mimimum;
+        self.stack.entries.last_mut().unwrap().mimimum = std::cmp::min(current_minimum, minimum);
+        self.stack.entries.last_mut().unwrap().active_strand_index = None;
+    }
+
+    fn clear_strands_after_cycle(&mut self, strands: Vec<Strand>) {
+        for strand in strands {
+            let selected_subgoal = strand.selected_subgoal.unwrap();
+            let strand_table = selected_subgoal.table_index;
+            let strands = self.forest.tables[strand_table].take_strands();
+            self.clear_strands_after_cycle(strands);
+        }
+    }
 }
 
 enum AnswerRes {
     Answer(Answer),
-    SolveUsingStackTop,
+    Pending { table_index: usize },
     NoMoreAnswers,
 }
 
