@@ -55,6 +55,10 @@ pub struct Inferer<'sess, 'db> {
     prefex_scope: PrefexScope,
     function_return_type: Type,
 
+    // Can be a method def id if we are inferring a method
+    // TODO Both of those are useless now but when we create a solver from this inferer
+    // TODO both of them will be passes to the solver
+    function_def_id: Id<DefinitionId>,
     constraints_in_scope: Vec<GenericConstraint>,
     /* TODO:
     - Add constraints in scope, that takes into account function and
@@ -70,6 +74,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
         current_namespace: &[String],
         prefex_scope: PrefexScope,
         receiver: Option<Type>,
+        function_def_id: Id<DefinitionId>,
         function_args: &[(String, Type)],
         function_return_type: Type,
         constraints_in_scope: Vec<GenericConstraint>,
@@ -89,6 +94,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
             function_return_type,
             receiver,
             constraints_in_scope,
+            function_def_id,
         }
     }
 
@@ -181,6 +187,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
             &namespace,
             prefex_scope,
             receiver,
+            id,
             &args,
             ret_ty,
             constraints,
@@ -667,6 +674,7 @@ mod tests {
             &[],
             PrefexScope::with_empty_scope(),
             None,
+            Id::dummy(),
             &[],
             Type::Unit,
             vec![],
@@ -734,6 +742,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             PrefexScope::with_empty_scope(),
             None,
+            Id::dummy(),
             &[],
             Type::Unit,
             vec![],
