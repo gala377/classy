@@ -45,6 +45,10 @@ impl<T: Default> Id<T> {
             id: T::default(),
         }
     }
+
+    pub fn as_local(self) -> Option<LocalId<T>> {
+        Some(LocalId(self.id))
+    }
 }
 
 /// Id referencing package the item is in.
@@ -200,18 +204,25 @@ impl MethodBlockInfo {
 pub struct MethodInfo {
     pub name: String,
     pub ty: LocalId<TypeId>,
+    pub arg_names: Vec<String>,
 }
 
 impl MethodInfo {
     pub const DUMMY: Self = Self {
         name: String::new(),
         ty: DUMMY_TYPE_ID,
+        arg_names: Vec::new(),
     };
 }
 
 pub struct FileInfo {
     pub path: PathBuf,
     pub namespace: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionInfo {
+    pub arg_names: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -223,7 +234,7 @@ pub enum DefinitionKind {
     Class(ClassInfo),
     Instance(InstanceInfo),
     Type,
-    Function,
+    Function(FunctionInfo),
 }
 
 impl DefinitionKind {
@@ -532,7 +543,9 @@ impl Database {
             id,
             Definition {
                 name: definition.name.clone(),
-                kind: DefinitionKind::Function,
+                kind: DefinitionKind::Function(FunctionInfo {
+                    arg_names: definition.parameters.clone(),
+                }),
                 implicit_imports: Default::default(),
                 constraints: Vec::new(),
                 ty: DUMMY_TYPE_ID,
@@ -664,7 +677,7 @@ impl Database {
     }
 
     pub fn get_definition(&self, id: Id<DefinitionId>) -> Option<Definition> {
-        self.get_definition_map(id, |def| def.clone())
+        self.get_definition_map(id, Clone::clone)
     }
 
     pub fn get_definition_map<R>(
@@ -687,7 +700,7 @@ impl Database {
         }
     }
 
-    pub fn get_type(&self, id: Id<DefinitionId>) -> Option<&Type> {
+    pub fn get_definitions_type(&self, id: Id<DefinitionId>) -> Option<&Type> {
         match id {
             Id { package, id } if package == CURRENT_PACKAGE_ID => {
                 let id = LocalId::new(id);
@@ -717,7 +730,7 @@ impl Database {
                 expanded_name.push(name.to_string());
                 let expanded_name = expanded_name.join("::");
                 if let Some(definition_id) = package_info.globals.get(&expanded_name) {
-                    return self.get_type((*definition_id).as_global(package_id));
+                    return self.get_definitions_type((*definition_id).as_global(package_id));
                 }
                 return None;
             }
@@ -728,7 +741,7 @@ impl Database {
         let expand_name = expanded_name.join("::");
         println!("Expanded name {expand_name}");
         let definition_id = self.globals.get(&expand_name)?;
-        self.get_type((*definition_id).as_global(CURRENT_PACKAGE_ID))
+        self.get_definitions_type((*definition_id).as_global(CURRENT_PACKAGE_ID))
     }
 
     pub fn get_definition_id_by_unresolved_name(
@@ -1233,6 +1246,7 @@ impl Database {
                                     file,
                                     method_block_id,
                                     &meth.name,
+                                    &[],
                                     &meth.typ,
                                 ),
                             };
@@ -1263,6 +1277,7 @@ impl Database {
                                 file,
                                 id,
                                 name,
+                                &[],
                                 typ,
                             ),
                         });
@@ -1322,7 +1337,13 @@ impl Database {
             );
             let mut block_methods = Vec::new();
             for ast::Method {
-                item: ast::FunctionDefinition { name, typ, .. },
+                item:
+                    ast::FunctionDefinition {
+                        name,
+                        typ,
+                        parameters,
+                        ..
+                    },
                 ..
             } in methods
             {
@@ -1335,6 +1356,7 @@ impl Database {
                         file,
                         *id,
                         name,
+                        &parameters,
                         typ,
                     ),
                 });
@@ -1403,6 +1425,7 @@ impl Database {
                     ast::InstanceDefinitionItem::FunctionDefinition(ast::FunctionDefinition {
                         name,
                         typ,
+                        parameters,
                         ..
                     }) => {
                         println!("Lowering instance method {name:?}");
@@ -1415,6 +1438,7 @@ impl Database {
                                 file,
                                 *id,
                                 name,
+                                &parameters,
                                 typ,
                             ),
                         });
@@ -1477,6 +1501,7 @@ impl Database {
                                     file,
                                     method_blocks_id,
                                     &meth.name,
+                                    &meth.parameters,
                                     &meth.typ,
                                 ),
                             };
@@ -1524,6 +1549,7 @@ impl Database {
         file: LocalId<DefinitionId>,
         parent: LocalId<DefinitionId>,
         name: &str,
+        arg_names: &[String],
         typ: &ast::Typ,
     ) -> LocalId<DefinitionId> {
         let mut f_bounds = Vec::new();
@@ -1559,6 +1585,7 @@ impl Database {
             kind: DefinitionKind::Method(MethodInfo {
                 name: name.to_owned(),
                 ty,
+                arg_names: arg_names.to_vec(),
             }),
             constraints: f_constraints,
             ty,
@@ -1571,7 +1598,13 @@ impl Database {
 
     pub fn lower_functions(&mut self, session: &Session) {
         let function_definitions = self.function_definitions.clone();
-        for (id, ast::FunctionDefinition { typ, .. }) in function_definitions.iter() {
+        for (
+            id,
+            ast::FunctionDefinition {
+                typ, parameters, ..
+            },
+        ) in function_definitions.iter()
+        {
             let namespace = self.get_namespace(*id).to_vec();
             let file = self.definitions.get(id).unwrap().file;
             let mut prefex_scope = PrefexScope::with_empty_scope();
@@ -1601,7 +1634,9 @@ impl Database {
             let ty = self.create_type(session, f_typ);
             let instance = self.definitions.get_mut(id).unwrap();
             *instance = Definition {
-                kind: DefinitionKind::Function,
+                kind: DefinitionKind::Function(FunctionInfo {
+                    arg_names: parameters.clone(),
+                }),
                 constraints: f_constraints,
                 ty,
                 file,

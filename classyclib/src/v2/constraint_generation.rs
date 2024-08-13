@@ -1,11 +1,16 @@
 use std::collections::{HashMap, HashSet};
 
+use classy_blackboard::database::DefId;
 use classy_syntax::ast;
 
-use crate::{session::Session, typecheck::ast_to_type::PrefexScope, v2::knowledge::Database};
+use crate::{
+    session::{self, Session},
+    typecheck::ast_to_type::PrefexScope,
+    v2::knowledge::{Database, GenericConstraint, InstanceInfo, MethodBlockInfo, TypeId},
+};
 
 use super::{
-    knowledge::{DefinitionId, Id, PackageId},
+    knowledge::{DefinitionId, DefinitionKind, FunctionInfo, Id, MethodInfo, PackageId},
     name_scope::NameScope,
     ty::Type,
 };
@@ -49,6 +54,8 @@ pub struct Inferer<'sess, 'db> {
     receiver: Option<Type>,
     prefex_scope: PrefexScope,
     function_return_type: Type,
+
+    constraints_in_scope: Vec<GenericConstraint>,
     /* TODO:
     - Add constraints in scope, that takes into account function and
         outer block constraints (method blocks, instances)
@@ -65,6 +72,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
         receiver: Option<Type>,
         function_args: &[(String, Type)],
         function_return_type: Type,
+        constraints_in_scope: Vec<GenericConstraint>,
     ) -> Self {
         let mut scope = NameScope::new();
         for (name, ty) in function_args {
@@ -80,7 +88,103 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
             prefex_scope,
             function_return_type,
             receiver,
+            constraints_in_scope,
         }
+    }
+
+    pub fn for_function(
+        id: Id<DefinitionId>,
+        database: &'db mut Database,
+        session: &'sess Session,
+    ) -> Self {
+        fn gather(
+            database: &Database,
+            id: Id<DefinitionId>,
+            constraints: &mut Vec<GenericConstraint>,
+            prefex_scope: &mut PrefexScope,
+        ) -> Option<Id<TypeId>> {
+            let definition = database.get_definition(id).unwrap();
+            let parent = definition.parent;
+            if let Some(parent) = parent {
+                gather(
+                    database,
+                    parent.as_global(id.package),
+                    constraints,
+                    prefex_scope,
+                );
+            }
+            let mut def_receiver = None;
+            match definition.kind {
+                DefinitionKind::Function(_) | DefinitionKind::Method(_) => {
+                    let ty = database.get_definitions_type(id).unwrap();
+                    if let Type::Scheme { prefex, .. } = ty {
+                        prefex_scope.new_scope();
+                        prefex_scope.add_type_vars(&prefex);
+                    }
+                }
+                DefinitionKind::MethodBlock(MethodBlockInfo {
+                    free_vars,
+                    receiver,
+                    ..
+                }) => {
+                    def_receiver = Some(receiver);
+                    if !free_vars.is_empty() {
+                        prefex_scope.new_scope();
+                        prefex_scope.add_type_vars(&free_vars);
+                    }
+                }
+                DefinitionKind::Instance(InstanceInfo { free_vars, .. }) => {
+                    if !free_vars.is_empty() {
+                        prefex_scope.new_scope();
+                        prefex_scope.add_type_vars(&free_vars);
+                    }
+                }
+                kind => panic!("Unexpected definition kind: {kind:?}"),
+            }
+            constraints.extend_from_slice(&definition.constraints);
+            def_receiver
+        }
+
+        let def = database.get_definition(id).unwrap();
+        let namespace = database.get_namespace(id.as_local().unwrap()).to_vec();
+        let mut constraints = Vec::new();
+        let mut prefex_scope = PrefexScope::without_scope();
+        let receiver = gather(database, id, &mut constraints, &mut prefex_scope)
+            .map(|r| database.resolve_alias_to_type(r).unwrap());
+        let (args_ty, ret_ty) = match database.get_definitions_type(id).cloned() {
+            Some(Type::Function { args, ret }) => (args, *ret),
+            Some(Type::Scheme {
+                typ: box Type::Function { args, ret },
+                ..
+            }) => (args, *ret),
+            t => panic!("Expected function, got {:?}", t),
+        };
+        let arg_names = match def.kind {
+            DefinitionKind::Method(MethodInfo { arg_names, .. }) => arg_names.clone(),
+            DefinitionKind::Function(FunctionInfo { arg_names }) => arg_names.clone(),
+            _ => panic!("Expected function or method, got {:?}", def.kind),
+        };
+        assert_eq!(
+            args_ty.len(),
+            arg_names.len(),
+            "Maybe you passed declaration instead of a definition? Declarations don't have arg \
+             names."
+        );
+        let args = arg_names
+            .iter()
+            .zip(args_ty.iter())
+            .map(|(name, ty)| (name.clone(), ty.clone()))
+            .collect::<Vec<_>>();
+        Self::new(
+            session,
+            database,
+            &namespace,
+            prefex_scope,
+            receiver,
+            &args,
+            ret_ty,
+            constraints,
+        )
     }
 
     pub fn add_constraint(&mut self, constraint: Constraint) {
@@ -127,7 +231,9 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                             .database
                             .get_type_by_unresolved_name(&self.current_namespace, path, identifier)
                             .cloned()
-                            .unwrap_or_else(|| panic!("Name {path:?}::{identifier} not found in database")),
+                            .unwrap_or_else(|| {
+                                panic!("Name {path:?}::{identifier} not found in database")
+                            }),
                     }
                 }
                 ast::Name::Unresolved { path, identifier } => self
@@ -145,7 +251,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                         package,
                         id: definition,
                     };
-                    self.database.get_type(id).cloned().unwrap()
+                    self.database.get_definitions_type(id).cloned().unwrap()
                 }
                 ast::Name::Local(name) => self
                     .scope
@@ -455,7 +561,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                     package,
                     id: definition,
                 };
-                self.database.get_type(id).cloned().unwrap()
+                self.database.get_definitions_type(id).cloned().unwrap()
             }
             ast::Name::Local(_) => panic!("What are you trying to do exaclty?"),
         }
@@ -545,7 +651,7 @@ mod tests {
         for (name, id) in db.globals.iter() {
             println!("{name}: {id:?}");
             let def = db.get_global(name).unwrap();
-            let ty = db.get_type(def.as_global(PackageId(0)));
+            let ty = db.get_definitions_type(def.as_global(PackageId(0)));
             println!("type: {ty:?}");
         }
         (db, sess)
@@ -563,6 +669,7 @@ mod tests {
             None,
             &[],
             Type::Unit,
+            vec![],
         )
     }
 
@@ -629,6 +736,7 @@ mod tests {
             None,
             &[],
             Type::Unit,
+            vec![],
         );
         let res = inferer.infer_expr(&ast::Expr {
             id: 0,
@@ -642,7 +750,7 @@ mod tests {
             .unwrap()
             .pipe(|id| {
                 database
-                    .get_type(id.as_global(PackageId(0)))
+                    .get_definitions_type(id.as_global(PackageId(0)))
                     .cloned()
                     .unwrap()
             });

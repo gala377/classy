@@ -306,7 +306,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
             let resolved_ty = self.database.get_definition(*ty).unwrap();
             let type_ref = *self.type_to_type_id.get(ty).unwrap();
             let type_params = {
-                let t = self.database.get_type(*ty).unwrap();
+                let t = self.database.get_definitions_type(*ty).unwrap();
                 match t {
                     Type::Scheme { prefex, .. } => prefex.clone(),
                     _ => Vec::new(),
@@ -685,7 +685,7 @@ mod tests {
         for (name, id) in db.globals.iter() {
             println!("{name}: {id:?}");
             let def = db.get_global(name).unwrap();
-            let ty = db.get_type(def.as_global(PackageId(0)));
+            let ty = db.get_definitions_type(def.as_global(PackageId(0)));
             println!("type: {ty:?}");
         }
         for (id, ty) in primitive_types {
