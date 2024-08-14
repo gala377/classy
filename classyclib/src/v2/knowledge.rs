@@ -1563,7 +1563,7 @@ impl Database {
             prefex_scope.new_scope();
             prefex_scope.add_type_vars(&f_free_vars);
         }
-        let f_typ = self.ast_type_to_type_shallow(session, prefex_scope, namespace, &f_typ);
+        let mut f_typ = self.ast_type_to_type_shallow(session, prefex_scope, namespace, &f_typ);
         let f_constraints = f_bounds
             .iter()
             .map(|bound| {
@@ -1577,6 +1577,10 @@ impl Database {
             .collect::<Vec<_>>();
         if !f_free_vars.is_empty() {
             prefex_scope.pop_scope();
+            f_typ = Type::Scheme {
+                prefex: f_free_vars.clone(),
+                typ: Box::new(f_typ),
+            };
         }
         let ty = self.create_type(session, f_typ);
         let definition = Definition {

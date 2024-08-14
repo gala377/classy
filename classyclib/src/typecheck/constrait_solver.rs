@@ -390,6 +390,7 @@ impl<'ctx, 'solver_db> ConstraintSolver<'ctx, 'solver_db> {
                     Box::new(goal::Goal::Domain(goal::DomainGoal::FindMethod {
                         name: method.clone(),
                         on_type: receiver_t.clone(),
+                        of_type: todo!(),
                     })),
                 );
                 // TODO: If the type is scheme we should do forall? Or instance it with a fresh

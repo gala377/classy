@@ -22,6 +22,13 @@ pub enum Ty {
         scopes: usize,
         index: usize,
     },
+    /// Actual generic types that should be present in resulting substitutions.
+    /// For example can be used in a type of a method if the method is generic
+    /// and the type does not come from any quantifier. In this case there is no
+    /// need for scope.
+    ActualGeneric {
+        index: usize,
+    },
 }
 
 impl Ty {
@@ -77,6 +84,7 @@ impl Ty {
             Ty::Variable(idx) => labeling_function.check_variable(*idx).unwrap(),
             Ty::SynthesizedConstant(idx) => labeling_function.check_constant(*idx).unwrap(),
             Ty::Generic { .. } => panic!("Generic type in normalized type"),
+            Ty::ActualGeneric { .. } => UniverseIndex::ROOT,
         }
     }
 
@@ -94,6 +102,7 @@ impl Ty {
             Ty::Variable(idx) => *idx == variable,
             Ty::SynthesizedConstant(_) => false,
             Ty::Generic { .. } => false,
+            Ty::ActualGeneric { .. } => false,
         }
     }
 
@@ -117,6 +126,7 @@ impl Ty {
             Ty::Variable(idx) => vec![*idx],
             Ty::SynthesizedConstant(_) => vec![],
             Ty::Generic { .. } => vec![],
+            Ty::ActualGeneric { .. } => vec![],
         }
     }
 
@@ -140,6 +150,7 @@ impl Ty {
             Ty::Variable(_) => vec![],
             Ty::SynthesizedConstant(idx) => vec![*idx],
             Ty::Generic { .. } => vec![],
+            Ty::ActualGeneric { .. } => vec![],
         }
     }
 
@@ -173,6 +184,7 @@ impl Ty {
             }
             Ty::SynthesizedConstant(_) => self.clone(),
             Ty::Generic { .. } => self.clone(),
+            Ty::ActualGeneric { .. } => self.clone(),
         }
     }
 }

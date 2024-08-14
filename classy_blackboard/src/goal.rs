@@ -42,15 +42,29 @@ impl Goal {
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub enum DomainGoal {
     // Does given instance exist and is well formed
-    InstanceExistsAndWellFormed { head: ClassRef, args: Vec<Ty> },
+    InstanceExistsAndWellFormed {
+        head: ClassRef,
+        args: Vec<Ty>,
+    },
     // Is there methods block for given type
-    MethodBlockExists { on_type: Ty },
+    MethodBlockExists {
+        on_type: Ty,
+    },
     // Type well formed
-    TypeWellFormed { ty: Ty },
+    TypeWellFormed {
+        ty: Ty,
+    },
     // Class well formed
-    ClassWellFormed { head: ClassRef, args: Vec<Ty> },
+    ClassWellFormed {
+        head: ClassRef,
+        args: Vec<Ty>,
+    },
     // Find method blocks and instances that contain given method
-    FindMethod { name: String, on_type: Ty },
+    FindMethod {
+        name: String,
+        on_type: Ty,
+        of_type: Ty,
+    },
 }
 
 impl DomainGoal {

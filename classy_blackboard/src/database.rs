@@ -8,6 +8,7 @@ use crate::{
     goal::{DomainGoal, ExClause, Goal, LabelingFunction},
     normalizer::ClauseNormalizer,
     slg::Substitution,
+    substitutor::VariableSubstitutor,
     ty::{ClassRef, Constraint, InstanceRef, MethodBlockRef, Ty, TyRef},
 };
 
@@ -563,18 +564,24 @@ impl Database {
             Clause::Fact(fact) => (fact, Vec::new()),
             _ => panic!("Clause is not normalized: {clause:?}"),
         };
-        self.unify(goal, &raw_clause, variable_generator, origin.clone())
-            .into_iter()
-            .map(|substitution| MatchResult {
-                exclause: ExClause {
-                    head: Goal::Domain(raw_clause.clone()),
-                    subgoals: body.clone(),
-                    unmap: unmap.clone().unwrap_or_default(),
-                },
-                substitution,
-                origin: origin.clone(),
-            })
-            .collect()
+        self.unify(
+            goal,
+            &raw_clause,
+            variable_generator,
+            unmap.as_ref().map(|v| v.as_slice()),
+            origin.clone(),
+        )
+        .into_iter()
+        .map(|substitution| MatchResult {
+            exclause: ExClause {
+                head: Goal::Domain(raw_clause.clone()),
+                subgoals: body.clone(),
+                unmap: unmap.clone().unwrap_or_default(),
+            },
+            substitution,
+            origin: origin.clone(),
+        })
+        .collect()
     }
 
     /// Remove any universal quantifiers and replace their respective variable
@@ -599,6 +606,8 @@ impl Database {
         goal: &DomainGoal,
         clause: &DomainGoal,
         variable_generator: &mut dyn VariableContext,
+        // important for FindMethod goal
+        inital_clause_substitutions: Option<&[Ty]>,
         origin: AnswerOrigin,
     ) -> Vec<Substitution> {
         let mut stack = vec![(goal.clone(), clause.clone())];
@@ -700,7 +709,11 @@ impl Database {
                     subst_stack!();
                 }
                 (
-                    FindMethod { name, on_type },
+                    FindMethod {
+                        name,
+                        on_type,
+                        of_type,
+                    },
                     MethodBlockExists {
                         on_type: target_type,
                     },
@@ -710,16 +723,46 @@ impl Database {
                             .get_method_block(reference)
                             .methods
                             .iter()
-                            .any(|def| def.name == *name),
-                        _ => false,
+                            .find(|def| def.name == *name),
+                        _ => None,
                     };
-                    if !method_found {
+                    let Some(method_found) = method_found else {
                         return Vec::new();
-                    }
+                    };
+                    let method_type = match inital_clause_substitutions {
+                        Some(clause_substitutions) => SubstituteMethodType {
+                            substitutions: clause_substitutions,
+                            shift_by: if method_found.type_params.is_empty() {
+                                0
+                            } else {
+                                1
+                            },
+                        }
+                        .fold_ty(method_found.ty.clone()),
+                        None => method_found.ty.clone(),
+                    };
                     if self
                         .unify_ty(
                             &on_type,
                             &target_type,
+                            &mut substitution,
+                            variable_generator,
+                            origin.clone(),
+                        )
+                        .is_none()
+                    {
+                        return Vec::new();
+                    }
+                    subst_stack!();
+                    // propagate substitutions to the method type
+                    let method_type = VariableSubstitutor {
+                        substitutions: &substitution.mapping,
+                    }
+                    .fold_ty(method_type);
+                    if self
+                        .unify_ty(
+                            &of_type,
+                            &method_type,
                             &mut substitution,
                             variable_generator,
                             origin.clone(),
@@ -778,6 +821,7 @@ impl Database {
                 }
                 (Variable(idx1), Variable(idx2)) if idx1 == idx2 => {}
                 (SynthesizedConstant(idx1), SynthesizedConstant(idx2)) if idx1 == idx2 => {}
+                (ActualGeneric { index }, ActualGeneric { index: index2 }) if index == index2 => {}
                 (Generic { .. }, _) | (_, Generic { .. }) => {
                     panic!("Unexpected generic type in normalized type")
                 }
@@ -854,6 +898,23 @@ impl Database {
     pub fn dump_clauses(&self) {
         for (i, clause) in self.clauses.iter().enumerate() {
             println!("\n{i} {:#?}", clause.clause);
+        }
+    }
+}
+
+struct SubstituteMethodType<'s> {
+    substitutions: &'s [Ty],
+    shift_by: usize,
+}
+
+impl Folder for SubstituteMethodType<'_> {
+    fn fold_ty_generic(&mut self, scopes: usize, index: usize) -> Ty {
+        println!("Substituting generic type: {scopes} {index}");
+        if scopes == self.shift_by {
+            self.substitutions[index].clone()
+        } else {
+            assert_eq!(scopes, 0);
+            Ty::Generic { scopes, index }
         }
     }
 }

@@ -7,7 +7,7 @@ pub mod slg;
 pub mod ty;
 
 pub mod chain_map;
-mod fold;
+pub mod fold;
 mod normalizer;
 mod substitutor;
 

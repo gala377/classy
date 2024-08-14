@@ -4,6 +4,7 @@ use classy_blackboard::{
     self as blackboard,
     clauses::Clause,
     database::{AnswerOrigin, GenericRef},
+    fold::Folder,
     ty::Constraint,
     DomainGoal,
 };
@@ -158,9 +159,10 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
                 let info = definition.kind.as_method().cloned().unwrap();
                 let method_type = info.ty.as_global(package);
                 let method_type = self.database.resolve_alias_to_type(method_type).unwrap();
+                println!("METHOD TYPE IS {:#?}", method_type);
                 let (free_vars, method_type) = match method_type {
                     Type::Scheme { prefex, typ } => (prefex, *typ),
-                    t => (Vec::new(), t),
+                    t => (vec![], t),
                 };
                 let method_type = self.to_blackboard_type(&method_type);
                 blackboard::database::Definition {
@@ -431,10 +433,19 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
 
     fn create_blackboard_query(&self, method: &str, receiver: &Type) -> blackboard::Goal {
         let receiver_as_blackboard_type = self.to_blackboard_type(receiver);
-        let mut query = blackboard::Goal::Domain(blackboard::DomainGoal::FindMethod {
-            name: method.to_owned(),
-            on_type: receiver_as_blackboard_type,
-        });
+        let mut query = blackboard::Goal::Exists(
+            1,
+            Box::new(blackboard::Goal::Domain(
+                blackboard::DomainGoal::FindMethod {
+                    name: method.to_owned(),
+                    on_type: ShiftDebruijn.fold_ty(receiver_as_blackboard_type),
+                    of_type: blackboard::Ty::Generic {
+                        scopes: 0,
+                        index: 0,
+                    },
+                },
+            )),
+        );
         let constraints = self
             .constarints_in_scope
             .iter()
@@ -526,6 +537,17 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
                         .unwrap(),
                 )
             }
+        }
+    }
+}
+
+struct ShiftDebruijn;
+
+impl blackboard::fold::Folder for ShiftDebruijn {
+    fn fold_ty_generic(&mut self, scopes: usize, index: usize) -> classy_blackboard::Ty {
+        classy_blackboard::Ty::Generic {
+            scopes: scopes + 1,
+            index,
         }
     }
 }
@@ -1157,6 +1179,44 @@ mod tests {
             classes,
         );
         let receiver = get_type(&database, "Foo");
+        match resolver.resolve_method(&receiver, "foo") {
+            Ok(ResolvedMethod::Static { .. }) => {}
+            err => panic!("Error {err:?}"),
+        }
+    }
+
+    const SOURCE_5: &str = r#"
+        type Foo(a) {}
+
+        methods for Foo(a) {
+            foo: () -> (a, b)
+            foo () {}
+        }
+    "#;
+
+    #[test]
+    fn resolve_one_substitution_on_method() {
+        let (database, _) = setup_database(SOURCE_5);
+        let types = get_types(&database);
+        let method_blocks = get_method_blocks(&database);
+        let classes = get_classes(&database);
+        let instances = get_instances(&database);
+        let scope = PrefexScope::without_scope();
+        let constraints = vec![];
+
+        let mut resolver = MethodResolver::within_function(
+            &database,
+            &scope,
+            constraints,
+            instances,
+            method_blocks,
+            types,
+            classes,
+        );
+        let receiver = Type::App {
+            typ: Box::new(get_type(&database, "Foo")),
+            args: vec![Type::Int],
+        };
         match resolver.resolve_method(&receiver, "foo") {
             Ok(ResolvedMethod::Static { .. }) => {}
             err => panic!("Error {err:?}"),

@@ -101,8 +101,12 @@ pub trait Folder: Sized {
         walk_ty_generic(self, scopes, index)
     }
 
-    fn fold_domain_find_method(&mut self, name: String, on_type: Ty) -> DomainGoal {
-        walk_domain_find_method(self, name, on_type)
+    fn fold_domain_find_method(&mut self, name: String, on_type: Ty, of_type: Ty) -> DomainGoal {
+        walk_domain_find_method(self, name, on_type, of_type)
+    }
+
+    fn fold_actual_generic(&mut self, index: usize) -> Ty {
+        Ty::ActualGeneric { index }
     }
 }
 
@@ -169,7 +173,11 @@ pub fn walk_domain_goal(folder: &mut impl Folder, goal: DomainGoal) -> DomainGoa
         DomainGoal::ClassWellFormed { head, args } => {
             folder.fold_domain_class_well_formed(head, args)
         }
-        DomainGoal::FindMethod { name, on_type } => folder.fold_domain_find_method(name, on_type),
+        DomainGoal::FindMethod {
+            name,
+            on_type,
+            of_type,
+        } => folder.fold_domain_find_method(name, on_type, of_type),
     }
 }
 
@@ -217,6 +225,7 @@ pub fn walk_ty(folder: &mut impl Folder, ty: Ty) -> Ty {
         Ty::Variable(idx) => folder.fold_ty_variable(idx),
         Ty::SynthesizedConstant(idx) => folder.fold_ty_synthesized_constant(idx),
         Ty::Generic { scopes, index } => folder.fold_ty_generic(scopes, index),
+        Ty::ActualGeneric { index } => folder.fold_actual_generic(index),
     }
 }
 
@@ -258,9 +267,15 @@ pub fn walk_ty_generic(_folder: &mut impl Folder, scopes: usize, index: usize) -
     Ty::Generic { scopes, index }
 }
 
-pub fn walk_domain_find_method(folder: &mut impl Folder, name: String, on_type: Ty) -> DomainGoal {
+pub fn walk_domain_find_method(
+    folder: &mut impl Folder,
+    name: String,
+    on_type: Ty,
+    of_type: Ty,
+) -> DomainGoal {
     DomainGoal::FindMethod {
         name,
         on_type: folder.fold_ty(on_type),
+        of_type: folder.fold_ty(of_type),
     }
 }
