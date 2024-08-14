@@ -544,7 +544,7 @@ impl<'sess> Inference<'sess> {
                 let mut typ = {
                     println!("Checking name {name}");
                     let scope = self.scope.borrow();
-                    
+
                     scope.type_of(name).unwrap_or_else(|| {
                         println!("Expression checked:\n{expr:?}");
                         panic!("Unknown variable {name}")

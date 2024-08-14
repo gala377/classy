@@ -33,7 +33,7 @@ pub fn run_after_parsing_passes(ast: ast::SourceFile, session: &Session) -> ast:
     let ast = promote_local_types::PromoteAnonTypes::new().run(ast, session);
     let ast = implicit_forall::ImplicitForall::new().run(ast, session);
     let ast = assign_ast_ids::AssignAstIds::new().run(ast, session);
-    
+
     expand_namespace::ExpandNamespace::new().run(ast, session)
 }
 
@@ -52,7 +52,7 @@ pub fn run_befor_type_context_passes(ast: ast::SourceFile, session: &Session) ->
     let ast = promote_local_types::PromoteAnonTypes::new().run(ast, session);
     let ast = implicit_forall::ImplicitForall::new().run(ast, session);
     let ast = move_const_init::MoveConstInit::new().run(ast, session);
-    
+
     assign_ast_ids::AssignAstIds::new().run(ast, session)
 }
 

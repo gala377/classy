@@ -68,7 +68,7 @@ impl ast::fold::Folder for MoveConstInit {
             id,
             kind: ast::ExprKind::Sequence(inits),
         };
-        
+
         ast::FunctionDefinition {
             body: new_body,
             ..def

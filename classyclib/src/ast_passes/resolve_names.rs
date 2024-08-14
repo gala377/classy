@@ -196,7 +196,7 @@ impl<'db> Folder for NameResolver<'db> {
         for def in definitions.iter() {
             self.variable_scope.add(def.name.clone(), ());
         }
-        
+
         ast::fold::fold_let_rec(self, definitions)
     }
 
@@ -262,7 +262,9 @@ fn resolve_name(
         } else {
             format!("{}::{}", current_namespace_prefix, identifier)
         };
-        let definition = database.get_global(&full_name).unwrap_or_else(|| panic!("Could not find global definition with name {full_name}"));
+        let definition = database
+            .get_global(&full_name)
+            .unwrap_or_else(|| panic!("Could not find global definition with name {full_name}"));
         return ast::Name::Global {
             package: CURRENT_PACKAGE_ID.0,
             definition: definition.0 .0,

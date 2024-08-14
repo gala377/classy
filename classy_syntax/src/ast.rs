@@ -412,14 +412,8 @@ impl Expr {
                 res.push('"');
                 res
             }
-            ExprKind::FloatConst(f) => {
-                
-                f.to_string()
-            }
-            ExprKind::BoolConst(b) => {
-                
-                b.to_string()
-            }
+            ExprKind::FloatConst(f) => f.to_string(),
+            ExprKind::BoolConst(b) => b.to_string(),
             ExprKind::Name(n) => n.pretty(),
             ExprKind::FunctionCall { func, args, kwargs } => {
                 let mut res = func.pretty();
