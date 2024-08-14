@@ -3,13 +3,12 @@ use std::collections::{HashMap, VecDeque};
 use crate::{
     session::Session,
     typecheck::{ast_to_type::PrefexScope, types::DeBruijn},
-    v2::constraint_generation::Constraint,
-};
-
-use super::{
-    knowledge::{Database, Id, TypeId},
-    method_resolver::{MethodResolver, ResolvedMethod},
-    ty::{Type, TypeFolder},
+    v2::{
+        constraint_generation::Constraint,
+        knowledge::{Database, DefinitionId, GenericConstraint, Id, TypeId},
+        method_resolver::{MethodResolutionError, MethodResolver, ResolvedMethod},
+        ty::{Type, TypeFolder},
+    },
 };
 
 pub(super) struct FreshTypeReplacer {
@@ -35,6 +34,14 @@ pub struct ConstraintSolver<'db, 'sess> {
     prefex_scope: PrefexScope,
 
     current_namespace: Vec<String>,
+
+    constraints_in_scope: Vec<GenericConstraint>,
+    visible_instances: Vec<Id<DefinitionId>>,
+    visible_method_blocks: Vec<Id<DefinitionId>>,
+    // probably all types of the compilation need to be there
+    // as a method can return a type that is not imported
+    types: Vec<Id<DefinitionId>>,
+    classes: Vec<Id<DefinitionId>>,
 }
 
 impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
@@ -45,6 +52,14 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
         current_namespace: Vec<String>,
         prefex_scope: PrefexScope,
         mut constraints: Vec<Constraint>,
+
+        constraints_in_scope: Vec<GenericConstraint>,
+        visible_instances: Vec<Id<DefinitionId>>,
+        visible_method_blocks: Vec<Id<DefinitionId>>,
+        // probably all types of the compilation need to be there
+        // as a method can return a type that is not imported
+        types: Vec<Id<DefinitionId>>,
+        classes: Vec<Id<DefinitionId>>,
     ) -> Self {
         constraints.reverse();
         ConstraintSolver {
@@ -54,6 +69,11 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
             substitutions: Vec::new(),
             current_namespace,
             prefex_scope,
+            constraints_in_scope,
+            visible_instances,
+            visible_method_blocks,
+            types,
+            classes,
         }
     }
     pub fn solve(&mut self) {
@@ -398,25 +418,11 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
                 method,
                 of_type: _,
             } => {
-                let generic_constraints = Vec::new();
-                let types_in_scope = Vec::new();
-                let method_blocks_in_scope = Vec::new();
-                let instances_in_scope = Vec::new();
-                let classes_in_scope = Vec::new();
-                let mut method_resolver = MethodResolver::within_function(
-                    self.database,
-                    &self.prefex_scope,
-                    generic_constraints,
-                    instances_in_scope,
-                    method_blocks_in_scope,
-                    types_in_scope,
-                    classes_in_scope,
-                );
                 // we need to have the return type of the method.
                 // but this depend on the instance and method block and substitutions.
                 // Honestly the best thing that could happen is if in the blackboard we
                 // could with the answer also give back the type of the method
-                match method_resolver.resolve_method(&receiver, &method) {
+                match self.resolve_method(&receiver, &method) {
                     Ok(ResolvedMethod::Static { def_id: _ }) => {
                         todo!()
                     }
@@ -431,10 +437,56 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
                     }
                 }
             }
-            Constraint::MethodOrGlobal { .. } => todo!(),
+            Constraint::MethodOrGlobal {
+                receiver,
+                name,
+                of_ty,
+            } => match self.resolve_method(&receiver, &name) {
+                Ok(ResolvedMethod::Static { def_id: _ }) => {
+                    todo!()
+                }
+                Ok(ResolvedMethod::FromInstanceInScope {
+                    method_id: _,
+                    referenced_constraint: _,
+                }) => {
+                    todo!()
+                }
+                Err(_) => {
+                    let def = self
+                        .database
+                        .get_definition_id_by_unresolved_name(&self.current_namespace, &[], &name)
+                        .expect("Could not find function {name}");
+                    // TODO: save resolved function id mapped to the ast node
+                    let ty = self.database.get_definitions_type(def).unwrap();
+                    self.constraints
+                        .push_back(Constraint::Eq(ty.clone(), of_ty));
+                }
+            },
 
             c => panic!("Cannot unify constraint {c:?}"),
         }
+    }
+
+    fn resolve_method(
+        &self,
+        receiver: &Type,
+        method: &str,
+    ) -> Result<ResolvedMethod, MethodResolutionError> {
+        let generic_constraints = self.constraints_in_scope.clone();
+        let types_in_scope = self.types.clone();
+        let method_blocks_in_scope = self.visible_method_blocks.clone();
+        let instances_in_scope = self.visible_instances.clone();
+        let classes_in_scope = self.classes.clone();
+        let mut method_resolver = MethodResolver::within_function(
+            self.database,
+            &self.prefex_scope,
+            generic_constraints,
+            instances_in_scope,
+            method_blocks_in_scope,
+            types_in_scope,
+            classes_in_scope,
+        );
+        method_resolver.resolve_method(receiver, method)
     }
 
     fn fresh_type(&mut self) -> Type {

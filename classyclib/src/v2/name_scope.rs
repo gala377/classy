@@ -1,6 +1,4 @@
-use crate::scope::Scope;
-
-use super::ty::Type;
+use crate::{scope::Scope, v2::ty::Type};
 
 pub struct NameScope {
     /// Variables that are defined in this scope

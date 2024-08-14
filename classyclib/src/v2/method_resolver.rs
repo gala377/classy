@@ -1,10 +1,5 @@
 use std::collections::HashMap;
 
-use crate::{
-    typecheck::{ast_to_type::PrefexScope, types::DeBruijn},
-    v2::knowledge::{ClassMethodBlock, DefinitionId},
-};
-
 use classy_blackboard::{
     self as blackboard,
     clauses::Clause,
@@ -13,9 +8,15 @@ use classy_blackboard::{
     DomainGoal,
 };
 
-use super::{
-    knowledge::{self, GenericConstraint, Id, InstanceMethodBlock, MethodHandle},
-    ty::Type,
+use crate::{
+    typecheck::{ast_to_type::PrefexScope, types::DeBruijn},
+    v2::{
+        knowledge::{
+            self, ClassMethodBlock, DefinitionId, GenericConstraint, Id, InstanceMethodBlock,
+            MethodHandle,
+        },
+        ty::Type,
+    },
 };
 
 #[derive(Debug)]

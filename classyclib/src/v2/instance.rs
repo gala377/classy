@@ -1,15 +1,15 @@
 use std::collections::HashMap;
 
-use crate::{
-    id_provider::UniqueId,
-    v2::knowledge::{Database, QueryError, TypeId},
-    v2::ty::{Type, TypeFolder},
-};
 use thiserror::Error;
 
-use crate::typecheck::types::DeBruijn;
-
-use super::knowledge::Id;
+use crate::{
+    id_provider::UniqueId,
+    typecheck::types::DeBruijn,
+    v2::{
+        knowledge::{Database, Id, QueryError, TypeId},
+        ty::{Type, TypeFolder},
+    },
+};
 
 #[derive(Error, Debug)]
 pub enum InstantiationError {

@@ -11,7 +11,10 @@ use thiserror::Error;
 use crate::{
     ast_passes,
     session::Session,
-    v2::knowledge::{Database, DefinitionId, PackageInfo},
+    v2::{
+        constraint_generation,
+        knowledge::{Database, DefinitionId, DefinitionKind, PackageInfo, CURRENT_PACKAGE_ID},
+    },
 };
 
 #[derive(Error, Debug)]
@@ -61,12 +64,40 @@ impl Compiler {
         self.database.lower_instances(&self.session);
         self.database.lower_functions(&self.session);
         self.database.dump_all();
+        self.typecheck();
+
         //render::render_db(&self.database, "./render");
         // generate constraints for all functions and methods in the database
         // solve the constraints
         // create resolved syntax tree for function and methods calls
         // do more lowering later.
         Ok(())
+    }
+
+    pub fn typecheck(&mut self) {
+        let funcs = self
+            .database
+            .definitions
+            .iter()
+            .filter_map(|(id, def)| match def.kind {
+                DefinitionKind::Function(_) | DefinitionKind::Method(_) => {
+                    Some(id.as_global(CURRENT_PACKAGE_ID))
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        for func in funcs {
+            let mut inferer = constraint_generation::Inferer::for_function(
+                func,
+                &mut self.database,
+                &self.session,
+            );
+            inferer.infer_function_body();
+            let mut solver = inferer.into_constraint_solver();
+            solver.solve();
+            // TODO: get resolution information from the solver then use it to
+            // TODO: create a resolved AST
+        }
     }
 
     /// Parse source files belonging to this package.

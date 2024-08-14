@@ -1,22 +1,15 @@
-use core::panic;
-use std::cell::RefCell;
-/// This is a part of typechecker V2.
-/// This will replace the TypCtx.
-use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
-use std::rc::Rc;
+use std::{cell::RefCell, collections::{HashMap, HashSet}, hash::{Hash, Hasher}, path::PathBuf, rc::Rc};
 
 use thiserror::Error;
 
 use classy_syntax::ast;
 
-use crate::id_provider::UniqueId;
-use crate::session::Session;
-use crate::typecheck::ast_to_type::PrefexScope;
-use crate::typecheck::types::DeBruijn;
-use crate::v2::instance::UnificationError;
-use crate::v2::ty::Type;
+use crate::{
+    id_provider::UniqueId,
+    session::Session,
+    typecheck::{ast_to_type::PrefexScope, types::DeBruijn},
+    v2::{instance::UnificationError, ty::Type},
+};
 
 #[derive(Debug, Clone)]
 pub struct GenericConstraint {
@@ -1936,6 +1929,99 @@ impl Database {
             Type::Scheme { typ, .. } => self.is_resolved_type(typ),
             _ => true,
         }
+    }
+
+    pub fn get_visible_instances(&self, file: LocalId<DefinitionId>) -> Vec<Id<DefinitionId>> {
+        // TODO: Also check imports in files and add those
+        let file_info = self.file_info.get(&file).unwrap();
+        let namespace = &file_info.namespace;
+        let files = self
+            .get_files_in_namespace(namespace)
+            .collect::<HashSet<_>>();
+        let mut instances = Vec::new();
+        for (id, definition) in self.definitions.iter() {
+            if let DefinitionKind::Instance(_) = definition.kind {
+                if files.contains(&definition.file) {
+                    instances.push(id.as_global(CURRENT_PACKAGE_ID));
+                }
+            }
+        }
+        instances
+    }
+
+    pub fn get_visible_method_blocks(&self, file: LocalId<DefinitionId>) -> Vec<Id<DefinitionId>> {
+        let file_info = self.file_info.get(&file).unwrap();
+        let namespace = &file_info.namespace;
+        let files = self
+            .get_files_in_namespace(namespace)
+            .collect::<HashSet<_>>();
+        let mut method_blocks = Vec::new();
+        for (id, defnition) in self.definitions.iter() {
+            if let DefinitionKind::MethodBlock(_) = defnition.kind {
+                if files.contains(&defnition.file) {
+                    method_blocks.push(id.as_global(CURRENT_PACKAGE_ID));
+                }
+            }
+        }
+        method_blocks
+    }
+
+    pub fn all_classes<'this>(&'this self) -> impl Iterator<Item = Id<DefinitionId>> + 'this {
+        self.definitions
+            .iter()
+            .filter_map(|(id, def)| match def {
+                Definition {
+                    kind: DefinitionKind::Class(_),
+                    ..
+                } => Some(id.as_global(CURRENT_PACKAGE_ID)),
+                _ => None,
+            })
+            .chain(
+                self.packages
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(index, package_info)| {
+                        package_info
+                            .classes
+                            .keys()
+                            .map(move |id| id.as_global(PackageId(index + 1)))
+                    }),
+            )
+    }
+
+    pub fn all_types<'this>(&'this self) -> impl Iterator<Item = Id<DefinitionId>> + 'this {
+        self.type_definitions
+            .keys()
+            .map(|id| id.as_global(CURRENT_PACKAGE_ID))
+            .chain(
+                self.packages
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(index, package_info)| {
+                        package_info.definition.iter().filter_map(move |(id, def)| {
+                            if let DefinitionKind::Type = def.kind {
+                                Some(id.as_global(PackageId(index + 1)))
+                            } else {
+                                None
+                            }
+                        })
+                    }),
+            )
+    }
+
+    pub fn get_files_in_namespace<'this: 'n, 'n>(
+        &'this self,
+        namespace: &'n [String],
+    ) -> impl Iterator<Item = LocalId<DefinitionId>> + 'n {
+        self.file_info.iter().filter_map(|(id, info)| {
+            (info.namespace.len() == namespace.len()
+                && info
+                    .namespace
+                    .iter()
+                    .zip(namespace.iter())
+                    .all(|(a, b)| a == b))
+            .then_some(id.clone())
+        })
     }
 }
 

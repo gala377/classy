@@ -1,18 +1,19 @@
 use std::collections::{HashMap, HashSet};
 
-use classy_blackboard::database::DefId;
 use classy_syntax::ast;
 
 use crate::{
-    session::{self, Session},
+    session::Session,
     typecheck::ast_to_type::PrefexScope,
-    v2::knowledge::{Database, GenericConstraint, InstanceInfo, MethodBlockInfo, TypeId},
-};
-
-use super::{
-    knowledge::{DefinitionId, DefinitionKind, FunctionInfo, Id, MethodInfo, PackageId},
-    name_scope::NameScope,
-    ty::Type,
+    v2::{
+        constraint_solver::ConstraintSolver,
+        knowledge::{
+            Database, DefinitionId, DefinitionKind, FunctionInfo, GenericConstraint, Id,
+            InstanceInfo, MethodBlockInfo, MethodInfo, PackageId, TypeId,
+        },
+        name_scope::NameScope,
+        ty::Type,
+    },
 };
 
 #[derive(Debug)]
@@ -194,6 +195,31 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
         )
     }
 
+    pub fn into_constraint_solver(self) -> ConstraintSolver<'db, 'sess> {
+        let file = self
+            .database
+            .definitions
+            .get(&self.function_def_id.as_local().unwrap())
+            .unwrap()
+            .file;
+        let visible_instances = self.database.get_visible_instances(file);
+        let visible_method_blocks = self.database.get_visible_method_blocks(file);
+        let types = self.database.all_types().collect();
+        let classes = self.database.all_classes().collect();
+        ConstraintSolver::new(
+            self.session,
+            self.database,
+            self.current_namespace,
+            self.prefex_scope,
+            self.constraints,
+            self.constraints_in_scope,
+            visible_instances,
+            visible_method_blocks,
+            types,
+            classes,
+        )
+    }
+
     pub fn add_constraint(&mut self, constraint: Constraint) {
         self.constraints.push(constraint);
     }
@@ -204,6 +230,17 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
 
     fn new_fresh_type(&self) -> Type {
         Type::Fresh(self.session.id_provider().next())
+    }
+
+    pub fn infer_function_body(&mut self) {
+        let body = &self
+            .database
+            .function_definitions
+            .get(&self.function_def_id.as_local().unwrap())
+            .unwrap()
+            .body
+            .clone();
+        self.infer_expr(&body);
     }
 
     pub fn infer_expr(&mut self, ast::Expr { id, kind }: &ast::Expr) -> Type {
