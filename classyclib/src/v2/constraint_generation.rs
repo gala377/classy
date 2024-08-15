@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use classy_syntax::ast;
+use classy_syntax::ast::{self, Pattern};
 
 use crate::{
     scope::{FlatScope, FlatScopeExt},
@@ -612,7 +612,39 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                 self.add_constraint(Constraint::Eq(index_ty, Type::Int));
                 inner_ty
             }
-            ast::ExprKind::Match { expr: _, cases: _ } => todo!(),
+            ast::ExprKind::Match { expr, cases } => {
+                let ret = self.new_fresh_type();
+                let expr_ty = self.infer_expr(expr);
+                for (pattern, body, guard) in cases {
+                    self.scope.new_scope();
+                    let mut subinferer = PatternInferer {
+                        constraints: Vec::new(),
+                        scope: &mut self.scope,
+                        session: self.session,
+                        database: self.database,
+                        expr_types: HashMap::new(),
+                        current_namespace: &self.current_namespace,
+                    };
+                    let pattern_ty = subinferer.infer_pattern(pattern);
+
+                    // pattern constraints have to be reversed and added after pattern == expr type
+                    // constraint
+                    let pattern_constraints =
+                        subinferer.constraints.into_iter().rev().collect::<Vec<_>>();
+                    let pattern_types = subinferer.expr_types;
+                    self.add_constraint(Constraint::Eq(pattern_ty, expr_ty.clone()));
+                    self.constraints.extend(pattern_constraints);
+                    self.expr_types.extend(pattern_types);
+                    if let Some(guard) = guard {
+                        let guard_ty = self.infer_expr(guard);
+                        self.add_constraint(Constraint::Eq(guard_ty, Type::Bool));
+                    }
+                    let body_ty = self.infer_expr(body);
+                    self.add_constraint(Constraint::Eq(body_ty, ret.clone()));
+                    self.scope.pop_scope();
+                }
+                ret
+            }
             ast::ExprKind::MethodCall {
                 receiver,
                 method,
@@ -659,6 +691,164 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
             }
             ast::Name::Local(_) => panic!("What are you trying to do exaclty?"),
         }
+    }
+}
+
+struct PatternInferer<'sess, 'db, 'scope, 'namespace> {
+    constraints: Vec<Constraint>,
+    scope: &'scope mut NameScope,
+    session: &'sess Session,
+    database: &'db mut Database,
+    expr_types: HashMap<ExprId, Type>,
+    current_namespace: &'namespace [String],
+}
+
+impl PatternInferer<'_, '_, '_, '_> {
+    pub fn new_fresh_type(&self) -> Type {
+        Type::Fresh(self.session.id_provider().next())
+    }
+
+    pub fn infer_pattern(&mut self, pattern: &Pattern) -> Type {
+        let typ = match &pattern.kind {
+            ast::PatternKind::Var(name) => {
+                let ty = self.new_fresh_type();
+                if name.starts_with(char::is_uppercase) {
+                    self.constraints.push(Constraint::HasCase {
+                        ty: ty.clone(),
+                        case: name.clone(),
+                        of_type: Type::Unit,
+                    });
+                } else {
+                    self.scope.add_variable(name.clone(), ty.clone());
+                }
+                ty
+            }
+            ast::PatternKind::Tuple(inner) => {
+                let typ = self.new_fresh_type();
+                let inner_types = inner.iter().map(|p| self.infer_pattern(p)).collect();
+                self.constraints
+                    .push(Constraint::Eq(typ.clone(), Type::Tuple(inner_types)));
+                typ
+            }
+            ast::PatternKind::Struct {
+                strct: ast::Name::Unresolved { path, identifier },
+                fields,
+            } if path.is_empty() => {
+                let typ = self.new_fresh_type();
+                let strct = identifier;
+                let inner_types = fields
+                    .iter()
+                    .map(|(n, p)| {
+                        let typ = self.infer_pattern(p);
+                        (n.clone(), typ)
+                    })
+                    .collect::<Vec<_>>();
+                self.constraints.push(Constraint::HasCase {
+                    ty: typ.clone(),
+                    case: strct.clone(),
+                    of_type: Type::Struct {
+                        def: Id::dummy(),
+                        fields: inner_types.into_iter().collect(),
+                    },
+                });
+                typ
+            }
+            ast::PatternKind::Struct { strct, fields } => {
+                let typ = self.new_fresh_type();
+                let strct_t = self
+                    .database
+                    .get_type_by_name(strct, self.current_namespace)
+                    .cloned()
+                    .unwrap();
+                let inner_types = fields
+                    .iter()
+                    .map(|(n, p)| {
+                        let typ = self.infer_pattern(p);
+                        (n.clone(), typ)
+                    })
+                    .collect::<Vec<_>>();
+                for (name, ty) in inner_types {
+                    self.constraints.push(Constraint::HasProperty {
+                        ty: strct_t.clone(),
+                        property: name,
+                        of_type: ty,
+                    });
+                }
+                typ
+            }
+            ast::PatternKind::TupleStruct {
+                strct: ast::Name::Unresolved { path, identifier },
+                fields,
+            } if path.is_empty() => {
+                let typ = self.new_fresh_type();
+
+                let strct = identifier;
+                let inner_types = fields
+                    .iter()
+                    .map(|p| self.infer_pattern(p))
+                    .collect::<Vec<_>>();
+                self.constraints.push(Constraint::HasCase {
+                    ty: typ.clone(),
+                    case: strct.clone(),
+                    of_type: Type::Tuple(inner_types),
+                });
+                typ
+            }
+            ast::PatternKind::AnonStruct { fields } => {
+                let typ = self.new_fresh_type();
+
+                let inner_types = fields
+                    .iter()
+                    .map(|(n, p)| {
+                        let typ = self.infer_pattern(p);
+                        (n.clone(), typ)
+                    })
+                    .collect::<Vec<_>>();
+                for (name, t) in &inner_types {
+                    self.constraints.push(Constraint::HasProperty {
+                        ty: typ.clone(),
+                        property: name.clone(),
+                        of_type: t.clone(),
+                    })
+                }
+                typ
+            }
+            ast::PatternKind::Array(patterns) => {
+                let typ = self.new_fresh_type();
+                let inner = patterns
+                    .iter()
+                    .map(|p| self.infer_pattern(p))
+                    .collect::<Vec<_>>();
+                for t in &inner {
+                    self.constraints
+                        .push(Constraint::Eq(t.clone(), inner[0].clone()));
+                }
+                self.constraints.push(Constraint::Eq(
+                    typ.clone(),
+                    Type::Array(Box::new(inner[0].clone())),
+                ));
+                typ
+            }
+            ast::PatternKind::Wildcard => self.new_fresh_type(),
+            ast::PatternKind::Unit => Type::Unit,
+            ast::PatternKind::String(_) => Type::String,
+            ast::PatternKind::Int(_) => Type::Int,
+            ast::PatternKind::Bool(_) => Type::Bool,
+            ast::PatternKind::TypeSpecifier(name, case) => {
+                let t = self
+                    .database
+                    .get_type_by_name(name, self.current_namespace)
+                    .cloned()
+                    .expect("Type not found");
+                let case_t = self.infer_pattern(case);
+                self.constraints
+                    .push(Constraint::Eq(t.clone(), case_t.clone()));
+                t
+            }
+            p => panic!("Pattern {p:?} not implemented"),
+        };
+        self.expr_types.insert(ExprId(pattern.id), typ.clone());
+        typ
     }
 }
 

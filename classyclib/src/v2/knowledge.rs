@@ -8,7 +8,7 @@ use std::{
 
 use thiserror::Error;
 
-use classy_syntax::ast::{self, FunctionDefinition};
+use classy_syntax::ast::{self, FunctionDefinition, Name};
 
 use crate::{
     id_provider::UniqueId,
@@ -724,6 +724,27 @@ impl Database {
                 let tid = package_info.definition.get(&id)?.ty;
                 package_info.typeid_to_type.get(&tid)
             }
+        }
+    }
+
+    pub fn get_type_by_name(&self, name: &Name, current_namespace: &[String]) -> Option<&Type> {
+        match name {
+            Name::Unresolved { path, identifier } => {
+                self.get_type_by_unresolved_name(current_namespace, path, identifier)
+            }
+            Name::Global {
+                package,
+                definition,
+            } => {
+                let package_id = PackageId(*package);
+                let definition_id = DefinitionId(*definition);
+                let id = Id {
+                    package: package_id,
+                    id: definition_id,
+                };
+                self.get_definitions_type(id)
+            }
+            _ => panic!("Cannot resolve local name"),
         }
     }
 
