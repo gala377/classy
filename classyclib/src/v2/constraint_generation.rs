@@ -34,11 +34,13 @@ pub enum Constraint {
         receiver: Type,
         method: String,
         of_type: Type,
+        resolution_id: usize,
     },
     MethodOrGlobal {
         receiver: Type,
         name: String,
         of_ty: Type,
+        resolution_id: usize,
     },
 }
 
@@ -337,6 +339,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                     receiver: self.receiver.clone().unwrap(),
                     name: identifier.clone(),
                     of_ty: inferred_func_ty.clone(),
+                    resolution_id: *id,
                 });
                 ret_ty
             }
@@ -595,6 +598,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                     receiver: receiver_ty,
                     method: method.clone(),
                     of_type: inferred_func_ty.clone(),
+                    resolution_id: *id,
                 });
                 ret_ty
             }

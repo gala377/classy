@@ -22,12 +22,15 @@ use crate::{
     },
 };
 
+use super::knowledge::TypeId;
+
 #[derive(Debug)]
 pub enum ResolvedMethod {
     Static {
         /// Statically known method.
         /// Might reference a method within a method block or a global instance.
         def_id: Id<DefinitionId>,
+        ty: Type,
     },
     FromInstanceInScope {
         /// References method declaration within a class definition.
@@ -47,6 +50,7 @@ pub enum ResolvedMethod {
         /// indexes. In the above example it would be (0, 1) as `Show`
         /// is the second constraint in innermost constraint scope.
         referenced_constraint: usize,
+        ty: Type,
     },
 }
 
@@ -69,6 +73,8 @@ pub struct MethodResolver<'db, 'scope> {
     instance_to_instance_id: HashMap<Id<DefinitionId>, blackboard::ty::InstanceRef>,
     type_to_type_id: HashMap<Id<DefinitionId>, blackboard::ty::TyRef>,
     meth_block_to_meth_block_id: HashMap<Id<DefinitionId>, blackboard::ty::MethodBlockRef>,
+
+    reverse_map_blackboard_type: HashMap<blackboard::ty::TyRef, Type>,
 
     synthetic_method_blocks: HashMap<blackboard::ty::MethodBlockRef, SyntheticData>,
 }
@@ -100,6 +106,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
             forest: blackboard::slg::Forest::new(),
             constrainst_scope: FlatScope::new(),
             generics_scope,
+            reverse_map_blackboard_type: HashMap::new(),
 
             class_to_class_id: HashMap::new(),
             instance_to_instance_id: HashMap::new(),
@@ -322,6 +329,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
             let type_ref = *self.type_to_type_id.get(ty).unwrap();
             let type_params = {
                 let t = self.database.get_definitions_type(*ty).unwrap();
+                self.reverse_map_blackboard_type.insert(type_ref, t.clone());
                 match t {
                     Type::Scheme { prefex, .. } => prefex.clone(),
                     _ => Vec::new(),
@@ -395,7 +403,9 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
         method: &str,
     ) -> ResolvedMethod {
         let blackboard::slg::Answer {
-            origin, evidence, ..
+            origin,
+            evidence,
+            subst,
         } = answers;
         match origin {
             AnswerOrigin::FromRef(classy_blackboard::database::GenericRef::MethodBlock(id)) => {
@@ -404,6 +414,9 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
                     .iter()
                     .find_map(|(k, v)| if v == id { Some(k) } else { None })
                     .unwrap();
+                assert_eq!(subst.mapping.len(), 1);
+                let method_type = subst.mapping.values().next().cloned().unwrap();
+                let method_type = self.blackboard_type_to_type(method_type);
                 if self.synthetic_method_blocks.contains_key(id) {
                     println!("EVIDENCE: {:#?}", evidence);
                     if let AnswerOrigin::FromAssumption(index) = evidence[0].origin {
@@ -418,6 +431,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
                         return ResolvedMethod::FromInstanceInScope {
                             method_id: method.as_global(kid.package),
                             referenced_constraint: index,
+                            ty: method_type,
                         };
                     }
                 }
@@ -432,6 +446,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
                         if name == method {
                             Some(ResolvedMethod::Static {
                                 def_id: definition.as_global(kid.package),
+                                ty: method_type.clone(),
                             })
                         } else {
                             None
@@ -440,6 +455,64 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
                     .unwrap()
             }
             _ => todo!("Only method blocks are supported for now"),
+        }
+    }
+
+    fn blackboard_type_to_type(&self, ty: blackboard::Ty) -> Type {
+        let mut generics_counter = NumberOfGenericArgs::default();
+        let ty = generics_counter.fold_ty(ty);
+        let generics_to_introduce = generics_counter.get();
+        let mut replacer = ReplaceConstants::new(self.generics_scope, generics_to_introduce > 0);
+        let ty = replacer.fold_ty(ty);
+        let ty = self.translate_blackboard_type_rec(ty);
+        if generics_to_introduce > 0 {
+            Type::Scheme {
+                prefex: (0..generics_to_introduce)
+                    .map(|i| format!("$generic_{i}"))
+                    .collect(),
+                typ: Box::new(ty),
+            }
+        } else {
+            ty
+        }
+    }
+
+    fn translate_blackboard_type_rec(&self, ty: blackboard::Ty) -> Type {
+        match ty {
+            classy_blackboard::Ty::Ref(tyref) => self
+                .reverse_map_blackboard_type
+                .get(&tyref)
+                .unwrap()
+                .clone(),
+            classy_blackboard::Ty::Array(inner) => {
+                let inner = self.translate_blackboard_type_rec(*inner);
+                Type::Array(Box::new(inner))
+            }
+            classy_blackboard::Ty::Tuple(args) => {
+                let args = args
+                    .into_iter()
+                    .map(|t| self.translate_blackboard_type_rec(t))
+                    .collect();
+                Type::Tuple(args)
+            }
+            classy_blackboard::Ty::Fn(args, ret) => Type::Function {
+                args: args
+                    .into_iter()
+                    .map(|t| self.translate_blackboard_type_rec(t))
+                    .collect(),
+                ret: Box::new(self.translate_blackboard_type_rec(*ret)),
+            },
+            classy_blackboard::Ty::App(head, args) => Type::App {
+                typ: Box::new(self.translate_blackboard_type_rec(*head)),
+                args: args
+                    .into_iter()
+                    .map(|t| self.translate_blackboard_type_rec(t))
+                    .collect(),
+            },
+            classy_blackboard::Ty::Generic { scopes, index } => {
+                Type::Generic(DeBruijn(scopes.try_into().unwrap()), index)
+            }
+            t => panic!("Unexpected type {:#?}", t),
         }
     }
 
@@ -500,7 +573,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
         }
         let query = self
             .generics_scope
-            .iter_scopes()
+            .iter_scopes_in_to_out()
             // ? Maybe this is should be enabled in the future but with how generic scopes
             // ? are handled now i don't think we should ever get en empty prefex scope
             //.filter(|s| !s.is_empty())
@@ -588,6 +661,70 @@ impl blackboard::fold::Folder for ShiftDebruijn {
     }
 }
 
+#[derive(Default)]
+struct NumberOfGenericArgs(usize);
+
+impl NumberOfGenericArgs {
+    pub fn get(&self) -> usize {
+        self.0
+    }
+}
+
+impl blackboard::fold::Folder for NumberOfGenericArgs {
+    fn fold_ty_generic(&mut self, scopes: usize, index: usize) -> classy_blackboard::Ty {
+        assert_eq!(
+            scopes, 0,
+            "expected generics in the method type to only reference it's own generics"
+        );
+        self.0 = self.0.max(index + 1);
+        classy_blackboard::Ty::Generic { scopes, index }
+    }
+}
+
+struct ReplaceConstants {
+    shift_by: usize,
+    // How many generics are there at each level.
+    // from outermost to innermost
+    scope: Vec<usize>,
+}
+
+impl ReplaceConstants {
+    pub fn new(scope: &PrefexScope, shift_by_one: bool) -> Self {
+        let scope = scope
+            .iter_scopes_out_to_in()
+            .map(|s| s.len())
+            .collect::<Vec<_>>();
+        Self {
+            shift_by: if shift_by_one { 1 } else { 0 },
+            scope,
+        }
+    }
+
+    pub fn get_generic(&self, index: usize) -> blackboard::Ty {
+        let num_of_scopes = self.scope.len();
+        println!("Scope: {:#?}", self.scope);
+        println!("Number of scopes: {:#?}", num_of_scopes);
+        let mut seen_generics = 0;
+        for (scope, num_of_generics) in self.scope.iter().enumerate() {
+            println!("Seen generics: {:#?}", seen_generics);
+            if seen_generics + num_of_generics > index {
+                let index = index - seen_generics;
+                return blackboard::Ty::Generic {
+                    scopes: num_of_scopes - (scope + 1) + self.shift_by,
+                    index,
+                };
+            }
+            seen_generics += num_of_generics;
+        }
+        panic!("Index out of bounds {:#?}", index);
+    }
+}
+
+impl blackboard::fold::Folder for ReplaceConstants {
+    fn fold_ty_synthesized_constant(&mut self, idx: usize) -> classy_blackboard::Ty {
+        self.get_generic(idx)
+    }
+}
 /*
 def find_most_specific_instance(instances)
   outer: for candidate in instances
@@ -834,7 +971,7 @@ mod tests {
         let receiver = get_type(&database, "Foo");
         let methods = vec!["foo", "bar", "baz"];
         for name in methods {
-            let ResolvedMethod::Static { def_id } =
+            let ResolvedMethod::Static { def_id, .. } =
                 resolver.resolve_method(&receiver, name).unwrap()
             else {
                 panic!("Method not found: {name}");
@@ -867,7 +1004,7 @@ mod tests {
         };
         let methods = vec!["foo", "bar"];
         for name in methods {
-            let ResolvedMethod::Static { def_id } =
+            let ResolvedMethod::Static { def_id, .. } =
                 resolver.resolve_method(&receiver, name).unwrap()
             else {
                 panic!("Method not found: {name}")
@@ -917,7 +1054,8 @@ mod tests {
             typ: Box::new(foo.clone()),
             args: vec![bar.clone()],
         };
-        let ResolvedMethod::Static { def_id } = resolver.resolve_method(&receiver, "foo").unwrap()
+        let ResolvedMethod::Static { def_id, .. } =
+            resolver.resolve_method(&receiver, "foo").unwrap()
         else {
             panic!("Method not found")
         };
@@ -971,7 +1109,8 @@ mod tests {
             typ: Box::new(foo.clone()),
             args: vec![Type::Generic(DeBruijn::zero(), 0)],
         };
-        let ResolvedMethod::Static { def_id } = resolver.resolve_method(&receiver, "foo").unwrap()
+        let ResolvedMethod::Static { def_id, .. } =
+            resolver.resolve_method(&receiver, "foo").unwrap()
         else {
             panic!("Method not found")
         };
@@ -1216,7 +1355,9 @@ mod tests {
         );
         let receiver = get_type(&database, "Foo");
         match resolver.resolve_method(&receiver, "foo") {
-            Ok(ResolvedMethod::Static { .. }) => {}
+            Ok(ResolvedMethod::Static { ty, .. }) => {
+                println!("TY: {:#?}", ty);
+            }
             err => panic!("Error {err:?}"),
         }
     }
@@ -1254,7 +1395,9 @@ mod tests {
             args: vec![Type::Int],
         };
         match resolver.resolve_method(&receiver, "foo") {
-            Ok(ResolvedMethod::Static { .. }) => {}
+            Ok(ResolvedMethod::Static { ty, .. }) => {
+                println!("TY: {:#?}", ty);
+            }
             err => panic!("Error {err:?}"),
         }
     }
@@ -1326,10 +1469,11 @@ mod tests {
             classes,
         );
         let receiver = Type::Generic(DeBruijn(1), 0);
-        let Ok(ResolvedMethod::FromInstanceInScope { .. }) =
+        let Ok(ResolvedMethod::FromInstanceInScope { ty, .. }) =
             resolver.resolve_method(&receiver, "foo")
         else {
             panic!("Method not found")
         };
+        println!("TY: {:#?}", ty);
     }
 }

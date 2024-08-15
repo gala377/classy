@@ -26,6 +26,15 @@ impl TypeFolder for FreshTypeReplacer {
     }
 }
 
+pub enum CallResolution {
+    StaticFunction(Id<DefinitionId>),
+    StaticMethod(Id<DefinitionId>),
+    FromInstanceInScope {
+        instance_index: usize,
+        method_def: Id<DefinitionId>,
+    },
+}
+
 pub struct ConstraintSolver<'db, 'sess> {
     constraints: VecDeque<Constraint>,
     database: &'db Database,
@@ -43,6 +52,7 @@ pub struct ConstraintSolver<'db, 'sess> {
     // as a method can return a type that is not imported
     types: Vec<Id<DefinitionId>>,
     classes: Vec<Id<DefinitionId>>,
+    call_resolutions: HashMap<usize, CallResolution>,
 }
 
 impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
@@ -75,6 +85,7 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
             visible_method_blocks,
             types,
             classes,
+            call_resolutions: HashMap::new(),
         }
     }
     pub fn solve(&mut self) {
@@ -376,12 +387,14 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
                 receiver: Type::Alias(id),
                 method,
                 of_type,
+                resolution_id,
             } => {
                 let ty = self.database.resolve_alias_to_type(id).unwrap();
                 self.constraints.push_back(Constraint::HasMethod {
                     receiver: ty,
                     method,
                     of_type,
+                    resolution_id,
                 });
             }
             // c @ Constraint::HasMethod { receiver, method, of_type }
@@ -392,17 +405,20 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
                 receiver: Type::App { typ, args },
                 method,
                 of_type,
+                resolution_id,
             } => {
                 self.constraints.push_back(Constraint::HasMethod {
                     receiver: instance(self.database, args, *typ),
                     method,
                     of_type,
+                    resolution_id,
                 });
             }
             Constraint::HasMethod {
                 receiver: Type::Scheme { prefex, typ },
                 method,
                 of_type,
+                resolution_id,
             } => {
                 let args = prefex.iter().map(|_| self.fresh_type()).collect();
                 self.constraints.push_back(Constraint::HasMethod {
@@ -412,52 +428,80 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
                     },
                     method,
                     of_type,
+                    resolution_id,
                 });
             }
             Constraint::HasMethod {
                 receiver,
                 method,
-                of_type: _,
-            } => {
-                // we need to have the return type of the method.
-                // but this depend on the instance and method block and substitutions.
-                // Honestly the best thing that could happen is if in the blackboard we
-                // could with the answer also give back the type of the method
-                match self.resolve_method(&receiver, &method) {
-                    Ok(ResolvedMethod::Static { def_id: _ }) => {
-                        todo!()
-                    }
-                    Ok(ResolvedMethod::FromInstanceInScope {
-                        method_id: _,
-                        referenced_constraint: _,
-                    }) => {
-                        todo!()
-                    }
-                    Err(e) => {
-                        panic!("Could not resolve method {method} on {receiver:?}: {e:?}")
-                    }
+                of_type,
+                resolution_id,
+            } => match self.resolve_method(&receiver, &method) {
+                Ok(ResolvedMethod::Static {
+                    def_id,
+                    ty: method_type,
+                }) => {
+                    self.call_resolutions
+                        .insert(resolution_id, CallResolution::StaticMethod(def_id));
+                    self.constraints
+                        .push_back(Constraint::Eq(of_type, method_type));
                 }
-            }
+                Ok(ResolvedMethod::FromInstanceInScope {
+                    method_id,
+                    referenced_constraint,
+                    ty: method_type,
+                }) => {
+                    self.call_resolutions.insert(
+                        resolution_id,
+                        CallResolution::FromInstanceInScope {
+                            instance_index: referenced_constraint,
+                            method_def: method_id,
+                        },
+                    );
+                    self.constraints
+                        .push_back(Constraint::Eq(of_type, method_type));
+                }
+                Err(e) => {
+                    panic!("Could not resolve method {method} on {receiver:?}: {e:?}")
+                }
+            },
             Constraint::MethodOrGlobal {
                 receiver,
                 name,
                 of_ty,
+                resolution_id,
             } => match self.resolve_method(&receiver, &name) {
-                Ok(ResolvedMethod::Static { def_id: _ }) => {
-                    todo!()
+                Ok(ResolvedMethod::Static {
+                    def_id,
+                    ty: method_type,
+                }) => {
+                    self.call_resolutions
+                        .insert(resolution_id, CallResolution::StaticMethod(def_id));
+                    self.constraints
+                        .push_back(Constraint::Eq(of_ty, method_type));
                 }
                 Ok(ResolvedMethod::FromInstanceInScope {
-                    method_id: _,
-                    referenced_constraint: _,
+                    method_id,
+                    referenced_constraint,
+                    ty: method_type,
                 }) => {
-                    todo!()
+                    self.call_resolutions.insert(
+                        resolution_id,
+                        CallResolution::FromInstanceInScope {
+                            instance_index: referenced_constraint,
+                            method_def: method_id,
+                        },
+                    );
+                    self.constraints
+                        .push_back(Constraint::Eq(of_ty, method_type));
                 }
                 Err(_) => {
                     let def = self
                         .database
                         .get_definition_id_by_unresolved_name(&self.current_namespace, &[], &name)
                         .expect("Could not find function {name}");
-                    // TODO: save resolved function id mapped to the ast node
+                    self.call_resolutions
+                        .insert(resolution_id, CallResolution::StaticFunction(def));
                     let ty = self.database.get_definitions_type(def).unwrap();
                     self.constraints
                         .push_back(Constraint::Eq(ty.clone(), of_ty));
@@ -518,10 +562,12 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
                     receiver,
                     method,
                     of_type,
+                    resolution_id,
                 } => Constraint::HasMethod {
                     receiver: replacer.fold_type(receiver.clone()).unwrap(),
                     method: method.clone(),
                     of_type: replacer.fold_type(of_type.clone()).unwrap(),
+                    resolution_id: *resolution_id,
                 },
                 Constraint::HasProperty {
                     ty,
@@ -536,10 +582,12 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
                     receiver,
                     name,
                     of_ty,
+                    resolution_id,
                 } => Constraint::MethodOrGlobal {
                     receiver: replacer.fold_type(receiver.clone()).unwrap(),
                     name: name.clone(),
                     of_ty: replacer.fold_type(of_ty.clone()).unwrap(),
+                    resolution_id: *resolution_id,
                 },
             }
         }

@@ -129,7 +129,12 @@ where
     }
 
     /// Iterate scopes from the innermost to the outermost
-    pub fn iter_scopes(&self) -> impl Iterator<Item = &HashMap<K, V>> {
+    pub fn iter_scopes_in_to_out(&self) -> impl Iterator<Item = &HashMap<K, V>> {
         self.stack.iter().rev()
+    }
+
+    /// Iterate scopes from the outermost to the innermost
+    pub fn iter_scopes_out_to_in(&self) -> impl Iterator<Item = &HashMap<K, V>> {
+        self.stack.iter()
     }
 }
