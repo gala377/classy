@@ -13,7 +13,10 @@ use crate::{
     session::Session,
     v2::{
         constraint_generation,
-        knowledge::{Database, DefinitionId, DefinitionKind, PackageInfo, CURRENT_PACKAGE_ID},
+        knowledge::{
+            Database, DefinitionId, DefinitionKind, FunctionInfo, MethodInfo, PackageInfo,
+            CURRENT_PACKAGE_ID,
+        },
     },
 };
 
@@ -53,6 +56,38 @@ impl Compiler {
         }
     }
 
+    pub fn populate_primitive_types(&mut self) {
+        let std_package_id = self
+            .database
+            .packages_map
+            .get("std")
+            .expect("std package not found")
+            .clone();
+        let std_package = self.database.get_package(std_package_id);
+        let primitive_types = std_package
+            .definition
+            .iter()
+            .filter_map(|(id, def)| {
+                let t = def.ty;
+                let t = std_package.typeid_to_type.get(&t).unwrap();
+                match t {
+                    crate::v2::ty::Type::Int => Some((*id, t.clone())),
+                    crate::v2::ty::Type::UInt => Some((*id, t.clone())),
+                    crate::v2::ty::Type::Bool => Some((*id, t.clone())),
+                    crate::v2::ty::Type::Float => Some((*id, t.clone())),
+                    crate::v2::ty::Type::Byte => Some((*id, t.clone())),
+                    crate::v2::ty::Type::String => Some((*id, t.clone())),
+                    crate::v2::ty::Type::Unit => Some((*id, t.clone())),
+                    _ => None,
+                }
+            })
+            .map(|(id, t)| (id.as_global(std_package_id), t))
+            .collect::<Vec<_>>();
+        for (id, ty) in primitive_types {
+            self.database.add_primitive_type(ty.clone(), id);
+        }
+    }
+
     pub fn compile_package(&mut self) -> Result<(), CompilationError> {
         self.parse_source_files()?;
         self.after_parsing_passes();
@@ -64,6 +99,8 @@ impl Compiler {
         self.database.lower_instances(&self.session);
         self.database.lower_functions(&self.session);
         self.database.dump_all();
+        // can go anywhere before typechecking
+        self.populate_primitive_types();
         self.typecheck();
 
         //render::render_db(&self.database, "./render");
@@ -80,12 +117,16 @@ impl Compiler {
             .definitions
             .iter()
             .filter_map(|(id, def)| match def.kind {
-                DefinitionKind::Function(_) | DefinitionKind::Method(_) => {
+                DefinitionKind::Function(FunctionInfo { is_abstract, .. })
+                | DefinitionKind::Method(MethodInfo { is_abstract, .. })
+                    if !is_abstract =>
+                {
                     Some(id.as_global(CURRENT_PACKAGE_ID))
                 }
                 _ => None,
             })
             .collect::<Vec<_>>();
+        let mut call_resolutions = HashMap::new();
         for func in funcs {
             let mut inferer = constraint_generation::Inferer::for_function(
                 func,
@@ -95,9 +136,9 @@ impl Compiler {
             inferer.infer_function_body();
             let mut solver = inferer.into_constraint_solver();
             solver.solve();
-            // TODO: get resolution information from the solver then use it to
-            // TODO: create a resolved AST
+            call_resolutions.extend(solver.call_resolutions);
         }
+        println!("{:#?}", call_resolutions);
     }
 
     /// Parse source files belonging to this package.

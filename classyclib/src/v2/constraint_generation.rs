@@ -17,6 +17,8 @@ use crate::{
     },
 };
 
+use super::knowledge::CURRENT_PACKAGE_ID;
+
 #[derive(Debug)]
 pub enum Constraint {
     Eq(Type, Type),
@@ -107,6 +109,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
         database: &'db mut Database,
         session: &'sess Session,
     ) -> Self {
+        assert!(id.as_local().is_some());
         fn gather(
             database: &Database,
             id: Id<DefinitionId>,
@@ -115,16 +118,16 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
         ) -> Option<Id<TypeId>> {
             let definition = database.get_definition(id).unwrap();
             let parent = definition.parent;
+            let mut def_receiver = None;
             if let Some(parent) = parent {
-                gather(
+                def_receiver = gather(
                     database,
                     parent.as_global(id.package),
                     constraints,
                     prefex_scope,
                 );
             }
-            let mut def_receiver = None;
-            let mut new_scope_created = false;
+            println!("Looking at definition {id:?} => {}", definition.name);
             match definition.kind {
                 DefinitionKind::Function(_) | DefinitionKind::Method(_) => {
                     let ty = database.get_definitions_type(id).unwrap();
@@ -132,7 +135,6 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                         constraints.new_scope();
                         prefex_scope.new_scope();
                         prefex_scope.add_type_vars(&prefex);
-                        new_scope_created = true;
                     }
                 }
                 DefinitionKind::MethodBlock(MethodBlockInfo {
@@ -145,7 +147,6 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                         constraints.new_scope();
                         prefex_scope.new_scope();
                         prefex_scope.add_type_vars(&free_vars);
-                        new_scope_created = true;
                     }
                 }
                 DefinitionKind::Instance(InstanceInfo { free_vars, .. }) => {
@@ -153,13 +154,12 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                         constraints.new_scope();
                         prefex_scope.new_scope();
                         prefex_scope.add_type_vars(&free_vars);
-                        new_scope_created = true;
                     }
                 }
                 kind => panic!("Unexpected definition kind: {kind:?}"),
             }
             if !definition.constraints.is_empty() {
-                assert!(new_scope_created);
+                assert!(!constraints.is_empty());
                 constraints
                     .last_scope_mut()
                     .unwrap()
@@ -174,17 +174,19 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
         let mut prefex_scope = PrefexScope::without_scope();
         let receiver = gather(database, id, &mut constraints, &mut prefex_scope)
             .map(|r| database.resolve_alias_to_type(r).unwrap());
-        let (args_ty, ret_ty) = match database.get_definitions_type(id).cloned() {
-            Some(Type::Function { args, ret }) => (args, *ret),
-            Some(Type::Scheme {
+        let definition_type = database.get_definitions_type(id).cloned().unwrap();
+        let definition_type = Self::resolve_alias_deep(database, definition_type);
+        let (args_ty, ret_ty) = match definition_type {
+            Type::Function { args, ret } => (args, *ret),
+            Type::Scheme {
                 typ: box Type::Function { args, ret },
                 ..
-            }) => (args, *ret),
+            } => (args, *ret),
             t => panic!("Expected function, got {:?}", t),
         };
         let arg_names = match def.kind {
             DefinitionKind::Method(MethodInfo { arg_names, .. }) => arg_names.clone(),
-            DefinitionKind::Function(FunctionInfo { arg_names }) => arg_names.clone(),
+            DefinitionKind::Function(FunctionInfo { arg_names, .. }) => arg_names.clone(),
             _ => panic!("Expected function or method, got {:?}", def.kind),
         };
         assert_eq!(
@@ -209,6 +211,26 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
             ret_ty,
             constraints,
         )
+    }
+
+    fn resolve_alias_deep(database: &Database, ty: Type) -> Type {
+        match ty {
+            Type::Alias(for_t) => {
+                let id = database.resolve_alias_to_type(for_t).unwrap();
+                Self::resolve_alias_deep(database, id)
+            }
+            Type::Scheme {
+                prefex,
+                typ: box Type::Alias(for_t),
+            } => {
+                let id = database.resolve_alias_to_type(for_t).unwrap();
+                Type::Scheme {
+                    prefex,
+                    typ: Box::new(Self::resolve_alias_deep(database, id)),
+                }
+            }
+            t => t,
+        }
     }
 
     pub fn into_constraint_solver(self) -> ConstraintSolver<'db, 'sess> {
@@ -249,13 +271,25 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
     }
 
     pub fn infer_function_body(&mut self) {
-        let body = &self
+        println!("All function defnitions");
+        for (id, def) in self.database.function_definitions.iter() {
+            println!("{id:?}: {def:?}\n\n\n");
+        }
+        println!("Function id {:?}", self.function_def_id);
+        let id = self.function_def_id.as_local().unwrap();
+        let body = self
             .database
             .function_definitions
-            .get(&self.function_def_id.as_local().unwrap())
-            .unwrap()
-            .body
-            .clone();
+            .get(&id)
+            .map(|def| def.body.clone())
+            .unwrap_or_else(|| {
+                self.database
+                    .method_definitions
+                    .get(&id)
+                    .unwrap()
+                    .body
+                    .clone()
+            });
         self.infer_expr(&body);
     }
 

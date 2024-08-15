@@ -152,6 +152,7 @@ fn prepare_std_package() -> PackageInfo {
         ("Float", classyclib::v2::ty::Type::Float),
         ("Byte", classyclib::v2::ty::Type::Byte),
         ("UInt", classyclib::v2::ty::Type::UInt),
+        ("Unit", classyclib::v2::ty::Type::Unit),
     ];
     PackageInfo {
         name: "std".to_string(),

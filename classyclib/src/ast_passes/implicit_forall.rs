@@ -43,14 +43,26 @@ impl ast::Folder for ImplicitForall {
         println!("function: {:?}", name);
         self.prefex.clear();
         let new_t = self.fold_typ(typ);
-        let new_t = if !self.prefex.is_empty() {
+        let new_t = match new_t {
             ast::Typ::Poly {
+                bounds,
+                free_variables,
+                typ,
+            } if !self.prefex.is_empty() => ast::Typ::Poly {
+                free_variables: self.prefex.to_vec(),
+                bounds,
+                typ: Box::new(ast::Typ::Poly {
+                    free_variables,
+                    bounds: Vec::new(),
+                    typ,
+                }),
+            },
+            t if !self.prefex.is_empty() => ast::Typ::Poly {
                 free_variables: self.prefex.to_vec(),
                 bounds: Vec::new(),
-                typ: Box::new(new_t),
-            }
-        } else {
-            new_t
+                typ: Box::new(t),
+            },
+            _ => new_t,
         };
         ast::FunctionDefinition {
             name,

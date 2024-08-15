@@ -163,7 +163,10 @@ impl Folder for GoalNormalizer<'_> {
     fn fold_ty_generic(&mut self, scopes: usize, index: usize) -> Ty {
         println!("substitutions len: {}", self.substitutions.len());
         println!("scopes: {}", scopes);
+        assert!(scopes < self.substitutions.len());
         let scope_index = self.substitutions.len() - 1 - scopes;
+        assert!(scope_index < self.substitutions.len());
+        assert!(index < self.substitutions[scope_index].len());
         self.substitutions[scope_index][index].clone()
     }
 }

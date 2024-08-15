@@ -26,6 +26,7 @@ impl TypeFolder for FreshTypeReplacer {
     }
 }
 
+#[derive(Debug)]
 pub enum CallResolution {
     StaticFunction(Id<DefinitionId>),
     StaticMethod(Id<DefinitionId>),
@@ -52,7 +53,7 @@ pub struct ConstraintSolver<'db, 'sess> {
     // as a method can return a type that is not imported
     types: Vec<Id<DefinitionId>>,
     classes: Vec<Id<DefinitionId>>,
-    call_resolutions: HashMap<usize, CallResolution>,
+    pub call_resolutions: HashMap<usize, CallResolution>,
 }
 
 impl<'db, 'sess> ConstraintSolver<'db, 'sess> {

@@ -46,6 +46,16 @@ from: { Conv(a, b) } => (a) -> b
 from x = x.cast()
 
 
+methods for Foo {
+    foo: () -> ()
+    foo {
+        bar()
+    }
+
+    bar: () -> ()
+    bar = ()
+}
+
 class { 
     WellFormed(a), 
 } => Show(a) {

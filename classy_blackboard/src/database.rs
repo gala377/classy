@@ -232,6 +232,7 @@ impl Database {
         for (type_ref, type_impl) in self.type_impls.iter().enumerate() {
             let type_ref = TyRef(type_ref);
             let clause = self.lower_type_impl(type_ref, type_impl);
+            println!("Lowered type impl class: {clause:?}");
             self.clauses.push(AnnotatedClause {
                 clause,
                 origin: GenericRef::Type(type_ref),
@@ -240,6 +241,7 @@ impl Database {
         for (class_ref, class) in self.type_classes.iter().enumerate() {
             let class_ref = ClassRef(class_ref);
             let clause = self.lower_class(class_ref, class);
+            println!("Lowered type class: {clause:?}");
             self.clauses.push(AnnotatedClause {
                 clause,
                 origin: GenericRef::Class(class_ref),
@@ -248,6 +250,7 @@ impl Database {
         for (instance_ref, instance) in self.instances.iter().enumerate() {
             let instance_ref = InstanceRef(instance_ref);
             let clause = self.lower_instance(instance);
+            println!("Lowered instance: {clause:?}");
             self.clauses.push(AnnotatedClause {
                 clause,
                 origin: GenericRef::Instance(instance_ref.clone()),
@@ -256,6 +259,7 @@ impl Database {
         for (method_block_ref, method_block) in self.method_blocks.iter().enumerate() {
             let method_block_ref = MethodBlockRef(method_block_ref);
             let clause = self.lower_methods_block(method_block);
+            println!("Lowered method block: {clause:?} => {method_block:?}");
             self.clauses.push(AnnotatedClause {
                 clause,
                 origin: GenericRef::MethodBlock(method_block_ref.clone()),
@@ -594,6 +598,7 @@ impl Database {
         variable_generator: &mut dyn VariableContext,
     ) -> (Clause, Option<Vec<Ty>>) {
         let mut normalizer = ClauseNormalizer::new(variable_generator, current_universe);
+        println!("Normalizing clause: {clause:?}");
         (
             normalizer.fold_clause(clause.clone()),
             normalizer.initial_generics_subst,

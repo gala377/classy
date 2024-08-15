@@ -639,7 +639,12 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
                 blackboard::Ty::Ref(
                     *self
                         .type_to_type_id
-                        .get(&self.database.get_primitive_type(t).unwrap())
+                        .get(
+                            &self
+                                .database
+                                .get_primitive_type(t)
+                                .expect(&format!("Primitive type not found {t:?}")),
+                        )
                         .unwrap(),
                 )
             }

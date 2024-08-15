@@ -395,6 +395,7 @@ impl<'source> Parser<'source> {
         let name = self.parse_identifier()?;
         self.expect_token(TokenType::Colon)?;
         let typ = self.parse_type()?;
+        println!("JAKALELE: {:?} => {:#?}", name, typ);
         let _ = self.expect_token(TokenType::Semicolon);
         if attributes.contains(&"empty".to_owned()) {
             return Ok(ast::FunctionDefinition {

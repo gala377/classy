@@ -8,7 +8,7 @@ use std::{
 
 use thiserror::Error;
 
-use classy_syntax::ast;
+use classy_syntax::ast::{self, FunctionDefinition};
 
 use crate::{
     id_provider::UniqueId,
@@ -46,7 +46,11 @@ impl<T: Default> Id<T> {
     }
 
     pub fn as_local(self) -> Option<LocalId<T>> {
-        Some(LocalId(self.id))
+        if self.package == CURRENT_PACKAGE_ID {
+            Some(LocalId(self.id))
+        } else {
+            None
+        }
     }
 }
 
@@ -204,6 +208,7 @@ pub struct MethodInfo {
     pub name: String,
     pub ty: LocalId<TypeId>,
     pub arg_names: Vec<String>,
+    pub is_abstract: bool,
 }
 
 impl MethodInfo {
@@ -211,6 +216,7 @@ impl MethodInfo {
         name: String::new(),
         ty: DUMMY_TYPE_ID,
         arg_names: Vec::new(),
+        is_abstract: false,
     };
 }
 
@@ -222,6 +228,7 @@ pub struct FileInfo {
 #[derive(Debug, Clone)]
 pub struct FunctionInfo {
     pub arg_names: Vec<String>,
+    pub is_abstract: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -356,7 +363,7 @@ pub struct Database {
 
     /// Global variable definitions.
     pub variable_definitions: HashMap<LocalId<DefinitionId>, ast::ConstDefinition>,
-    /// Function and method definitions.
+    /// Function definitions.
     pub function_definitions: HashMap<LocalId<DefinitionId>, ast::FunctionDefinition>,
     /// Type definitions.
     pub type_definitions: HashMap<LocalId<DefinitionId>, ast::TypeDefinition>,
@@ -367,6 +374,9 @@ pub struct Database {
     pub class_definitions: HashMap<LocalId<DefinitionId>, ast::ClassDefinition>,
     /// Instance definitions
     pub instance_definitions: HashMap<LocalId<DefinitionId>, ast::InstanceDefinition>,
+    /// Asts of nonabstract method definitions. Maybe remove later and just walk
+    /// through instances and method blocks to get them.
+    pub method_definitions: HashMap<LocalId<DefinitionId>, ast::FunctionDefinition>,
 
     /// All the type values generated during typechecking.
     /// Maps their respective handle to the value of the type.
@@ -442,6 +452,7 @@ impl Database {
             method_blocks_definitions: HashMap::new(),
             class_definitions: HashMap::new(),
             instance_definitions: HashMap::new(),
+            method_definitions: Default::default(),
             globals: HashMap::new(),
             typeid_to_type: HashMap::new(),
             reverse_type_aliases: Rc::new(RefCell::new(TypeHashMap::new(
@@ -544,6 +555,7 @@ impl Database {
                 name: definition.name.clone(),
                 kind: DefinitionKind::Function(FunctionInfo {
                     arg_names: definition.parameters.clone(),
+                    is_abstract: false,
                 }),
                 implicit_imports: Default::default(),
                 constraints: Vec::new(),
@@ -1247,6 +1259,7 @@ impl Database {
                                     &meth.name,
                                     &[],
                                     &meth.typ,
+                                    None,
                                 ),
                             };
                             method_block_definition
@@ -1278,6 +1291,7 @@ impl Database {
                                 name,
                                 &[],
                                 typ,
+                                None,
                             ),
                         });
                     }
@@ -1337,7 +1351,7 @@ impl Database {
             let mut block_methods = Vec::new();
             for ast::Method {
                 item:
-                    ast::FunctionDefinition {
+                    method_ast @ ast::FunctionDefinition {
                         name,
                         typ,
                         parameters,
@@ -1357,6 +1371,7 @@ impl Database {
                         name,
                         &parameters,
                         typ,
+                        Some(method_ast),
                     ),
                 });
             } // end for method in methods
@@ -1421,12 +1436,14 @@ impl Database {
             let mut method_blocks = Vec::new();
             for instance_item in body {
                 match instance_item {
-                    ast::InstanceDefinitionItem::FunctionDefinition(ast::FunctionDefinition {
-                        name,
-                        typ,
-                        parameters,
-                        ..
-                    }) => {
+                    ast::InstanceDefinitionItem::FunctionDefinition(
+                        method_ast @ ast::FunctionDefinition {
+                            name,
+                            typ,
+                            parameters,
+                            ..
+                        },
+                    ) => {
                         println!("Lowering instance method {name:?}");
                         static_methods.push(MethodHandle {
                             name: name.clone(),
@@ -1439,6 +1456,7 @@ impl Database {
                                 name,
                                 &parameters,
                                 typ,
+                                Some(method_ast),
                             ),
                         });
                     }
@@ -1502,6 +1520,7 @@ impl Database {
                                     &meth.name,
                                     &meth.parameters,
                                     &meth.typ,
+                                    Some(&meth),
                                 ),
                             };
                             method_blocks_definition
@@ -1550,6 +1569,7 @@ impl Database {
         name: &str,
         arg_names: &[String],
         typ: &ast::Typ,
+        is_abstract: Option<&FunctionDefinition>,
     ) -> LocalId<DefinitionId> {
         let mut f_bounds = Vec::new();
         let mut f_free_vars = Vec::new();
@@ -1589,6 +1609,7 @@ impl Database {
                 name: name.to_owned(),
                 ty,
                 arg_names: arg_names.to_vec(),
+                is_abstract: is_abstract.is_none(),
             }),
             constraints: f_constraints,
             ty,
@@ -1596,7 +1617,11 @@ impl Database {
             implicit_imports: Vec::new(),
             parent: Some(parent),
         };
-        self.add_definition(session, definition)
+        let id = self.add_definition(session, definition);
+        if let Some(ast) = is_abstract {
+            self.method_definitions.insert(id, ast.clone());
+        }
+        id
     }
 
     pub fn lower_functions(&mut self, session: &Session) {
@@ -1634,11 +1659,20 @@ impl Database {
                 })
                 .collect::<Vec<_>>();
             prefex_scope.pop_scope();
+            let f_typ = if f_free_vars.is_empty() {
+                f_typ
+            } else {
+                Type::Scheme {
+                    prefex: f_free_vars.clone(),
+                    typ: Box::new(f_typ),
+                }
+            };
             let ty = self.create_type(session, f_typ);
             let instance = self.definitions.get_mut(id).unwrap();
             *instance = Definition {
                 kind: DefinitionKind::Function(FunctionInfo {
                     arg_names: parameters.clone(),
+                    is_abstract: false,
                 }),
                 constraints: f_constraints,
                 ty,
@@ -1968,7 +2002,7 @@ impl Database {
         let mut method_blocks = Vec::new();
         for (id, defnition) in self.definitions.iter() {
             if let DefinitionKind::MethodBlock(_) = defnition.kind {
-                if files.contains(&defnition.file) {
+                if defnition.parent.is_none() && files.contains(&defnition.file) {
                     method_blocks.push(id.as_global(CURRENT_PACKAGE_ID));
                 }
             }
