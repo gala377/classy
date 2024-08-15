@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use classy_syntax::ast;
 
 use crate::{
+    scope::{FlatScope, FlatScopeExt},
     session::Session,
     typecheck::ast_to_type::PrefexScope,
     v2::{
@@ -60,7 +61,7 @@ pub struct Inferer<'sess, 'db> {
     // TODO Both of those are useless now but when we create a solver from this inferer
     // TODO both of them will be passes to the solver
     function_def_id: Id<DefinitionId>,
-    constraints_in_scope: Vec<GenericConstraint>,
+    constraints_in_scope: FlatScope<GenericConstraint>,
     /* TODO:
     - Add constraints in scope, that takes into account function and
         outer block constraints (method blocks, instances)
@@ -78,7 +79,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
         function_def_id: Id<DefinitionId>,
         function_args: &[(String, Type)],
         function_return_type: Type,
-        constraints_in_scope: Vec<GenericConstraint>,
+        constraints_in_scope: FlatScope<GenericConstraint>,
     ) -> Self {
         let mut scope = NameScope::new();
         for (name, ty) in function_args {
@@ -107,7 +108,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
         fn gather(
             database: &Database,
             id: Id<DefinitionId>,
-            constraints: &mut Vec<GenericConstraint>,
+            constraints: &mut FlatScope<GenericConstraint>,
             prefex_scope: &mut PrefexScope,
         ) -> Option<Id<TypeId>> {
             let definition = database.get_definition(id).unwrap();
@@ -121,12 +122,15 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                 );
             }
             let mut def_receiver = None;
+            let mut new_scope_created = false;
             match definition.kind {
                 DefinitionKind::Function(_) | DefinitionKind::Method(_) => {
                     let ty = database.get_definitions_type(id).unwrap();
                     if let Type::Scheme { prefex, .. } = ty {
+                        constraints.new_scope();
                         prefex_scope.new_scope();
                         prefex_scope.add_type_vars(&prefex);
+                        new_scope_created = true;
                     }
                 }
                 DefinitionKind::MethodBlock(MethodBlockInfo {
@@ -136,25 +140,35 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                 }) => {
                     def_receiver = Some(receiver);
                     if !free_vars.is_empty() {
+                        constraints.new_scope();
                         prefex_scope.new_scope();
                         prefex_scope.add_type_vars(&free_vars);
+                        new_scope_created = true;
                     }
                 }
                 DefinitionKind::Instance(InstanceInfo { free_vars, .. }) => {
                     if !free_vars.is_empty() {
+                        constraints.new_scope();
                         prefex_scope.new_scope();
                         prefex_scope.add_type_vars(&free_vars);
+                        new_scope_created = true;
                     }
                 }
                 kind => panic!("Unexpected definition kind: {kind:?}"),
             }
-            constraints.extend_from_slice(&definition.constraints);
+            if !definition.constraints.is_empty() {
+                assert!(new_scope_created);
+                constraints
+                    .last_scope_mut()
+                    .unwrap()
+                    .extend_from_slice(&definition.constraints);
+            }
             def_receiver
         }
 
         let def = database.get_definition(id).unwrap();
         let namespace = database.get_namespace(id.as_local().unwrap()).to_vec();
-        let mut constraints = Vec::new();
+        let mut constraints = FlatScope::new();
         let mut prefex_scope = PrefexScope::without_scope();
         let receiver = gather(database, id, &mut constraints, &mut prefex_scope)
             .map(|r| database.resolve_alias_to_type(r).unwrap());

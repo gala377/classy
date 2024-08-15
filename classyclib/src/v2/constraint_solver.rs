@@ -1,6 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::{
+    scope::FlatScope,
     session::Session,
     typecheck::{ast_to_type::PrefexScope, types::DeBruijn},
     v2::{
@@ -35,7 +36,7 @@ pub struct ConstraintSolver<'db, 'sess> {
 
     current_namespace: Vec<String>,
 
-    constraints_in_scope: Vec<GenericConstraint>,
+    constraints_in_scope: FlatScope<GenericConstraint>,
     visible_instances: Vec<Id<DefinitionId>>,
     visible_method_blocks: Vec<Id<DefinitionId>>,
     // probably all types of the compilation need to be there
@@ -53,7 +54,7 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
         prefex_scope: PrefexScope,
         mut constraints: Vec<Constraint>,
 
-        constraints_in_scope: Vec<GenericConstraint>,
+        constraints_in_scope: FlatScope<GenericConstraint>,
         visible_instances: Vec<Id<DefinitionId>>,
         visible_method_blocks: Vec<Id<DefinitionId>>,
         // probably all types of the compilation need to be there

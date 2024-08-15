@@ -1,5 +1,37 @@
 use std::{borrow::Borrow, collections::HashMap, hash::Hash};
 
+pub type FlatScope<T> = Vec<Vec<T>>;
+
+pub trait FlatScopeExt<T> {
+    fn map_all<R>(&self, f: impl FnMut(&T) -> R) -> FlatScope<R>;
+
+    fn new_scope(&mut self);
+
+    fn add(&mut self, value: T);
+
+    fn last_scope_mut(&mut self) -> Option<&mut Vec<T>>;
+}
+
+impl<T> FlatScopeExt<T> for FlatScope<T> {
+    fn map_all<R>(&self, mut f: impl FnMut(&T) -> R) -> FlatScope<R> {
+        self.iter()
+            .map(|scope| scope.iter().map(|t| f(t)).collect())
+            .collect()
+    }
+
+    fn new_scope(&mut self) {
+        self.push(Vec::new());
+    }
+
+    fn add(&mut self, value: T) {
+        self.last_mut().unwrap().push(value);
+    }
+
+    fn last_scope_mut(&mut self) -> Option<&mut Vec<T>> {
+        self.last_mut()
+    }
+}
+
 pub struct Scope<K, V> {
     stack: Vec<HashMap<K, V>>,
 }

@@ -8,8 +8,10 @@ use classy_blackboard::{
     ty::Constraint,
     DomainGoal,
 };
+use tracing_subscriber::registry::Scope;
 
 use crate::{
+    scope::{FlatScope, FlatScopeExt},
     typecheck::{ast_to_type::PrefexScope, types::DeBruijn},
     v2::{
         knowledge::{
@@ -59,8 +61,8 @@ pub struct MethodResolver<'db, 'scope> {
     database: &'db knowledge::Database,
     blackboard_database: blackboard::Database,
     forest: blackboard::slg::Forest,
-
-    constarints_in_scope: Vec<blackboard::ty::Constraint>,
+    // front is outermost, back is innermost
+    constrainst_scope: FlatScope<blackboard::ty::Constraint>,
     generics_scope: &'scope PrefexScope,
 
     class_to_class_id: HashMap<Id<DefinitionId>, blackboard::ty::ClassRef>,
@@ -83,7 +85,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
     pub fn within_function(
         database: &'db knowledge::Database,
         generics_scope: &'scope PrefexScope,
-        constraints_in_scope: Vec<GenericConstraint>,
+        constraints_scope: FlatScope<GenericConstraint>,
         visible_instances: Vec<Id<DefinitionId>>,
         visible_method_blocks: Vec<Id<DefinitionId>>,
         // probably all types of the compilation need to be there
@@ -96,8 +98,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
             database,
             blackboard_database,
             forest: blackboard::slg::Forest::new(),
-            constarints_in_scope: Vec::new(),
-
+            constrainst_scope: FlatScope::new(),
             generics_scope,
 
             class_to_class_id: HashMap::new(),
@@ -116,8 +117,8 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
 
         resolver.blackboard_database.lower_to_clauses();
 
-        let constraints_in_scope = resolver.translate_constraints(&constraints_in_scope);
-        resolver.constarints_in_scope = constraints_in_scope;
+        let constraints_in_scope = resolver.translate_constraints_scope(constraints_scope);
+        resolver.constrainst_scope = constraints_in_scope;
 
         resolver
     }
@@ -304,6 +305,17 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
         res
     }
 
+    fn translate_constraints_scope(
+        &self,
+        constraints: FlatScope<GenericConstraint>,
+    ) -> FlatScope<blackboard::ty::Constraint> {
+        constraints.map_all(|GenericConstraint { class, args }| {
+            let class_ref = self.class_to_class_id.get(class).unwrap();
+            let args = args.iter().map(|ty| self.to_blackboard_type(ty)).collect();
+            blackboard::ty::Constraint::Class(*class_ref, args)
+        })
+    }
+
     fn add_types(&mut self, types: &[Id<DefinitionId>]) {
         for ty in types {
             let resolved_ty = self.database.get_definition(*ty).unwrap();
@@ -438,7 +450,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
             Box::new(blackboard::Goal::Domain(
                 blackboard::DomainGoal::FindMethod {
                     name: method.to_owned(),
-                    on_type: ShiftDebruijn.fold_ty(receiver_as_blackboard_type),
+                    on_type: ShiftDebruijn(1).fold_ty(receiver_as_blackboard_type),
                     of_type: blackboard::Ty::Generic {
                         scopes: 0,
                         index: 0,
@@ -446,17 +458,41 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
                 },
             )),
         );
+        // TODO: We need to shift debruijin indexes for every clause in the query.
+        // That is because all implications will be flat within all forall scopes.
+        // So we kinda need to know which scope the constraint is in and shift the index
+        // according to each forall we introduce. So something like that
+        // scope1: @(0, 0) @(0, 1)
+        // scope2: @(1, 0) @(0, 1)
+        // scope3: @(2, 0) @(1, 1) @(0, 0)
+        // under all 3 scopes would turn into
+        // @(2, 0) @(2, 1)
+        // @(2, 0) @(1, 1)
+        // @(2, 0) @(1, 1) @(0, 0)
+        // so basically going in post or pre order we need to increase every index by
+        // number_of_scopes - how_many_are_we_under
+        let number_of_scopes = self.constrainst_scope.len();
+        println!("Number of scopes: {:#?}", number_of_scopes);
+        println!("Scopes: {:#?}", self.constrainst_scope);
         let constraints = self
-            .constarints_in_scope
+            .constrainst_scope
             .iter()
-            .map(|c| match c {
-                Constraint::Class(class, args) => {
-                    Clause::Fact(DomainGoal::InstanceExistsAndWellFormed {
-                        head: *class,
-                        args: args.clone(),
-                    })
-                }
-                Constraint::Eq(_, _) => todo!(),
+            .enumerate()
+            .flat_map(|(index, scope)| {
+                let under_scopes = index + 1;
+                let mut shifter = ShiftDebruijn(number_of_scopes - under_scopes);
+                scope.iter().map(move |c| match c {
+                    Constraint::Class(class, args) => {
+                        Clause::Fact(DomainGoal::InstanceExistsAndWellFormed {
+                            head: *class,
+                            args: args
+                                .iter()
+                                .map(|arg| shifter.fold_ty(arg.clone()))
+                                .collect(),
+                        })
+                    }
+                    Constraint::Eq(_, _) => todo!(),
+                })
             })
             .collect::<Vec<_>>();
         if !constraints.is_empty() {
@@ -541,12 +577,12 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
     }
 }
 
-struct ShiftDebruijn;
+struct ShiftDebruijn(pub usize);
 
 impl blackboard::fold::Folder for ShiftDebruijn {
     fn fold_ty_generic(&mut self, scopes: usize, index: usize) -> classy_blackboard::Ty {
         classy_blackboard::Ty::Generic {
-            scopes: scopes + 1,
+            scopes: scopes + self.0,
             index,
         }
     }
@@ -1046,7 +1082,7 @@ mod tests {
         let mut scope = PrefexScope::with_empty_scope();
         scope.add_type_var("a");
 
-        let constraints = vec![
+        let constraints = vec![vec![
             GenericConstraint {
                 class: get_class(&database, "Debug"),
                 args: vec![Type::Generic(DeBruijn::zero(), 0)],
@@ -1055,7 +1091,7 @@ mod tests {
                 class: get_class(&database, "Clone"),
                 args: vec![Type::Generic(DeBruijn::zero(), 0)],
             },
-        ];
+        ]];
         let mut resolver = MethodResolver::within_function(
             &database,
             &scope,
@@ -1138,10 +1174,10 @@ mod tests {
         let mut scope = PrefexScope::with_empty_scope();
         scope.add_type_var("a");
 
-        let constraints = vec![GenericConstraint {
+        let constraints = vec![vec![GenericConstraint {
             class: get_class(&database, "C"),
             args: vec![Type::Generic(DeBruijn::zero(), 0)],
-        }];
+        }]];
 
         let mut resolver = MethodResolver::within_function(
             &database,
@@ -1221,5 +1257,79 @@ mod tests {
             Ok(ResolvedMethod::Static { .. }) => {}
             err => panic!("Error {err:?}"),
         }
+    }
+
+    const SOURCE_6: &str = r#"
+        class C1(a, b) {
+            methods for a {
+                bar: () -> a
+            }
+        }
+
+        class C2(a, b) {
+            methods for a {
+                foo: () -> (a, b)
+            }
+        }
+
+        instance for C1(a, b) {
+            methods for a {
+                bar: () -> a
+                bar () {}
+            }
+        }
+
+        instance for C2(a, b) {
+            methods for a {
+                foo: () -> (a, b)
+                foo () {}
+            }
+        }
+
+    "#;
+
+    #[test]
+    fn multiple_layers_of_generics_from_env() {
+        let (database, _) = setup_database(SOURCE_6);
+        let types = get_types(&database);
+        let method_blocks = get_method_blocks(&database);
+        let classes = get_classes(&database);
+        let instances = get_instances(&database);
+        let mut scope = PrefexScope::with_empty_scope();
+        scope.add_type_vars(&["a".into(), "b".into()]);
+        scope.new_scope();
+        scope.add_type_var("c");
+        let constraints = vec![
+            vec![GenericConstraint {
+                class: get_class(&database, "C1"),
+                args: vec![
+                    Type::Generic(DeBruijn::zero(), 0),
+                    Type::Generic(DeBruijn::zero(), 1),
+                ],
+            }],
+            vec![GenericConstraint {
+                class: get_class(&database, "C2"),
+                args: vec![
+                    Type::Generic(DeBruijn(1), 0),
+                    Type::Generic(DeBruijn::zero(), 0),
+                ],
+            }],
+        ];
+
+        let mut resolver = MethodResolver::within_function(
+            &database,
+            &scope,
+            constraints,
+            instances,
+            method_blocks,
+            types,
+            classes,
+        );
+        let receiver = Type::Generic(DeBruijn(1), 0);
+        let Ok(ResolvedMethod::FromInstanceInScope { .. }) =
+            resolver.resolve_method(&receiver, "foo")
+        else {
+            panic!("Method not found")
+        };
     }
 }
