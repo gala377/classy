@@ -17,8 +17,6 @@ use crate::{
     },
 };
 
-use super::knowledge::CURRENT_PACKAGE_ID;
-
 #[derive(Debug)]
 pub enum Constraint {
     Eq(Type, Type),
