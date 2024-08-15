@@ -8,7 +8,6 @@ use classy_blackboard::{
     ty::Constraint,
     DomainGoal,
 };
-use tracing_subscriber::registry::Scope;
 
 use crate::{
     scope::{FlatScope, FlatScopeExt},
@@ -21,8 +20,6 @@ use crate::{
         ty::Type,
     },
 };
-
-use super::knowledge::TypeId;
 
 #[derive(Debug)]
 pub enum ResolvedMethod {
