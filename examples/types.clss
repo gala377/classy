@@ -1,4 +1,5 @@
 
+namespace foo::bar::baz
 
 type Foo {
     bar: std::String

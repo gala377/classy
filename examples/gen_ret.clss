@@ -1,12 +1,16 @@
 
-
 @runtime
 @empty
-print: (String) -> ()
+print: (std::String) -> ()
 
-test: (a) -> b
-test x = x
+type Foo {
+  bar: std::String
+}
 
-main {
+main: ((std::String) -> ()) -> ()
+main(print) {
+  let foo = Foo {
+    bar = "test"
+  }
   print "test"
 }

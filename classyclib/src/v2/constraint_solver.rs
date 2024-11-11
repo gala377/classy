@@ -26,7 +26,7 @@ impl TypeFolder for FreshTypeReplacer {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum CallResolution {
     StaticFunction(Id<DefinitionId>),
     StaticMethod(Id<DefinitionId>),
@@ -34,12 +34,13 @@ pub enum CallResolution {
         instance_index: usize,
         method_def: Id<DefinitionId>,
     },
+    Unresolved,
 }
 
 pub struct ConstraintSolver<'db, 'sess> {
     constraints: VecDeque<Constraint>,
     database: &'db Database,
-    substitutions: Vec<(usize, Type)>,
+    pub substitutions: Vec<(usize, Type)>,
     session: &'sess Session,
 
     prefex_scope: PrefexScope,

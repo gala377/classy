@@ -45,12 +45,12 @@ pub enum Constraint {
 }
 
 #[repr(transparent)]
-#[derive(Clone, Copy, Hash, Eq, PartialEq)]
-pub struct ExprId(usize);
+#[derive(Clone, Copy, Hash, Eq, PartialEq, Debug)]
+pub struct ExprId(pub usize);
 
 pub struct Inferer<'sess, 'db> {
     constraints: Vec<Constraint>,
-    expr_types: HashMap<ExprId, Type>,
+    pub expr_types: HashMap<ExprId, Type>,
     scope: NameScope,
     session: &'sess Session,
     database: &'db mut Database,
@@ -60,15 +60,9 @@ pub struct Inferer<'sess, 'db> {
     function_return_type: Type,
 
     // Can be a method def id if we are inferring a method
-    // TODO Both of those are useless now but when we create a solver from this inferer
-    // TODO both of them will be passes to the solver
     function_def_id: Id<DefinitionId>,
     constraints_in_scope: FlatScope<GenericConstraint>,
-    /* TODO:
-    - Add constraints in scope, that takes into account function and
-        outer block constraints (method blocks, instances)
-    - Add receiver type, this is important for method blocks.
-    */
+    pub trivial_name_resolutions: HashMap<ExprId, ast::Name>,
 }
 
 impl<'sess, 'db> Inferer<'sess, 'db> {
@@ -99,6 +93,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
             receiver,
             constraints_in_scope,
             function_def_id,
+            trivial_name_resolutions: HashMap::new(),
         }
     }
 
@@ -318,38 +313,57 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                 ast::Name::Unresolved { path, identifier } if path.is_empty() => {
                     let possibly_local = self.scope.get_variable(identifier).cloned();
                     match possibly_local {
-                        Some(ty) => ty,
-                        None => self
-                            .database
-                            .get_type_by_unresolved_name(&self.current_namespace, path, identifier)
-                            .cloned()
-                            .unwrap_or_else(|| {
-                                panic!("Name {path:?}::{identifier} not found in database")
-                            }),
+                        Some(ty) => {
+                            self.trivial_name_resolutions
+                                .insert(ExprId(*id), ast::Name::Local(identifier.clone()));
+                            ty
+                        }
+                        None => {
+                            let (def, ty) = self
+                                .database
+                                .resolve_unresolved_name(&self.current_namespace, path, identifier)
+                                .map(|(def, ty)| (def, ty.clone()))
+                                .unwrap_or_else(|| {
+                                    panic!("Name {path:?}::{identifier} not found in database")
+                                });
+                            self.trivial_name_resolutions.insert(
+                                ExprId(*id),
+                                ast::Name::Global {
+                                    package: def.package.0,
+                                    definition: def.id.0,
+                                },
+                            );
+                            ty
+                        } /* ! TODO
+                           * other possibility is that it is a name that is scoped by the
+                           * constraint so we should lookup
+                           * names in classes in scope to see if we can find this name.
+                           * Also if receiver.is_some() == true then this can also be a method or
+                           * a field so we should have a constraint
+                           * like MethodOrField { receiver, name, of_ty }
+                           * That we should resolve in the constraint solver. */
                     }
                 }
-                ast::Name::Unresolved { path, identifier } => self
-                    .database
-                    .get_type_by_unresolved_name(&self.current_namespace, path, identifier)
-                    .cloned()
-                    .unwrap_or_else(|| panic!("Name {path:?}::{identifier} not found in database")),
-                ast::Name::Global {
-                    package,
-                    definition,
-                } => {
-                    let package = PackageId(*package);
-                    let definition = DefinitionId(*definition);
-                    let id = Id {
-                        package,
-                        id: definition,
-                    };
-                    self.database.get_definitions_type(id).cloned().unwrap()
+                ast::Name::Unresolved { path, identifier } => {
+                    let (def, ty) = self
+                        .database
+                        .resolve_unresolved_name(&self.current_namespace, path, identifier)
+                        .map(|(def, ty)| (def, ty.clone()))
+                        .unwrap_or_else(|| {
+                            panic!("Name {path:?}::{identifier} not found in database")
+                        });
+                    self.trivial_name_resolutions.insert(
+                        ExprId(*id),
+                        ast::Name::Global {
+                            package: def.package.0,
+                            definition: def.id.0,
+                        },
+                    );
+                    ty
                 }
-                ast::Name::Local(name) => self
-                    .scope
-                    .get_variable(name)
-                    .cloned()
-                    .unwrap_or_else(|| panic!("Variable {name} not found in scope")),
+                name => {
+                    panic!("Name {name:?} not expected as resolution did not take place yet");
+                }
             },
             ast::ExprKind::FunctionCall {
                 func:
@@ -905,6 +919,7 @@ mod tests {
                             file: LocalId(DefinitionId(0)),
                             implicit_imports: vec![],
                             parent: None,
+                            annotations: Default::default(),
                         },
                     );
                 }

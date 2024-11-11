@@ -176,6 +176,7 @@ fn prepare_std_package() -> PackageInfo {
                         file: LocalId(DefinitionId(0)),
                         implicit_imports: vec![],
                         parent: None,
+                        annotations: Default::default(),
                     },
                 );
             }

@@ -6,4 +6,5 @@ pub mod constraint_generation;
 pub mod constraint_solver;
 pub mod method_resolver;
 pub mod name_scope;
+pub mod rast;
 pub mod ty;

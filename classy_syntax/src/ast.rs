@@ -1,6 +1,7 @@
 use std::{collections::HashMap, ops::Range};
 
 pub mod fold;
+pub mod transformer;
 pub mod visitor;
 
 use classy_sexpr::ToSExpr;

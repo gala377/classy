@@ -770,7 +770,7 @@ mod tests {
     use crate::session::Session;
     use crate::v2::compile::Compiler;
     use crate::v2::knowledge::Database;
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
 
     const SOURCE_1: &str = r#"
         // import std::Int 
@@ -834,6 +834,7 @@ mod tests {
                             file: LocalId(DefinitionId(0)),
                             implicit_imports: vec![],
                             parent: None,
+                            annotations: HashSet::new(),
                         },
                     );
                 }

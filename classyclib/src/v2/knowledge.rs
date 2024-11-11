@@ -306,6 +306,7 @@ pub struct Definition {
     /// block for method blocks it might be their instance, class or just
     /// nothing.
     pub parent: Option<LocalId<DefinitionId>>,
+    pub annotations: HashSet<String>,
 }
 
 impl Definition {
@@ -534,6 +535,7 @@ impl Database {
                 ty: DUMMY_TYPE_ID,
                 file,
                 parent: None,
+                annotations: Default::default(),
             },
         );
         self.type_definitions.insert(id, definition);
@@ -562,6 +564,7 @@ impl Database {
                 ty: DUMMY_TYPE_ID,
                 file,
                 parent: None,
+                annotations: definition.attributes.iter().cloned().collect(),
             },
         );
         self.function_definitions.insert(id, definition);
@@ -587,6 +590,7 @@ impl Database {
                 ty: DUMMY_TYPE_ID,
                 file,
                 parent: None,
+                annotations: Default::default(),
             },
         );
         self.variable_definitions.insert(id, definition);
@@ -617,6 +621,7 @@ impl Database {
                 ty: DUMMY_TYPE_ID,
                 file,
                 parent: None,
+                annotations: Default::default(),
             },
         );
         self.method_blocks_definitions.insert(id, definition);
@@ -641,6 +646,7 @@ impl Database {
                 ty: DUMMY_TYPE_ID,
                 file,
                 parent: None,
+                annotations: Default::default(),
             },
         );
         self.class_definitions.insert(id, definition);
@@ -670,6 +676,7 @@ impl Database {
                 ty: DUMMY_TYPE_ID,
                 file,
                 parent: None,
+                annotations: Default::default(),
             },
         );
         self.instance_definitions.insert(id, definition);
@@ -774,6 +781,35 @@ impl Database {
         println!("Expanded name {expand_name}");
         let definition_id = self.globals.get(&expand_name)?;
         self.get_definitions_type((*definition_id).as_global(CURRENT_PACKAGE_ID))
+    }
+
+    pub fn resolve_unresolved_name(
+        &self,
+        current_namespace: &[String],
+        path: &[String],
+        name: &str,
+    ) -> Option<(Id<DefinitionId>, &Type)> {
+        if let Some(potential_package) = path.first() {
+            if let Some(package_id) = self.package_id(potential_package) {
+                let package_info = self.get_package(package_id);
+                let mut expanded_name = path[1..].to_vec();
+                expanded_name.push(name.to_string());
+                let expanded_name = expanded_name.join("::");
+                if let Some(definition_id) = package_info.globals.get(&expanded_name) {
+                    let id = (*definition_id).as_global(package_id);
+                    return self.get_definitions_type(id).map(|x| (id, x));
+                }
+                return None;
+            }
+        }
+        let mut expanded_name = current_namespace.to_vec();
+        expanded_name.extend(path.iter().cloned());
+        expanded_name.push(name.to_string());
+        let expand_name = expanded_name.join("::");
+        println!("Expanded name {expand_name}");
+        let definition_id = self.globals.get(&expand_name)?;
+        let id = (*definition_id).as_global(CURRENT_PACKAGE_ID);
+        self.get_definitions_type(id).map(|x| (id, x))
     }
 
     pub fn get_definition_id_by_unresolved_name(
@@ -1265,6 +1301,7 @@ impl Database {
                             file,
                             implicit_imports: vec![],
                             parent: Some(id),
+                            annotations: Default::default(),
                         };
                         let method_block_id =
                             LocalId::new(DefinitionId(session.id_provider().next()));
@@ -1528,6 +1565,7 @@ impl Database {
                             file,
                             implicit_imports: vec![],
                             parent: Some(*id),
+                            annotations: Default::default(),
                         };
                         for ast::Method { item: meth, .. } in methods {
                             let method_handle = MethodHandle {
@@ -1637,6 +1675,11 @@ impl Database {
             file,
             implicit_imports: Vec::new(),
             parent: Some(parent),
+            annotations: if let Some(ast) = is_abstract {
+                ast.attributes.iter().cloned().collect()
+            } else {
+                Default::default()
+            },
         };
         let id = self.add_definition(session, definition);
         if let Some(ast) = is_abstract {
