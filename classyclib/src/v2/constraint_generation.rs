@@ -283,7 +283,8 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                     .body
                     .clone()
             });
-        self.infer_expr(&body);
+        let ret_type = self.infer_expr(&body);
+        self.add_constraint(Constraint::Eq(ret_type, self.function_return_type.clone()));
     }
 
     pub fn infer_expr(&mut self, ast::Expr { id, kind }: &ast::Expr) -> Type {

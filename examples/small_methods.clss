@@ -12,9 +12,9 @@ main {
     }
     let a = () => { () }
       
-    let top_students = from(students). 
-        filter(x => (x.gdp).gt(90)).
-        select(x => type { 
+    let top_students = from(students)
+        .filter(x => (x.gdp).gt(90))
+        .select(x => type { 
             name=x.name
             surname=x.surname
         })

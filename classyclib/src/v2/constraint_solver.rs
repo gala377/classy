@@ -169,6 +169,13 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
                 },
             ) => {
                 self.constraints.push_back(Constraint::Eq(*ret_1, *ret_2));
+                if args_1.len() != args_2.len() {
+                    panic!(
+                        "Number of arguments mismatched expected {} got {}",
+                        args_2.len(),
+                        args_1.len(),
+                    );
+                }
                 for (a1, a2) in args_1.iter().zip(args_2.iter()) {
                     self.constraints
                         .push_back(Constraint::Eq(a1.clone(), a2.clone()));
@@ -443,6 +450,11 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
                     def_id,
                     ty: method_type,
                 }) => {
+                    println!("AAAAAAA");
+                    println!(
+                        "Resolved method to type {:?} expected {:?}",
+                        method_type, of_type
+                    );
                     self.call_resolutions
                         .insert(resolution_id, CallResolution::StaticMethod(def_id));
                     self.constraints
