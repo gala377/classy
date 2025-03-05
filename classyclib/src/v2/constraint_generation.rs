@@ -589,7 +589,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                     );
                     self.add_constraint(Constraint::Eq(init_ty.clone(), ty));
                 }
-                init_ty
+                Type::Unit
             }
             ast::ExprKind::LetRec { .. } => todo!(),
             ast::ExprKind::AnonType { .. } => todo!(),

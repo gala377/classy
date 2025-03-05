@@ -3,13 +3,15 @@
 
 use std::collections::HashMap;
 
+use classy_sexpr::{SExpr, ToSExpr};
+use classy_sexpr_proc_macro::sexpr;
 use classy_syntax::ast::{self, transformer::AstExprTransformer, FunctionDefinition};
 
 use super::{
     constraint_generation::ExprId,
     constraint_solver::CallResolution,
     knowledge::{
-        Database, DefinitionId, DefinitionKind, Id, LocalId, PackageId, CURRENT_PACKAGE_ID,
+        Database, DefinitionId, DefinitionKind, Id, LocalId, PackageId, TypeId, CURRENT_PACKAGE_ID,
     },
     ty::Type,
 };
@@ -246,7 +248,6 @@ impl AstExprTransformer for RastBuilder<'_, '_, '_, '_> {
                         todo!("call resolution does not exist, so this should a call to a local")
                     }
                 };
-                todo!()
             }
             ast::ExprKind::StructLiteral { strct, values } => {
                 let resolved = match strct {
@@ -621,5 +622,197 @@ impl AstExprTransformer for RastBuilder<'_, '_, '_, '_> {
 
     fn transform_bool_pattern(&mut self, val: bool) -> Self::PatternKind {
         todo!()
+    }
+}
+
+impl ToSExpr for LocalId<DefinitionId> {
+    fn to_sexpr(self) -> SExpr {
+        let LocalId(def) = self;
+        let def = def.0;
+        sexpr!((local id #def))
+    }
+}
+
+impl ToSExpr for RastTree {
+    fn to_sexpr(self) -> SExpr {
+        let bodies: Vec<_> = self
+            .bodies
+            .into_iter()
+            .map(|(id, expr)| {
+                sexpr!(
+                    (definition[$id] &n $expr)
+                )
+            })
+            .collect();
+        sexpr!((rast &en $bodies))
+    }
+}
+
+impl ToSExpr for Expr {
+    fn to_sexpr(self) -> SExpr {
+        let Expr { kind, ty, .. } = self;
+        sexpr!((expr type of $ty &n body $kind))
+    }
+}
+
+impl ToSExpr for Id<TypeId> {
+    fn to_sexpr(self) -> SExpr {
+        let Id { package, id } = self;
+        let package = package.0;
+        let id = id.0;
+        sexpr!((id (package #package) (id #id)))
+    }
+}
+
+impl ToSExpr for Id<DefinitionId> {
+    fn to_sexpr(self) -> SExpr {
+        let Id { package, id } = self;
+        let package = package.0;
+        let id = id.0;
+        sexpr!((id (package #package) (id #id)))
+    }
+}
+
+impl ToSExpr for Type {
+    fn to_sexpr(self) -> SExpr {
+        match self {
+            Type::Int => sexpr!(int),
+            Type::UInt => sexpr!(uint),
+            Type::Bool => sexpr!(bool),
+            Type::String => sexpr!(string),
+            Type::Float => sexpr!(float),
+            Type::Unit => sexpr!(unit),
+            Type::Byte => sexpr!(byte),
+            Type::Struct { def, fields } => sexpr!(
+                (struct[$def] &en $fields)
+            ),
+            Type::ADT { def, constructors } => sexpr!(
+                (adt[$def] &n $constructors)
+            ),
+            Type::Function { args, ret } => sexpr!(
+                (fn $args $ret)
+            ),
+            Type::Tuple(items) => sexpr!((tuple @ items)),
+            Type::Array(inner) => sexpr!((array $inner)),
+            Type::Alias(id) => {
+                sexpr!((alias $id))
+            }
+            Type::Divergent => sexpr!(divergent),
+            Type::ToInfere => sexpr!(to_infere),
+            Type::Scheme { prefex, typ } => sexpr!(
+                (forall $prefex $typ)
+            ),
+            Type::App { typ, args } => sexpr!((app $typ @args)),
+            Type::Generic(debruijn, index) => {
+                let debruijn = debruijn.0;
+                sexpr!((generic #debruijn #index))
+            }
+            Type::Fresh(id) => sexpr!((fresh #id)),
+        }
+    }
+}
+
+impl ToSExpr for ExprId {
+    fn to_sexpr(self) -> SExpr {
+        let ExprId(inner) = self;
+        sexpr!((exprid #inner))
+    }
+}
+
+impl ToSExpr for CallResolution {
+    fn to_sexpr(self) -> SExpr {
+        match self {
+            CallResolution::StaticFunction(id) => sexpr!((static $id)),
+            CallResolution::StaticMethod(id) => sexpr!((static method $id)),
+            CallResolution::FromInstanceInScope {
+                instance_index,
+                method_def,
+            } => sexpr!((
+                from instance #instance_index $method_def
+            )),
+            CallResolution::Unresolved => sexpr!(unresolved),
+        }
+    }
+}
+
+impl ToSExpr for ResolvedName {
+    fn to_sexpr(self) -> SExpr {
+        match self {
+            ResolvedName::Local(name) => sexpr!((local #name)),
+            ResolvedName::Global(id) => sexpr!((global $id)),
+        }
+    }
+}
+
+impl ToSExpr for AccessResolution {
+    fn to_sexpr(self) -> SExpr {
+        match self {
+            AccessResolution::Field(val) => sexpr!((field #val)),
+            AccessResolution::Method(id) => sexpr!((method $id)),
+        }
+    }
+}
+
+impl ToSExpr for ExprKind {
+    fn to_sexpr(self) -> classy_sexpr::SExpr {
+        match self {
+            ExprKind::This => sexpr!(this),
+            ExprKind::Unit => sexpr!(unit),
+            ExprKind::Sequence(exprs) => {
+                let exprs = exprs.into_iter().map(ToSExpr::to_sexpr).collect::<Vec<_>>();
+                sexpr!((&en $exprs))
+            }
+            ExprKind::Assignment { lhs, rhs } => sexpr!(
+                ($lhs assign &n $rhs)
+            ),
+            ExprKind::IntConst(val) => sexpr!((const int #val)),
+            ExprKind::StringConst(val) => sexpr!((const string #val)),
+            ExprKind::FloatConst(val) => sexpr!((const string #val)),
+            ExprKind::BoolConst(val) => sexpr!((const bool #val)),
+            ExprKind::MethodCall {
+                receiver,
+                method,
+                args,
+                implicit_args,
+                resolution,
+            } => sexpr!((
+                call &n (with $receiver) &n #method resolved to $resolution &n2 args &en $args
+            )),
+            ExprKind::Call {
+                callee,
+                args,
+                implicit_args,
+                resolution,
+            } => sexpr!((call $callee[$resolution] &n @args)),
+            ExprKind::Name { symbol, resolved } => sexpr!((name #symbol[$resolved])),
+            ExprKind::Access {
+                val,
+                field,
+                access_resolution,
+            } => sexpr!((get $val $field [$access_resolution])),
+            ExprKind::Tuple(exprs) => sexpr!((tuple @ exprs)),
+            ExprKind::ArrayLiteral { size, init } => sexpr!((array[$size] @init)),
+            ExprKind::IndexAccess { lhs, index } => sexpr!((get index $lhs $index)),
+            ExprKind::Let { name, init } => sexpr!((let #name &n $init)),
+            ExprKind::If {
+                cond,
+                then,
+                else_body,
+            } => sexpr!((if $cond $then @else_body)),
+            ExprKind::While { cond, body } => sexpr!((while $cond $body)),
+            ExprKind::Lambda { args, body } => sexpr!((lambda @args $body)),
+            ExprKind::StructLiteral { def, fields } => sexpr!((struct literal [$def] &en $fields)),
+            ExprKind::AdtUnitConstructor { def, case } => sexpr!((adt[$def] unit #case)),
+            ExprKind::AdtTupleConstructor { def, case, fields } => {
+                sexpr!((adt[$def] tuple #case @fields))
+            }
+            ExprKind::AdtStructConstructor { def, case, fields } => sexpr!((
+                adt[$def] struct #case @fields
+            )),
+            ExprKind::MakeInstance { def, args } => sexpr!((
+                make instance[$def] @args
+            )),
+            ExprKind::Return { expr } => sexpr!((return $expr)),
+        }
     }
 }

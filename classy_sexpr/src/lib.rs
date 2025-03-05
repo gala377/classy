@@ -11,6 +11,7 @@ pub enum Atom {
     Symbol(String),
     Number(i64),
     String(String),
+    Hint(String),
 }
 
 impl std::fmt::Debug for SExpr {
@@ -37,7 +38,104 @@ impl std::fmt::Debug for Atom {
             Atom::Symbol(s) => write!(f, "`{}", s),
             Atom::Number(n) => write!(f, "{}", n),
             Atom::String(s) => write!(f, "\"{}\"", s),
+            Atom::Hint(_) => Ok(()),
         }
+    }
+}
+
+#[derive(Default)]
+struct FormatingOptions {
+    indent_elements: Option<usize>,
+    indent: usize,
+}
+
+impl FormatingOptions {
+    fn all_indent(&self) -> usize {
+        self.indent + self.indent_elements.unwrap_or_default()
+    }
+}
+
+pub fn pretty_print(sexpr: &SExpr) {
+    let to_print = pretty_string(FormatingOptions::default(), sexpr);
+    println!("{}", to_print);
+}
+
+fn pretty_string(options: FormatingOptions, sexpr: &SExpr) -> String {
+    fn make_indent(indent: usize) -> String {
+        "  ".repeat(indent)
+    }
+    match sexpr {
+        SExpr::List(sexprs) => {
+            let mut res = String::new();
+            res.push('(');
+            let end = sexprs.len();
+            let mut i = 0;
+            while i < end {
+                let expr = &sexprs[i];
+                match expr {
+                    SExpr::Atom(Atom::Hint(hint)) => match hint.as_str() {
+                        "en" => {
+                            let mut next_options = FormatingOptions::default();
+                            next_options.indent_elements = Some(options.all_indent() + 1);
+                            res += &pretty_string(next_options, &sexprs[i + 1]);
+                            if i + 1 < end - 1 {
+                                res += " ";
+                            }
+                            i += 2;
+                            continue;
+                        }
+                        "n" => {
+                            let mut next_options = FormatingOptions::default();
+                            next_options.indent = options.all_indent() + 1;
+                            res += "\n";
+                            res += &make_indent(next_options.indent);
+                            res += &pretty_string(next_options, &sexprs[i + 1]);
+                            if i + 1 < end - 1 {
+                                res += " ";
+                            }
+                            i += 2;
+                            continue;
+                        }
+                        "n2" => {
+                            let mut next_options = FormatingOptions::default();
+                            next_options.indent = options.all_indent() + 2;
+                            res += "\n";
+                            res += &make_indent(next_options.indent);
+                            res += &pretty_string(next_options, &sexprs[i + 1]);
+                            if i + 1 < end - 1 {
+                                res += " ";
+                            }
+                            i += 2;
+                            continue;
+                        }
+                        _ => {}
+                    },
+                    _ => {
+                        let add = if let Some(indent) = options.indent_elements {
+                            format!("\n{}", make_indent(indent))
+                        } else {
+                            String::new()
+                        };
+                        let mut next_options = FormatingOptions::default();
+                        next_options.indent = options.all_indent() + 1;
+                        res += &add;
+                        res += &pretty_string(next_options, expr);
+                        if i < end - 1 {
+                            res += " ";
+                        }
+                    }
+                }
+                i += 1;
+            }
+            res.push(')');
+            res
+        }
+        SExpr::Atom(atom) => match atom {
+            Atom::Symbol(sym) => format!("{sym}"),
+            Atom::Number(num) => format!("{num}"),
+            Atom::String(val) => format!("\"{val}\""),
+            Atom::Hint(_) => "".to_string(),
+        },
     }
 }
 

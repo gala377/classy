@@ -6,6 +6,8 @@ use classy_syntax::{
     parser::{Parser, SyntaxError},
 };
 
+use classy_sexpr::ToSExpr;
+
 use thiserror::Error;
 
 use crate::{
@@ -127,7 +129,8 @@ impl Compiler {
             &typechecking_result.call_resolutions,
             &typechecking_result.name_resolutions,
         );
-        println!("{:#?}", rast);
+        println!("🦀Printing RAST");
+        classy_sexpr::pretty_print(&rast.to_sexpr());
         //render::render_db(&self.database, "./render");
         // generate constraints for all functions and methods in the database
         // solve the constraints
