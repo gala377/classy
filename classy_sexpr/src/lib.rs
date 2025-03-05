@@ -84,6 +84,26 @@ fn pretty_string(options: FormatingOptions, sexpr: &SExpr) -> String {
                             i += 2;
                             continue;
                         }
+                        "en2" => {
+                            let mut next_options = FormatingOptions::default();
+                            next_options.indent_elements = Some(options.all_indent() + 2);
+                            res += &pretty_string(next_options, &sexprs[i + 1]);
+                            if i + 1 < end - 1 {
+                                res += " ";
+                            }
+                            i += 2;
+                            continue;
+                        }
+                        "en3" => {
+                            let mut next_options = FormatingOptions::default();
+                            next_options.indent_elements = Some(options.all_indent() + 3);
+                            res += &pretty_string(next_options, &sexprs[i + 1]);
+                            if i + 1 < end - 1 {
+                                res += " ";
+                            }
+                            i += 2;
+                            continue;
+                        }
                         "n" => {
                             let mut next_options = FormatingOptions::default();
                             next_options.indent = options.all_indent() + 1;

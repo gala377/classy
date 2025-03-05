@@ -6,7 +6,7 @@ methods for Foo {
     foo: (std::Int, std::String) -> std::Int
     foo (z, y) { 
         let x = 1
-        1
+        return z
     }
 }
 
@@ -16,5 +16,4 @@ main {
         bar: 2 
     }
     foo.foo(1, "hello")
-    ()
 }

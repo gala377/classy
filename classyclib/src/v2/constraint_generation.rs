@@ -284,7 +284,12 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                     .clone()
             });
         let ret_type = self.infer_expr(&body);
-        self.add_constraint(Constraint::Eq(ret_type, self.function_return_type.clone()));
+        match &self.function_return_type {
+            Type::Unit => {}
+            t => {
+                self.add_constraint(Constraint::Eq(ret_type, t.clone()));
+            }
+        }
     }
 
     pub fn infer_expr(&mut self, ast::Expr { id, kind }: &ast::Expr) -> Type {
@@ -554,7 +559,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
             ast::ExprKind::Return(expr) => {
                 let expr_ty = self.infer_expr(expr);
                 self.add_constraint(Constraint::Eq(expr_ty, self.function_return_type.clone()));
-                Type::Unit
+                Type::Divergent
             }
             ast::ExprKind::If {
                 cond,

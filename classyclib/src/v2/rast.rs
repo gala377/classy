@@ -776,14 +776,14 @@ impl ToSExpr for ExprKind {
                 implicit_args,
                 resolution,
             } => sexpr!((
-                call &n (with $receiver) &n #method resolved to $resolution &n2 args &en $args
+                call &n (with $receiver) &n #method resolved to $resolution &n2 args &en3 $args
             )),
             ExprKind::Call {
                 callee,
                 args,
                 implicit_args,
                 resolution,
-            } => sexpr!((call $callee[$resolution] &n @args)),
+            } => sexpr!((call $callee[$resolution] &n2 args &en3 $args)),
             ExprKind::Name { symbol, resolved } => sexpr!((name #symbol[$resolved])),
             ExprKind::Access {
                 val,
