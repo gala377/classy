@@ -62,6 +62,8 @@ pub enum TokenType {
     Import,
     #[token("export")]
     Export,
+    #[token("new")]
+    New,
 
     // Literals
     #[regex(r"[_a-zA-Z][_a-zA-Z0-9]*", |lex| lex.slice().to_owned())]
@@ -152,7 +154,7 @@ lazy_static! {
             // Grouping
             LBrace, LBracket, LParen,
             // Keywords
-            Class, Where, End, Struct, Do, Else,
+            Class, Where, End, Struct, Do, Else, New,
 
             Attribute("a".to_owned()),
         ];

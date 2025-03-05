@@ -623,8 +623,27 @@ impl<'source> Parser<'source> {
             TokenType::Return => self.parse_return(),
             TokenType::Let => self.parse_let(),
             TokenType::Type => self.parse_type_expr(),
+            TokenType::New => self.parse_struct_literal(),
             _ => self.parse_assignment(),
         }
+    }
+
+    fn parse_struct_literal(&mut self) -> ParseRes<ast::Expr> {
+        self.match_token(TokenType::New)?;
+        let name = self.parse_name()?;
+        self.expect_token(TokenType::LBrace)?;
+        let field_parser = |parser: &mut Self| -> ParseRes<(String, ast::Expr)> {
+            let name = parser.parse_identifier()?;
+            parser.expect_token(TokenType::Colon)?;
+            let value = parser.parse_expr()?;
+            Ok((name, value))
+        };
+        let fields = self.parse_delimited(field_parser, TokenType::Semicolon);
+        self.expect_token(TokenType::RBrace)?;
+        Ok(mk_expr(ast::ExprKind::StructLiteral {
+            strct: name,
+            values: fields.into_iter().collect(),
+        }))
     }
 
     fn parse_assignment(&mut self) -> ParseRes<ast::Expr> {

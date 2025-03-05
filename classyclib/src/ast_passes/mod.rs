@@ -12,6 +12,7 @@ pub mod import_prelude;
 pub mod move_const_init;
 pub mod promote_local_types;
 pub mod resolve_names;
+pub mod resolve_struct_literal_names;
 pub mod verify_lvalues;
 
 pub trait AstPass {
@@ -39,11 +40,12 @@ pub fn run_after_parsing_passes(ast: ast::SourceFile, session: &Session) -> ast:
 
 pub fn run_after_db_creation_passes(
     ast: ast::SourceFile,
-    db: &Database,
-    session: &Session,
+    _db: &Database,
+    _session: &Session,
 ) -> ast::SourceFile {
-    let ast = func_to_struct_literal_db::PromoteCallToStructLiteral::new(db).run(ast, session);
-    let ast = resolve_names::NameResolver::new(db).run(ast, session);
+    // let ast = func_to_struct_literal_db::PromoteCallToStructLiteral::new(db).
+    // run(ast, session); let ast = resolve_names::NameResolver::new(db).
+    // run(ast, session);
     ast
 }
 

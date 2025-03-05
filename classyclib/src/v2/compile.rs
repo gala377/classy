@@ -116,8 +116,8 @@ impl Compiler {
         // can go anywhere before typechecking
         println!("🦀Populating primitive types");
         self.populate_primitive_types();
-        println!("🦀After database creation passes");
-        self.after_database_creation_passes();
+        println!("🦀Fold database");
+        self.fold_database();
         println!("🦀Typechecking");
         let typechecking_result = self.typecheck();
         println!("🦀Building RAST");
@@ -125,6 +125,7 @@ impl Compiler {
             &self.database,
             &typechecking_result.expr_types,
             &typechecking_result.call_resolutions,
+            &typechecking_result.name_resolutions,
         );
         println!("{:#?}", rast);
         //render::render_db(&self.database, "./render");
@@ -133,6 +134,16 @@ impl Compiler {
         // create resolved syntax tree for function and methods calls
         // do more lowering later.
         Ok(())
+    }
+
+    pub fn fold_database(&mut self) {
+        let commit = {
+            let resolver = ast_passes::resolve_struct_literal_names::ResolveStructLiteralNames::new(
+                &self.database,
+            );
+            self.database.fold_program(resolver)
+        };
+        commit(&mut self.database);
     }
 
     pub fn typecheck(&mut self) -> TypecheckingResult {
@@ -155,6 +166,7 @@ impl Compiler {
         let mut call_resolutions = HashMap::new();
         let mut substitutions = HashMap::new();
         let mut expr_types = HashMap::<ExprId, Type>::new();
+        let mut name_resolutions = HashMap::<ExprId, ast::Name>::new();
         println!("🐍Typechecking functions");
         for func in funcs {
             let mut inferer = constraint_generation::Inferer::for_function(
@@ -164,6 +176,12 @@ impl Compiler {
             );
             inferer.infer_function_body();
             expr_types.extend(inferer.expr_types.iter().map(|(k, v)| (*k, v.clone())));
+            name_resolutions.extend(
+                inferer
+                    .trivial_name_resolutions
+                    .iter()
+                    .map(|(k, v)| (*k, v.clone())),
+            );
             let mut solver = inferer.into_constraint_solver();
             solver.solve();
             call_resolutions.extend(solver.call_resolutions);
@@ -182,6 +200,7 @@ impl Compiler {
         TypecheckingResult {
             expr_types,
             call_resolutions,
+            name_resolutions,
         }
     }
 
@@ -219,12 +238,16 @@ impl Compiler {
         }
     }
 
-    pub fn after_database_creation_passes(&mut self) {
+    pub fn after_types_exist_passes(&mut self) {
         //! TODO
         // We need to promoto some function calls to struct literals
         // We can ignore the name resolutions and delay them to the typechecking
         // phase. Some of the names can be resolved during constraint
         // generation some have to be delayed to constraint solving.
+        for (_, ast) in &mut self.package_ast {
+            *ast =
+                ast_passes::run_after_db_creation_passes(ast.clone(), &self.database, &self.session)
+        }
     }
 
     /// Add all defintions from the parsed AST to the database.
@@ -299,6 +322,7 @@ impl Compiler {
 pub struct TypecheckingResult {
     expr_types: HashMap<ExprId, Type>,
     call_resolutions: HashMap<usize, CallResolution>,
+    name_resolutions: HashMap<ExprId, ast::Name>,
 }
 
 struct FreshTypeSubstitutor {

@@ -266,7 +266,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
     pub fn infer_function_body(&mut self) {
         println!("All function defnitions");
         for (id, def) in self.database.function_definitions.iter() {
-            println!("{id:?}: {def:?}\n\n\n");
+            println!("{id:?}: {def:#?}\n\n\n");
         }
         println!("Function id {:?}", self.function_def_id);
         let id = self.function_def_id.as_local().unwrap();
@@ -293,7 +293,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                 .iter()
                 .map(|expr| self.infer_expr(expr))
                 .last()
-                .unwrap(),
+                .expect(&format!("Expected sequence to not be empty {:?}", exprs)),
             ast::ExprKind::Assignment { lval, rval } => {
                 let lval_ty = self.infer_expr(lval);
                 let rval_ty = self.infer_expr(rval);

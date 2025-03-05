@@ -8,7 +8,8 @@ use std::{
 
 use thiserror::Error;
 
-use classy_syntax::ast::{self, FunctionDefinition, Name};
+use classy_syntax::ast::{self, FunctionDefinition, Method, Name};
+use tracing_subscriber::registry::Data;
 
 use crate::{
     id_provider::UniqueId,
@@ -16,6 +17,10 @@ use crate::{
     typecheck::{ast_to_type::PrefexScope, types::DeBruijn},
     v2::{instance::UnificationError, ty::Type},
 };
+
+pub trait DatabaseFolder: ast::Folder {
+    fn process_definition(&mut self, id: LocalId<DefinitionId>);
+}
 
 #[derive(Debug, Clone)]
 pub struct GenericConstraint {
@@ -462,6 +467,96 @@ impl Database {
             file_info: Default::default(),
             definitions: Default::default(),
             primitive_types: Default::default(),
+        }
+    }
+
+    pub fn fold_program(
+        &self,
+        mut folder: impl DatabaseFolder,
+    ) -> impl FnOnce(&mut Database) + 'static {
+        let variable_definitions = self.variable_definitions.clone();
+        let variable_definitions = variable_definitions
+            .into_iter()
+            .map(|(k, v)| {
+                (k, {
+                    folder.process_definition(k);
+                    folder.fold_const_definition(v)
+                })
+            })
+            .collect::<HashMap<_, _>>();
+        let function_definitions = self.function_definitions.clone();
+        let function_definitions = function_definitions
+            .into_iter()
+            .map(|(k, v)| {
+                (k, {
+                    folder.process_definition(k);
+                    folder.fold_function_definition(v)
+                })
+            })
+            .collect::<HashMap<_, _>>();
+        let type_definitions = self.type_definitions.clone();
+        let type_definitions = type_definitions
+            .into_iter()
+            .map(|(k, v)| {
+                (k, {
+                    folder.process_definition(k);
+                    folder.fold_type_definition(v)
+                })
+            })
+            .collect::<HashMap<_, _>>();
+        let instance_definitions = self.instance_definitions.clone();
+        let instance_definitions = instance_definitions
+            .into_iter()
+            .map(|(k, v)| {
+                (k, {
+                    folder.process_definition(k);
+                    folder.fold_instance_definition(v)
+                })
+            })
+            .collect::<HashMap<_, _>>();
+        let class_definitions = self.class_definitions.clone();
+        let class_definitions = class_definitions
+            .into_iter()
+            .map(|(k, v)| {
+                (k, {
+                    folder.process_definition(k);
+                    folder.fold_class_definition(v)
+                })
+            })
+            .collect::<HashMap<_, _>>();
+        let method_block_defnitions = self.method_blocks_definitions.clone();
+        let method_block_definitions = method_block_defnitions
+            .into_iter()
+            .map(|(k, v)| {
+                (k, {
+                    folder.process_definition(k);
+                    folder.fold_methods_block(v)
+                })
+            })
+            .collect::<HashMap<_, _>>();
+        let method_definitions = self.method_definitions.clone();
+        let method_definitions = method_definitions
+            .into_iter()
+            .map(|(k, v)| {
+                (k, {
+                    folder.process_definition(k);
+                    folder
+                        .fold_method_definition(Method {
+                            id: k.0 .0,
+                            item: v,
+                        })
+                        .item
+                })
+            })
+            .collect::<HashMap<_, _>>();
+        move |this| {
+            this.variable_definitions = variable_definitions;
+            this.class_definitions = class_definitions;
+            this.function_definitions = function_definitions;
+            this.method_blocks_definitions = method_block_definitions;
+            this.method_definitions = method_definitions;
+            this.type_definitions = type_definitions;
+            this.instance_definitions = instance_definitions;
         }
     }
 

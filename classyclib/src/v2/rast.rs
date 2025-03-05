@@ -84,7 +84,6 @@ pub enum ExprKind {
     },
     Let {
         name: String,
-        typ: Type,
         init: Box<Expr>,
     },
     If {
@@ -122,13 +121,16 @@ pub enum ExprKind {
         def: Id<DefinitionId>,
         args: Vec<Expr>,
     },
-    // todo! and so on
+    Return {
+        expr: Box<Expr>,
+    }, // todo! and so on
 }
 
 pub fn build_rast(
     database: &Database,
     expr_types: &HashMap<ExprId, Type>,
     call_resolutions: &HashMap<usize, CallResolution>,
+    name_resolutions: &HashMap<ExprId, ast::Name>,
 ) -> RastTree {
     let all_functions = database
         .function_definitions
@@ -163,6 +165,7 @@ pub fn build_rast(
             database,
             expr_types,
             call_resolutions: &call_resolutions,
+            name_resolutions,
             is_method,
         };
         println!("Building RAST for {:?}, body is {:#?}", id, body);
@@ -172,14 +175,15 @@ pub fn build_rast(
     RastTree { bodies }
 }
 
-pub struct RastBuilder<'database, 'expr_types, 'call_resolutions> {
+pub struct RastBuilder<'database, 'expr_types, 'call_resolutions, 'name_resolutions> {
     database: &'database Database,
     expr_types: &'expr_types HashMap<ExprId, Type>,
     call_resolutions: &'call_resolutions HashMap<ExprId, CallResolution>,
+    name_resolutions: &'name_resolutions HashMap<ExprId, ast::Name>,
     is_method: bool,
 }
 
-impl AstExprTransformer for RastBuilder<'_, '_, '_> {
+impl AstExprTransformer for RastBuilder<'_, '_, '_, '_> {
     type Expr = Expr;
     type ExprKind = ExprKind;
     type Pattern = ();
@@ -243,6 +247,82 @@ impl AstExprTransformer for RastBuilder<'_, '_, '_> {
                     }
                 };
                 todo!()
+            }
+            ast::ExprKind::StructLiteral { strct, values } => {
+                let resolved = match strct {
+                    ast::Name::Global {
+                        package,
+                        definition,
+                    } => Id {
+                        package: PackageId(package),
+                        id: DefinitionId(definition),
+                    },
+                    ast::Name::Local(_) => panic!("Struct name should never be local"),
+                    ast::Name::Unresolved { .. } => match self.name_resolutions.get(&ExprId(id)) {
+                        Some(ast::Name::Global {
+                            package,
+                            definition,
+                        }) => Id {
+                            package: PackageId(*package),
+                            id: DefinitionId(*definition),
+                        },
+                        other => {
+                            panic!("Unexpected invalid struct name {other:?}")
+                        }
+                    },
+                };
+                ExprKind::StructLiteral {
+                    def: resolved,
+                    fields: values
+                        .into_iter()
+                        .map(|(key, value)| (key, self.transform_expr(value)))
+                        .collect(),
+                }
+            }
+            ast::ExprKind::Name(name) => {
+                let (resolved, symbol) = match name {
+                    ast::Name::Local(name) if name == "this" && self.is_method => {
+                        return Expr {
+                            id: ExprId(id),
+                            kind: ExprKind::This,
+                            ty: typ,
+                        };
+                    }
+                    ast::Name::Local(name) => (ResolvedName::Local(name.clone()), name),
+                    ast::Name::Global {
+                        package,
+                        definition,
+                    } => {
+                        let package = PackageId(package);
+                        let id = Id {
+                            package,
+                            id: DefinitionId(definition),
+                        };
+                        let name = self.database.get_definition_map(id, |def| def.name.clone());
+                        (ResolvedName::Global(id), name.unwrap())
+                    }
+                    ast::Name::Unresolved { path, identifier } => {
+                        match self.name_resolutions.get(&ExprId(id)) {
+                            Some(ast::Name::Local(name)) => {
+                                (ResolvedName::Local(name.clone()), name.clone())
+                            }
+                            Some(ast::Name::Global {
+                                package,
+                                definition,
+                            }) => (
+                                ResolvedName::Global(Id {
+                                    package: PackageId(*package),
+                                    id: DefinitionId(*definition),
+                                }),
+                                identifier.clone(),
+                            ),
+                            _ => {
+                                panic!("After all could not resolve name {path:?}::{identifier}")
+                            }
+                        }
+                    }
+                };
+                ExprKind::Name { symbol, resolved }
             }
             k => self.transform_expr_kind(k),
         };
@@ -310,35 +390,40 @@ impl AstExprTransformer for RastBuilder<'_, '_, '_> {
 
     fn transform_function_call(
         &mut self,
-        func: ast::Expr,
-        args: Vec<ast::Expr>,
-        kwargs: HashMap<String, ast::Expr>,
+        _func: ast::Expr,
+        _args: Vec<ast::Expr>,
+        _kwargs: HashMap<String, ast::Expr>,
     ) -> Self::ExprKind {
-        todo!()
+        unreachable!("Should be resolved at transform_expr")
     }
 
     fn transform_access(&mut self, val: ast::Expr, field: String) -> Self::ExprKind {
-        todo!()
+        todo!("not yet there")
     }
 
     fn transform_tuple(&mut self, fields: Vec<ast::Expr>) -> Self::ExprKind {
-        todo!()
+        ExprKind::Tuple(fields.into_iter().map(|e| self.transform_expr(e)).collect())
     }
 
     fn transform_lambda(
         &mut self,
-        params: Vec<ast::TypedIdentifier>,
-        body: ast::Expr,
+        _params: Vec<ast::TypedIdentifier>,
+        _body: ast::Expr,
     ) -> Self::ExprKind {
-        todo!()
+        todo!("no lambda support yet")
     }
 
     fn transform_while(&mut self, cond: ast::Expr, body: ast::Expr) -> Self::ExprKind {
-        todo!()
+        ExprKind::While {
+            cond: Box::new(self.transform_expr(cond)),
+            body: Box::new(self.transform_expr(body)),
+        }
     }
 
     fn transform_return(&mut self, expr: ast::Expr) -> Self::ExprKind {
-        todo!()
+        ExprKind::Return {
+            expr: Box::new(self.transform_expr(expr)),
+        }
     }
 
     fn transform_if(
@@ -347,15 +432,22 @@ impl AstExprTransformer for RastBuilder<'_, '_, '_> {
         body: ast::Expr,
         else_body: Option<ast::Expr>,
     ) -> Self::ExprKind {
-        todo!()
+        ExprKind::If {
+            cond: Box::new(self.transform_expr(cond)),
+            then: Box::new(self.transform_expr(body)),
+            else_body: else_body.map(|expr| Box::new(self.transform_expr(expr))),
+        }
     }
 
-    fn transform_let(&mut self, name: String, typ: ast::Typ, init: ast::Expr) -> Self::ExprKind {
-        todo!()
+    fn transform_let(&mut self, name: String, _typ: ast::Typ, init: ast::Expr) -> Self::ExprKind {
+        ExprKind::Let {
+            name,
+            init: Box::new(self.transform_expr(init)),
+        }
     }
 
     fn transform_typed_expr(&mut self, expr: ast::Expr, typ: ast::Typ) -> Self::ExprKind {
-        todo!()
+        todo!("not supporter yet")
     }
 
     fn transform_struct_literal(
@@ -363,20 +455,45 @@ impl AstExprTransformer for RastBuilder<'_, '_, '_> {
         strct: ast::Name,
         values: HashMap<String, ast::Expr>,
     ) -> Self::ExprKind {
-        todo!()
+        let resolved = match strct {
+            ast::Name::Global {
+                package,
+                definition,
+            } => Id {
+                package: PackageId(package),
+                id: DefinitionId(definition),
+            },
+            ast::Name::Local(_) => panic!("Struct name should never be local"),
+            ast::Name::Unresolved { path, identifier } => {
+                panic!("Unresolved name: {path:?}::{identifier:?}")
+            }
+        };
+        ExprKind::StructLiteral {
+            def: resolved,
+            fields: values
+                .into_iter()
+                .map(|(key, value)| (key, self.transform_expr(value)))
+                .collect(),
+        }
     }
 
     fn transform_bool_const(&mut self, val: bool) -> Self::ExprKind {
-        todo!()
+        ExprKind::BoolConst(val)
     }
 
     fn transform_array_literal(
         &mut self,
-        typ: ast::Typ,
+        _typ: ast::Typ,
         size: ast::Expr,
         init: Vec<ast::Expr>,
     ) -> Self::ExprKind {
-        todo!()
+        ExprKind::ArrayLiteral {
+            size: Box::new(self.transform_expr(size)),
+            init: init
+                .into_iter()
+                .map(|expr| self.transform_expr(expr))
+                .collect(),
+        }
     }
 
     fn transform_index_access(&mut self, lhs: ast::Expr, index: ast::Expr) -> Self::ExprKind {
