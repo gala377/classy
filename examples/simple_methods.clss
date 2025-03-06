@@ -2,12 +2,43 @@ type Foo {
     bar: std::Int
 }
 
+class Bar(a) {
+    methods for a {
+        baz: () -> a
+    }
+}
+
+instance for Bar(Foo) {
+    methods for Foo {
+        baz: () -> Foo
+        baz {
+            foo(1, "a")
+            new Foo { bar: 1 }
+        }
+    }
+}
+
 methods for Foo {
     foo: (std::Int, std::String) -> std::Int
     foo (z, y) { 
         let x = 1
         return z
     }
+
+    test: () -> ()
+    test {
+        this.baz()
+        foo(1, "hello")
+    }
+}
+
+test: { Bar(a) } => (a) -> ()
+test val {
+    return ()
+}
+
+type Test {
+    foo: std::String
 }
 
 main: () -> ()
@@ -16,4 +47,8 @@ main {
         bar: 2 
     }
     foo.foo(1, "hello")
+    foo.baz()
+    let t = new Test { foo: "a" }
+    test foo
+    test t
 }

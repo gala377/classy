@@ -380,6 +380,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                 args,
                 kwargs: _,
             } if path.is_empty() && self.receiver.is_some() => {
+                println!("AAAAA Possible method is triggered?");
                 // possibly a method call
                 let arg_tys = args.iter().map(|arg| self.infer_expr(arg)).collect();
                 let ret_ty = self.new_fresh_type();
@@ -400,6 +401,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                 args,
                 kwargs: _,
             } => {
+                println!("AAAAA This one has been triggered");
                 let func_ty = self.infer_expr(func);
                 let arg_tys = args.iter().map(|arg| self.infer_expr(arg)).collect();
                 let ret_ty = self.new_fresh_type();

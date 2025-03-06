@@ -5,13 +5,20 @@ use std::collections::HashMap;
 
 use classy_sexpr::{SExpr, ToSExpr};
 use classy_sexpr_proc_macro::sexpr;
-use classy_syntax::ast::{self, transformer::AstExprTransformer, FunctionDefinition};
+use classy_syntax::ast::{self, transformer::AstExprTransformer};
+
+use crate::{
+    scope::{FlatScope, FlatScopeExt},
+    typecheck::ast_to_type::PrefexScope,
+    v2::knowledge::{InstanceInfo, MethodBlockInfo},
+};
 
 use super::{
     constraint_generation::ExprId,
     constraint_solver::CallResolution,
     knowledge::{
-        Database, DefinitionId, DefinitionKind, Id, LocalId, PackageId, TypeId, CURRENT_PACKAGE_ID,
+        Database, DefinitionId, DefinitionKind, GenericConstraint, Id, LocalId, PackageId, TypeId,
+        CURRENT_PACKAGE_ID,
     },
     ty::Type,
 };
@@ -25,6 +32,11 @@ pub struct RastTree {
 pub enum ResolvedName {
     Local(String),
     Global(Id<DefinitionId>),
+}
+
+pub enum ResolvedNameOrThis {
+    Resolved(ResolvedName),
+    This,
 }
 
 #[derive(Clone, Debug)]
@@ -163,12 +175,18 @@ pub fn build_rast(
             database.get_definition_map(id.as_global(CURRENT_PACKAGE_ID), |def| def.kind.clone()),
             Some(DefinitionKind::Method(_))
         );
+        let as_global = id.as_global(CURRENT_PACKAGE_ID);
+        let mut constraints = FlatScope::new();
+        let mut prefex_scope = PrefexScope::without_scope();
+        let this_type = gather(database, as_global, &mut constraints, &mut prefex_scope);
+        // resolve type of this
         let mut builder = RastBuilder {
             database,
             expr_types,
             call_resolutions: &call_resolutions,
             name_resolutions,
             is_method,
+            this_type,
         };
         println!("Building RAST for {:?}, body is {:#?}", id, body);
         let body = builder.transform_expr(body);
@@ -183,6 +201,56 @@ pub struct RastBuilder<'database, 'expr_types, 'call_resolutions, 'name_resoluti
     call_resolutions: &'call_resolutions HashMap<ExprId, CallResolution>,
     name_resolutions: &'name_resolutions HashMap<ExprId, ast::Name>,
     is_method: bool,
+    this_type: Option<Id<TypeId>>,
+}
+
+impl RastBuilder<'_, '_, '_, '_> {
+    fn receiver_type(&self) -> Option<Type> {
+        self.this_type
+            .map(|t| self.database.resolve_alias_to_type(t).unwrap())
+    }
+
+    fn resolve_name(&self, name: &ast::Name, id: usize) -> ResolvedNameOrThis {
+        match name {
+            ast::Name::Local(name) if name == "this" && self.this_type.is_some() => {
+                ResolvedNameOrThis::This
+            }
+            ast::Name::Local(name) => {
+                ResolvedNameOrThis::Resolved(ResolvedName::Local(name.clone()))
+            }
+            ast::Name::Global {
+                package,
+                definition,
+            } => {
+                let package = PackageId(*package);
+                let id = Id {
+                    package,
+                    id: DefinitionId(*definition),
+                };
+                ResolvedNameOrThis::Resolved(ResolvedName::Global(id))
+            }
+            ast::Name::Unresolved { path, identifier } => {
+                if path.is_empty() && identifier == "this" && self.this_type.is_some() {
+                    return ResolvedNameOrThis::This;
+                }
+                match self.name_resolutions.get(&ExprId(id)) {
+                    Some(ast::Name::Local(name)) => {
+                        ResolvedNameOrThis::Resolved(ResolvedName::Local(name.clone()))
+                    }
+                    Some(ast::Name::Global {
+                        package,
+                        definition,
+                    }) => ResolvedNameOrThis::Resolved(ResolvedName::Global(Id {
+                        package: PackageId(*package),
+                        id: DefinitionId(*definition),
+                    })),
+                    _ => {
+                        panic!("After all could not resolve name {path:?}::{identifier}")
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl AstExprTransformer for RastBuilder<'_, '_, '_, '_> {
@@ -224,30 +292,118 @@ impl AstExprTransformer for RastBuilder<'_, '_, '_, '_> {
                 }
             }
             ast::ExprKind::FunctionCall { func, args, kwargs } => {
-                // TODO: Could be a method call, depends on the resolution.
                 let resolution = self.call_resolutions.get(&ExprId(id)).clone();
-                let kind: ExprKind = match resolution {
+                match resolution {
                     // If its a method call we need to call transform_method passing this as
                     // the receiver
                     // Otherwise its just a function call. It does not need to be static btw.
                     // Could be just a name. In this case idk, i guess call resolution is empty.
-                    Some(CallResolution::StaticMethod(_)) => todo!(),
+                    Some(CallResolution::StaticMethod(resolution)) => {
+                        let receiver_t = self.receiver_type().unwrap();
+                        let receiver = Expr {
+                            kind: ExprKind::This,
+                            ty: receiver_t,
+                            // dummy id, hope its not used anywhere
+                            id: ExprId(usize::MAX),
+                        };
+                        let method = self
+                            .database
+                            .get_definition_map(*resolution, |def| def.name.clone())
+                            .unwrap();
+                        ExprKind::MethodCall {
+                            receiver: Box::new(receiver),
+                            method,
+                            args: args
+                                .into_iter()
+                                .map(|expr| self.transform_expr(expr))
+                                .collect(),
+                            implicit_args: Vec::new(),
+                            resolution: CallResolution::StaticMethod(*resolution),
+                        }
+                    }
                     Some(CallResolution::FromInstanceInScope {
                         instance_index,
                         method_def,
-                    }) => todo!(),
-                    Some(CallResolution::StaticFunction(_)) => todo!(),
-                    Some(CallResolution::Unresolved) => panic!("Call is unresolved"),
-                    None => {
-                        assert!(
-                            matches!(func.kind, ast::ExprKind::Name(ast::Name::Local(_))),
-                            "Kind: {:?}, Resolution: {:?}",
-                            func.kind,
-                            &self.call_resolutions
-                        );
-                        todo!("call resolution does not exist, so this should a call to a local")
+                    }) => {
+                        let receiver_t = self.receiver_type().unwrap();
+                        let receiver = Expr {
+                            kind: ExprKind::This,
+                            ty: receiver_t,
+                            // dummy id, hope its not used anywhere
+                            id: ExprId(usize::MAX),
+                        };
+                        let method = self
+                            .database
+                            .get_definition_map(*method_def, |def| def.name.clone())
+                            .unwrap();
+                        ExprKind::MethodCall {
+                            receiver: Box::new(receiver),
+                            method,
+                            args: args
+                                .into_iter()
+                                .map(|expr| self.transform_expr(expr))
+                                .collect(),
+                            implicit_args: Vec::new(),
+                            resolution: CallResolution::FromInstanceInScope {
+                                instance_index: *instance_index,
+                                method_def: *method_def,
+                            },
+                        }
                     }
-                };
+                    Some(CallResolution::StaticFunction(id)) => {
+                        let ExprKind::Call {
+                            callee,
+                            args,
+                            implicit_args,
+                            ..
+                        } = self.transform_function_call(*func, args, kwargs)
+                        else {
+                            unreachable!("not possible");
+                        };
+                        ExprKind::Call {
+                            callee,
+                            args,
+                            implicit_args,
+                            resolution: CallResolution::StaticFunction(*id),
+                        }
+                    }
+                    Some(CallResolution::Unresolved) => {
+                        panic!(
+                            "Call is unresolved. This should not happen. If anything the \
+                             resolution should be None for function calls"
+                        );
+                    }
+                    None => match self.name_resolutions.get(&ExprId(func.id)) {
+                        // Possibly just a name that has been resolved
+                        Some(name) => {
+                            if let ResolvedNameOrThis::Resolved(ResolvedName::Global(id)) =
+                                self.resolve_name(name, func.id)
+                            {
+                                let ExprKind::Call {
+                                    callee,
+                                    args,
+                                    implicit_args,
+                                    ..
+                                } = self.transform_function_call(*func, args, kwargs)
+                                else {
+                                    unreachable!("not possible");
+                                };
+                                ExprKind::Call {
+                                    callee,
+                                    args,
+                                    implicit_args,
+                                    resolution: CallResolution::StaticFunction(id),
+                                }
+                            } else {
+                                self.transform_function_call(*func, args, kwargs)
+                            }
+                        }
+                        None => {
+                            // in this case the lhs is an expression that does not have resolution
+                            self.transform_function_call(*func, args, kwargs)
+                        }
+                    },
+                }
             }
             ast::ExprKind::StructLiteral { strct, values } => {
                 let resolved = match strct {
@@ -281,47 +437,22 @@ impl AstExprTransformer for RastBuilder<'_, '_, '_, '_> {
                 }
             }
             ast::ExprKind::Name(name) => {
-                let (resolved, symbol) = match name {
-                    ast::Name::Local(name) if name == "this" && self.is_method => {
+                let resolved = match self.resolve_name(&name, id) {
+                    ResolvedNameOrThis::Resolved(resolved) => resolved,
+                    ResolvedNameOrThis::This => {
                         return Expr {
                             id: ExprId(id),
                             kind: ExprKind::This,
-                            ty: typ,
+                            ty: self.receiver_type().unwrap(),
                         };
                     }
-                    ast::Name::Local(name) => (ResolvedName::Local(name.clone()), name),
-                    ast::Name::Global {
-                        package,
-                        definition,
-                    } => {
-                        let package = PackageId(package);
-                        let id = Id {
-                            package,
-                            id: DefinitionId(definition),
-                        };
-                        let name = self.database.get_definition_map(id, |def| def.name.clone());
-                        (ResolvedName::Global(id), name.unwrap())
-                    }
-                    ast::Name::Unresolved { path, identifier } => {
-                        match self.name_resolutions.get(&ExprId(id)) {
-                            Some(ast::Name::Local(name)) => {
-                                (ResolvedName::Local(name.clone()), name.clone())
-                            }
-                            Some(ast::Name::Global {
-                                package,
-                                definition,
-                            }) => (
-                                ResolvedName::Global(Id {
-                                    package: PackageId(*package),
-                                    id: DefinitionId(*definition),
-                                }),
-                                identifier.clone(),
-                            ),
-                            _ => {
-                                panic!("After all could not resolve name {path:?}::{identifier}")
-                            }
-                        }
-                    }
+                };
+                let symbol = match &resolved {
+                    ResolvedName::Local(name) => name.clone(),
+                    ResolvedName::Global(id) => self
+                        .database
+                        .get_definition_map(*id, |def| def.name.clone())
+                        .unwrap(),
                 };
                 ExprKind::Name { symbol, resolved }
             }
@@ -349,29 +480,31 @@ impl AstExprTransformer for RastBuilder<'_, '_, '_, '_> {
         ExprKind::FloatConst(val)
     }
 
-    fn transform_name(&mut self, name: ast::Name) -> Self::ExprKind {
-        let (resolved, symbol) = match name {
-            ast::Name::Local(name) if name == "this" && self.is_method => {
-                return ExprKind::This;
-            }
-            ast::Name::Local(name) => (ResolvedName::Local(name.clone()), name),
-            ast::Name::Global {
-                package,
-                definition,
-            } => {
-                let package = PackageId(package);
-                let id = Id {
-                    package,
-                    id: DefinitionId(definition),
-                };
-                let name = self.database.get_definition_map(id, |def| def.name.clone());
-                (ResolvedName::Global(id), name.unwrap())
-            }
-            ast::Name::Unresolved { path, identifier } => {
-                panic!("Unresolved name: {path:?}::{identifier:?}")
-            }
-        };
-        ExprKind::Name { symbol, resolved }
+    fn transform_name(&mut self, _name: ast::Name) -> Self::ExprKind {
+        // let (resolved, symbol) = match name {
+        //     ast::Name::Local(name) if name == "this" && self.is_method => {
+        //         return ExprKind::This;
+        //     }
+        //     ast::Name::Local(name) => (ResolvedName::Local(name.clone()), name),
+        //     ast::Name::Global {
+        //         package,
+        //         definition,
+        //     } => {
+        //         let package = PackageId(package);
+        //         let id = Id {
+        //             package,
+        //             id: DefinitionId(definition),
+        //         };
+        //         let name = self.database.get_definition_map(id, |def|
+        // def.name.clone());         (ResolvedName::Global(id), name.unwrap())
+        //     }
+        //     ast::Name::Unresolved { path, identifier } => {
+        //         // We should have id here, and get trivial resolutions
+        //         panic!("Unresolved name: {path:?}::{identifier:?}")
+        //     }
+        // };
+        // ExprKind::Name { symbol, resolved }
+        unreachable!("Resolved at transform_expression")
     }
 
     fn transform_sequence(&mut self, seq: Vec<ast::Expr>) -> Self::ExprKind {
@@ -387,15 +520,6 @@ impl AstExprTransformer for RastBuilder<'_, '_, '_, '_> {
             lhs: Box::new(self.transform_expr(lval)),
             rhs: Box::new(self.transform_expr(rval)),
         }
-    }
-
-    fn transform_function_call(
-        &mut self,
-        _func: ast::Expr,
-        _args: Vec<ast::Expr>,
-        _kwargs: HashMap<String, ast::Expr>,
-    ) -> Self::ExprKind {
-        unreachable!("Should be resolved at transform_expr")
     }
 
     fn transform_access(&mut self, val: ast::Expr, field: String) -> Self::ExprKind {
@@ -453,29 +577,30 @@ impl AstExprTransformer for RastBuilder<'_, '_, '_, '_> {
 
     fn transform_struct_literal(
         &mut self,
-        strct: ast::Name,
-        values: HashMap<String, ast::Expr>,
+        _strct: ast::Name,
+        _values: HashMap<String, ast::Expr>,
     ) -> Self::ExprKind {
-        let resolved = match strct {
-            ast::Name::Global {
-                package,
-                definition,
-            } => Id {
-                package: PackageId(package),
-                id: DefinitionId(definition),
-            },
-            ast::Name::Local(_) => panic!("Struct name should never be local"),
-            ast::Name::Unresolved { path, identifier } => {
-                panic!("Unresolved name: {path:?}::{identifier:?}")
-            }
-        };
-        ExprKind::StructLiteral {
-            def: resolved,
-            fields: values
-                .into_iter()
-                .map(|(key, value)| (key, self.transform_expr(value)))
-                .collect(),
-        }
+        // let resolved = match strct {
+        //     ast::Name::Global {
+        //         package,
+        //         definition,
+        //     } => Id {
+        //         package: PackageId(package),
+        //         id: DefinitionId(definition),
+        //     },
+        //     ast::Name::Local(_) => panic!("Struct name should never be local"),
+        //     ast::Name::Unresolved { path, identifier } => {
+        //         panic!("Unresolved name: {path:?}::{identifier:?}")
+        //     }
+        // };
+        // ExprKind::StructLiteral {
+        //     def: resolved,
+        //     fields: values
+        //         .into_iter()
+        //         .map(|(key, value)| (key, self.transform_expr(value)))
+        //         .collect(),
+        // }
+        unreachable!("Resolved ad transform_expr")
     }
 
     fn transform_bool_const(&mut self, val: bool) -> Self::ExprKind {
@@ -514,6 +639,23 @@ impl AstExprTransformer for RastBuilder<'_, '_, '_, '_> {
         ExprKind::MethodCall {
             receiver: Box::new(self.transform_expr(receiver)),
             method,
+            args: args
+                .into_iter()
+                .map(|expr| self.transform_expr(expr))
+                .collect(),
+            implicit_args: Vec::new(),
+            resolution: CallResolution::Unresolved,
+        }
+    }
+
+    fn transform_function_call(
+        &mut self,
+        func: ast::Expr,
+        args: Vec<ast::Expr>,
+        _kwargs: HashMap<String, ast::Expr>,
+    ) -> Self::ExprKind {
+        ExprKind::Call {
+            callee: Box::new(self.transform_expr(func)),
             args: args
                 .into_iter()
                 .map(|expr| self.transform_expr(expr))
@@ -815,4 +957,62 @@ impl ToSExpr for ExprKind {
             ExprKind::Return { expr } => sexpr!((return $expr)),
         }
     }
+}
+
+fn gather(
+    database: &Database,
+    id: Id<DefinitionId>,
+    constraints: &mut FlatScope<GenericConstraint>,
+    prefex_scope: &mut PrefexScope,
+) -> Option<Id<TypeId>> {
+    let definition = database.get_definition(id).unwrap();
+    let parent = definition.parent;
+    let mut def_receiver = None;
+    if let Some(parent) = parent {
+        def_receiver = gather(
+            database,
+            parent.as_global(id.package),
+            constraints,
+            prefex_scope,
+        );
+    }
+    println!("Looking at definition {id:?} => {}", definition.name);
+    match definition.kind {
+        DefinitionKind::Function(_) | DefinitionKind::Method(_) => {
+            let ty = database.get_definitions_type(id).unwrap();
+            if let Type::Scheme { prefex, .. } = ty {
+                constraints.new_scope();
+                prefex_scope.new_scope();
+                prefex_scope.add_type_vars(&prefex);
+            }
+        }
+        DefinitionKind::MethodBlock(MethodBlockInfo {
+            free_vars,
+            receiver,
+            ..
+        }) => {
+            def_receiver = Some(receiver);
+            if !free_vars.is_empty() {
+                constraints.new_scope();
+                prefex_scope.new_scope();
+                prefex_scope.add_type_vars(&free_vars);
+            }
+        }
+        DefinitionKind::Instance(InstanceInfo { free_vars, .. }) => {
+            if !free_vars.is_empty() {
+                constraints.new_scope();
+                prefex_scope.new_scope();
+                prefex_scope.add_type_vars(&free_vars);
+            }
+        }
+        kind => panic!("Unexpected definition kind: {kind:?}"),
+    }
+    if !definition.constraints.is_empty() {
+        assert!(!constraints.is_empty());
+        constraints
+            .last_scope_mut()
+            .unwrap()
+            .extend_from_slice(&definition.constraints);
+    }
+    def_receiver
 }
