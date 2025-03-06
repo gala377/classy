@@ -31,7 +31,7 @@ methods for Foo {
         foo(1, "hello")
     }
 }
-
+// This doesn't work
 test: { Bar(a) } => (a) -> ()
 test val {
     return ()
@@ -49,6 +49,14 @@ main {
     foo.foo(1, "hello")
     foo.baz()
     let t = new Test { foo: "a" }
+    // Implicit arguments and function/type bounds don't work yet
+    // so this is yet to be done.
+
+    // This should generate implicit arguments for this function
     test foo
+
+    // This should not pass typechecking but it does
     test t
+
+    // But hey, methods are working
 }
