@@ -1,62 +1,82 @@
-type Foo {
-    bar: std::Int
+//type Foo {
+//    bar: std::Int
+//}
+
+//class Bar(a) {
+//    methods for a {
+//        baz: () -> a
+//    }
+//}
+
+type Generic(a) {
+    field: a
 }
 
-class Bar(a) {
-    methods for a {
-        baz: () -> a
-    }
+methods for Generic(a) {
+    method1: (std::Int) -> ()
+    method1 x { () }
 }
 
-instance for Bar(Foo) {
-    methods for Foo {
-        baz: () -> Foo
-        baz {
-            foo(1, "a")
-            new Foo { bar: 1 }
-        }
-    }
+methods for Generic(std::Int) {
+    method2: () -> std::Int
+    method2 { 1 }
 }
 
-methods for Foo {
-    foo: (std::Int, std::String) -> std::Int
-    foo (z, y) { 
-        let x = 1
-        return z
-    }
-
-    test: () -> ()
-    test {
-        this.baz()
-        foo(1, "hello")
-    }
-}
+//instance for Bar(Foo) {
+//    methods for Foo {
+//        baz: () -> Foo
+//        baz {
+//            foo(1, "a")
+//            new Foo { bar: 1 }
+//        }
+ //   }
+//}
+//
+//methods for Foo {
+//    foo: (std::Int, std::String) -> std::Int
+//    foo (z, y) { 
+//        let x = 1
+//        return z
+//    }
+//
+//    test: () -> ()
+//    test {
+//        this.baz()
+//        foo(1, "hello")
+//    }
+//}
 // This doesn't work
-test: { Bar(a) } => (a) -> ()
-test val {
-    return ()
-}
+//test: { Bar(a) } => (a) -> ()
+//test val {
+//    return ()
+//}
 
-type Test {
-    foo: std::String
-}
+//type Test {
+//    foo: std::String
+//}
 
 main: () -> ()
 main {
-    let foo = new Foo { 
-        bar: 2 
-    }
-    foo.foo(1, "hello")
-    foo.baz()
-    let t = new Test { foo: "a" }
+    //let foo = new Foo { 
+    //    bar: 2 
+    //}
+    //foo.foo(1, "hello")
+  //  foo.baz()
+//    let t = new Test { foo: "a" }
     // Implicit arguments and function/type bounds don't work yet
     // so this is yet to be done.
 
     // This should generate implicit arguments for this function
-    test foo
+    //test foo
 
     // This should not pass typechecking but it does
-    test t
+    //test t
 
     // But hey, methods are working
+    let gs = new Generic { field: "hello" }
+    let gi = new Generic { field: 1 }
+    gi.method1(1)
+    gi.method2()
+    gs.method1(1)
+    //gs.method2()
 }

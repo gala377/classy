@@ -336,6 +336,7 @@ impl TypeFolder for FreshTypeSubstitutor {
     type Error = ();
 
     fn fold_fresh(&mut self, id: usize) -> Result<Type, Self::Error> {
+        println!("BBBBB Replacing fresh with id: {:?}", id);
         Ok(self
             .substitutions
             .get(&id)

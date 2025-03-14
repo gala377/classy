@@ -410,19 +410,19 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
             // if not_fully_resolved(receiver) => {
             //    self.delayed.push(c)
             // }
-            Constraint::HasMethod {
-                receiver: Type::App { typ, args },
-                method,
-                of_type,
-                resolution_id,
-            } => {
-                self.constraints.push_back(Constraint::HasMethod {
-                    receiver: instance(self.database, args, *typ),
-                    method,
-                    of_type,
-                    resolution_id,
-                });
-            }
+            // Constraint::HasMethod {
+            //     receiver: Type::App { typ, args },
+            //     method,
+            //     of_type,
+            //     resolution_id,
+            // } => {
+            //     self.constraints.push_back(Constraint::HasMethod {
+            //         receiver: instance(self.database, args, *typ),
+            //         method,
+            //         of_type,
+            //         resolution_id,
+            //     });
+            // }
             Constraint::HasMethod {
                 receiver: Type::Scheme { prefex, typ },
                 method,
@@ -560,6 +560,11 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
                 m
             },
         };
+        self.substitutions = self
+            .substitutions
+            .iter()
+            .map(|(id, t)| (*id, replacer.fold_type(t.clone()).unwrap()))
+            .collect();
 
         for c in self.constraints.iter_mut() {
             *c = match c {

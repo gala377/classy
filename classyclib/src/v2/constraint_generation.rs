@@ -8,6 +8,7 @@ use crate::{
     typecheck::ast_to_type::PrefexScope,
     v2::{
         constraint_solver::ConstraintSolver,
+        instance::instance,
         knowledge::{
             Database, DefinitionId, DefinitionKind, FunctionInfo, GenericConstraint, Id,
             InstanceInfo, MethodBlockInfo, MethodInfo, PackageId, TypeId,
@@ -471,14 +472,21 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
             ast::ExprKind::StructLiteral { strct, values } => {
                 let ret = self.new_fresh_type();
                 let mut strct_t = self.resolve_type_name(strct);
-                self.add_constraint(Constraint::Eq(ret.clone(), strct_t.clone()));
                 if let Type::Alias(for_t) = strct_t {
                     let tid = self.database.resolve_alias(for_t).unwrap();
                     strct_t = self.database.resolve_tid(tid).unwrap();
                 }
-                let Type::Struct { def, fields } = strct_t else {
-                    panic!("Expected struct type, got {strct_t:?}");
-                };
+                if let Type::Scheme { prefex, .. } = &strct_t {
+                    let arguments = (0..prefex.len())
+                        .map(|_| self.new_fresh_type())
+                        .collect::<Vec<_>>();
+                    strct_t = Type::App {
+                        typ: Box::new(strct_t),
+                        args: arguments,
+                    };
+                }
+                self.add_constraint(Constraint::Eq(ret.clone(), strct_t.clone()));
+                let (def, fields) = self.unpack_struct(&strct_t).unwrap();
                 let seen_fields = values.keys().collect::<HashSet<_>>();
                 let actual_fields = fields.iter().map(|(name, _)| name).collect::<HashSet<_>>();
                 if seen_fields != actual_fields {
@@ -712,6 +720,28 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                 self.database.get_definitions_type(id).cloned().unwrap()
             }
             ast::Name::Local(_) => panic!("What are you trying to do exaclty?"),
+        }
+    }
+
+    fn unpack_struct(&self, strct: &Type) -> Option<(Id<DefinitionId>, Vec<(String, Type)>)> {
+        match strct {
+            Type::Struct { def, fields } => Some((*def, fields.clone())),
+            Type::App {
+                typ:
+                    scheme @ box Type::Scheme {
+                        prefex: _,
+                        typ: box Type::Struct { def, .. },
+                    },
+                args,
+            } => {
+                let Type::Struct { fields, .. } =
+                    instance(&self.database, *scheme.clone(), args.clone()).unwrap()
+                else {
+                    unreachable!("Not a struct, should be a struct");
+                };
+                Some((*def, fields))
+            }
+            _ => None,
         }
     }
 }

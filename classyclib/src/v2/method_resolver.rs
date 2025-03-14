@@ -582,6 +582,11 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
     }
 
     fn to_blackboard_type(&self, ty: &Type) -> blackboard::Ty {
+        //! todo:  Technically it could be better if based on type we could
+        //! `unapply` it. Basically by looking at a struct for example or adt
+        //! Now if it was a generic application and unapply it to create
+        //! Type:App. Otherwise blackboard cannot handle instantiated
+        //! types. This applies to structs and ADTs
         match ty {
             // blackbooard does not know about basic types so we need to
             // return a type ref to them if we added them before.
