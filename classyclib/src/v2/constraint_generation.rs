@@ -700,6 +700,7 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
         self.add_expr_type(ExprId(*id), ty.clone());
         ty
     }
+
     fn resolve_type_name(&self, name: &ast::Name) -> Type {
         match name {
             ast::Name::Unresolved { path, identifier } => self
