@@ -8,19 +8,6 @@
 //    }
 //}
 
-type Generic(a) {
-    field: a
-}
-
-methods for Generic(a) {
-    method1: (std::Int) -> ()
-    method1 x { () }
-}
-
-methods for Generic(std::Int) {
-    method2: () -> std::Int
-    method2 { 1 }
-}
 
 //instance for Bar(Foo) {
 //    methods for Foo {
@@ -55,8 +42,8 @@ methods for Generic(std::Int) {
 //    foo: std::String
 //}
 
-main: () -> ()
-main {
+//main: () -> ()
+//main {
     //let foo = new Foo { 
     //    bar: 2 
     //}
@@ -73,10 +60,34 @@ main {
     //test t
 
     // But hey, methods are working
+    //let gs = new Generic { field: "hello" }
+    //let gi = new Generic { field: 1 }
+    //gi.method1(1)
+    //gi.method2()
+    //gs.method1(1)
+    //gs.method2()
+//}
+
+
+type Generic(a) {
+    field: a
+}
+
+methods for Generic(a) {
+    method1: (std::Int) -> ()
+    method1 x { () }
+}
+
+methods for Generic(std::Int) {
+    method2: () -> std::Int
+    method2 { 1 }
+}
+
+main2: () -> () 
+main2 {
     let gs = new Generic { field: "hello" }
     let gi = new Generic { field: 1 }
     gi.method1(1)
     gi.method2()
     gs.method1(1)
-    //gs.method2()
 }

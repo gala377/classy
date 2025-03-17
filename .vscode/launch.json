@@ -7,6 +7,30 @@
         {
             "type": "lldb",
             "request": "launch",
+            "name": "Debug v2 typechecking on methods example",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=classyc",
+                    "--package=classyc",
+                ],
+                "filter": {
+                    "name": "classyc",
+                    "kind": "bin"
+                },
+            },
+            "args": [
+                "--use-v2",
+                "--file=./examples/simple_methods.clss"
+            ],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "RUST_BACKTRACE": "1"
+            }
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
             "name": "Debug v2 typechecking on types example",
             "cargo": {
                 "args": [

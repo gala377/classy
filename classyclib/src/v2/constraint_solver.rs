@@ -114,9 +114,11 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
         while let Some(constraint) = self.constraints.pop_back() {
             self.solve_constraint(constraint);
         }
+        println!("Finished solving with {:?}", self.substitutions);
     }
 
     pub fn solve_constraint(&mut self, constraint: Constraint) {
+        println!("Constraint {constraint:#?}");
         match constraint {
             Constraint::Eq(Type::Bool, Type::Bool)
             | Constraint::Eq(Type::Int, Type::Int)
@@ -139,11 +141,30 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
                 self.constraints.push_back(Constraint::Eq(t, resolved));
             }
             Constraint::Eq(Type::Fresh(id1), Type::Fresh(id2)) if id1 == id2 => {}
-            Constraint::Eq(Type::Struct { def: def_1, .. }, Type::Struct { def: def_2, .. })
-                if def_1 == def_2 => {}
+            Constraint::Eq(
+                Type::Struct {
+                    def: def_1,
+                    fields: fields_1,
+                },
+                Type::Struct {
+                    def: def_2,
+                    fields: fields_2,
+                },
+            ) if def_1 == def_2 => {
+                // this still might be application of one and the second one so the types
+                // of fields could still be mismatched
+                for ((_, t1), (_, t2)) in fields_1.into_iter().zip(fields_2) {
+                    self.constraints.push_back(Constraint::Eq(t1, t2));
+                }
+            }
 
             Constraint::Eq(Type::ADT { def: def_1, .. }, Type::ADT { def: def_2, .. })
-                if def_1 == def_2 => {}
+                if def_1 == def_2 =>
+            {
+                // TODO, the same as above basically, with generic structs
+                // because of instantionations, the types of inner fields might
+                // still be different
+            }
             Constraint::Eq(Type::Tuple(t_1), Type::Tuple(t_2)) => {
                 for (t1, t2) in t_1.iter().zip(t_2.iter()) {
                     self.constraints
@@ -159,21 +180,21 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
                     .push_back(Constraint::Eq(instance(self.database, args, *typ), app2));
             }
             Constraint::Eq(app @ Type::App { .. }, t) => {
+                println!("SOLVER: (App, t) => (t, App)");
                 self.constraints.push_back(Constraint::Eq(t, app));
             }
-            Constraint::Eq(Type::Fresh(id), other @ Type::App { .. }) => {
-                self.substitutions.push((id, other.clone()));
-                self.replace_in_constraints(id, other)
-            }
             Constraint::Eq(t, Type::App { typ: app_t, args }) => {
+                println!("SOLVER: (t, App) => (t, instance(App))");
                 self.constraints
                     .push_back(Constraint::Eq(t, instance(self.database, args, *app_t)));
             }
             Constraint::Eq(Type::Fresh(id1), other) => {
+                println!("SOLVER: (fresh, t) => fresh = t");
                 self.substitutions.push((id1, other.clone()));
                 self.replace_in_constraints(id1, other);
             }
             Constraint::Eq(other, Type::Fresh(id1)) => {
+                println!("SOLVER: (t, fresh) => fres = t");
                 self.substitutions.push((id1, other.clone()));
                 self.replace_in_constraints(id1, other);
             }
@@ -430,19 +451,19 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
             // if not_fully_resolved(receiver) => {
             //    self.delayed.push(c)
             // }
-            // Constraint::HasMethod {
-            //     receiver: Type::App { typ, args },
-            //     method,
-            //     of_type,
-            //     resolution_id,
-            // } => {
-            //     self.constraints.push_back(Constraint::HasMethod {
-            //         receiver: instance(self.database, args, *typ),
-            //         method,
-            //         of_type,
-            //         resolution_id,
-            //     });
-            // }
+            Constraint::HasMethod {
+                receiver: Type::App { typ, args },
+                method,
+                of_type,
+                resolution_id,
+            } => {
+                self.constraints.push_back(Constraint::HasMethod {
+                    receiver: instance(self.database, args, *typ),
+                    method,
+                    of_type,
+                    resolution_id,
+                });
+            }
             Constraint::HasMethod {
                 receiver: Type::Scheme { prefex, typ },
                 method,

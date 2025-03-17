@@ -169,7 +169,7 @@ impl<'db, 'scope, 'sess> MethodResolver<'db, 'scope, 'sess> {
             .cloned()
             .unwrap();
         let receiver = self.database.resolve_alias_to_type(info.receiver).unwrap();
-        let receiver = self.to_blackboard_type(&receiver);
+        let receiver = self.to_blackboard_type(&self.unapply_type(&receiver));
         let methods = info
             .methods
             .iter()
@@ -184,7 +184,7 @@ impl<'db, 'scope, 'sess> MethodResolver<'db, 'scope, 'sess> {
                     Type::Scheme { prefex, typ } => (prefex, *typ),
                     t => (vec![], t),
                 };
-                let method_type = self.to_blackboard_type(&method_type);
+                let method_type = self.to_blackboard_type(&self.unapply_type(&method_type));
                 blackboard::database::Definition {
                     type_params: free_vars,
                     name: name.clone(),
@@ -227,7 +227,10 @@ impl<'db, 'scope, 'sess> MethodResolver<'db, 'scope, 'sess> {
             let info = instance_definition.kind.as_instance().cloned().unwrap();
             let GenericConstraint { class, args } = info.receiver.clone();
             let class_ref = *self.class_to_class_id.get(&class).unwrap();
-            let args = args.iter().map(|ty| self.to_blackboard_type(ty)).collect();
+            let args = args
+                .iter()
+                .map(|ty| self.to_blackboard_type(&self.unapply_type(ty)))
+                .collect();
             // ! Why instance does not have members?
             // ! Looking for methods in instances is not supported yet.
             // ! Oh well, that's fine for now I guess.
@@ -318,7 +321,10 @@ impl<'db, 'scope, 'sess> MethodResolver<'db, 'scope, 'sess> {
         let mut res = Vec::new();
         for GenericConstraint { class, args } in constraints {
             let class_ref = self.class_to_class_id.get(class).unwrap();
-            let args = args.iter().map(|ty| self.to_blackboard_type(ty)).collect();
+            let args = args
+                .iter()
+                .map(|ty| self.to_blackboard_type(&self.unapply_type(ty)))
+                .collect();
             res.push(blackboard::ty::Constraint::Class(*class_ref, args));
         }
         res
@@ -330,7 +336,10 @@ impl<'db, 'scope, 'sess> MethodResolver<'db, 'scope, 'sess> {
     ) -> FlatScope<blackboard::ty::Constraint> {
         constraints.map_all(|GenericConstraint { class, args }| {
             let class_ref = self.class_to_class_id.get(class).unwrap();
-            let args = args.iter().map(|ty| self.to_blackboard_type(ty)).collect();
+            let args = args
+                .iter()
+                .map(|ty| self.to_blackboard_type(&self.unapply_type(ty)))
+                .collect();
             blackboard::ty::Constraint::Class(*class_ref, args)
         })
     }
@@ -529,7 +538,8 @@ impl<'db, 'scope, 'sess> MethodResolver<'db, 'scope, 'sess> {
     }
 
     fn create_blackboard_query(&self, method: &str, receiver: &Type) -> blackboard::Goal {
-        let receiver_as_blackboard_type = self.to_blackboard_type(receiver);
+        let receiver = self.unapply_type(receiver);
+        let receiver_as_blackboard_type = self.to_blackboard_type(&receiver);
         let mut query = blackboard::Goal::Exists(
             1,
             Box::new(blackboard::Goal::Domain(
@@ -597,15 +607,18 @@ impl<'db, 'scope, 'sess> MethodResolver<'db, 'scope, 'sess> {
     }
 
     fn unapply_type(&self, ty: &Type) -> Type {
-        let mut unappliaer = UnapplyType {
-            database: &self.database,
-            session: &self.session,
-        };
-        unappliaer.fold_type(ty.clone()).unwrap()
+        if let Type::Struct { .. } = ty {
+            let mut unappliaer = UnapplyType {
+                database: &self.database,
+                session: &self.session,
+            };
+            unappliaer.fold_type(ty.clone()).unwrap()
+        } else {
+            ty.clone()
+        }
     }
 
     fn to_blackboard_type(&self, ty: &Type) -> blackboard::Ty {
-        let ty = self.unapply_type(ty);
         match &ty {
             // blackbooard does not know about basic types so we need to
             // return a type ref to them if we added them before.
@@ -804,25 +817,56 @@ impl UnapplyType<'_, '_> {
 impl TypeFolder for UnapplyType<'_, '_> {
     type Error = ();
 
+    fn fold_scheme(
+        &mut self,
+        prefex: Vec<crate::typecheck::type_context::Name>,
+        typ: Type,
+    ) -> Result<Type, Self::Error> {
+        // Do not process schemes
+        Ok(Type::Scheme {
+            prefex,
+            typ: Box::new(typ),
+        })
+    }
+
     fn fold_struct(
         &mut self,
         def: Id<DefinitionId>,
         fields: Vec<(String, Type)>,
     ) -> Result<Type, Self::Error> {
+        // TODO! Idea was okay but the problem is how can we know that
         let original_type = self.database.get_definitions_type(def).cloned().unwrap();
         if let typ @ Type::Scheme { prefex, .. } = &original_type {
             let args = std::iter::repeat_with(|| Type::Fresh(self.session.id_provider().next()))
                 .take(prefex.len())
                 .collect::<Vec<_>>();
+            assert_eq!(args.len(), prefex.len());
             let pattern = Type::App {
                 typ: Box::new(typ.clone()),
                 args,
             };
+            println!(
+                "Type of struct is {:?}",
+                Type::Struct {
+                    def,
+                    fields: fields.clone()
+                }
+            );
             let mut result = self
-                .unapply(pattern, Type::Struct { def, fields })
+                .unapply(
+                    pattern,
+                    Type::Struct {
+                        def,
+                        fields: fields.clone(),
+                    },
+                )
                 .into_iter()
                 .collect::<Vec<_>>();
-            assert_eq!(prefex.len(), result.len());
+            if result.is_empty() {
+                let s = crate::v2::ty::fold_struct(self, def, fields);
+                println!("Could not unapply {s:?}");
+                return s;
+            }
             result.sort_by(|(a, _), (b, _)| a.cmp(b));
             let args = result
                 .into_iter()
