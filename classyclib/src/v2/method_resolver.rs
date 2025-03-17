@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, VecDeque},
+    iter::Successors,
+};
 
 use classy_blackboard::{
     self as blackboard,
@@ -8,17 +11,26 @@ use classy_blackboard::{
     ty::Constraint,
     DomainGoal,
 };
+use classy_syntax::ast;
 
 use crate::{
     scope::{FlatScope, FlatScopeExt},
+    session::Session,
     typecheck::{ast_to_type::PrefexScope, types::DeBruijn},
     v2::{
+        instance::instance,
         knowledge::{
             self, ClassMethodBlock, DefinitionId, GenericConstraint, Id, InstanceMethodBlock,
             MethodHandle,
         },
         ty::Type,
     },
+};
+
+use super::{
+    constraint_solver::ConstraintSolver,
+    knowledge::Database,
+    ty::{self, TypeFolder},
 };
 
 #[derive(Debug)]
@@ -58,8 +70,9 @@ pub enum MethodResolutionError {
     Ambiguity { candidates: Vec<ResolvedMethod> },
 }
 
-pub struct MethodResolver<'db, 'scope> {
+pub struct MethodResolver<'db, 'scope, 'sess> {
     database: &'db knowledge::Database,
+    session: &'sess Session,
     blackboard_database: blackboard::Database,
     forest: blackboard::slg::Forest,
     // front is outermost, back is innermost
@@ -82,11 +95,12 @@ enum SyntheticData {
     FromClass(Id<DefinitionId>),
 }
 
-impl<'db, 'scope> MethodResolver<'db, 'scope> {
+impl<'db, 'scope, 'sess> MethodResolver<'db, 'scope, 'sess> {
     /// create blackboard database for the given function
     /// using definitions in scope and function constraints
     pub fn within_function(
         database: &'db knowledge::Database,
+        session: &'sess Session,
         generics_scope: &'scope PrefexScope,
         constraints_scope: FlatScope<GenericConstraint>,
         visible_instances: Vec<Id<DefinitionId>>,
@@ -99,6 +113,7 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
         let blackboard_database = blackboard::Database::new();
         let mut resolver = Self {
             database,
+            session,
             blackboard_database,
             forest: blackboard::slg::Forest::new(),
             constrainst_scope: FlatScope::new(),
@@ -581,13 +596,17 @@ impl<'db, 'scope> MethodResolver<'db, 'scope> {
         query
     }
 
+    fn unapply_type(&self, ty: &Type) -> Type {
+        let mut unappliaer = UnapplyType {
+            database: &self.database,
+            session: &self.session,
+        };
+        unappliaer.fold_type(ty.clone()).unwrap()
+    }
+
     fn to_blackboard_type(&self, ty: &Type) -> blackboard::Ty {
-        //! todo:  Technically it could be better if based on type we could
-        //! `unapply` it. Basically by looking at a struct for example or adt
-        //! Now if it was a generic application and unapply it to create
-        //! Type:App. Otherwise blackboard cannot handle instantiated
-        //! types. This applies to structs and ADTs
-        match ty {
+        let ty = self.unapply_type(ty);
+        match &ty {
             // blackbooard does not know about basic types so we need to
             // return a type ref to them if we added them before.
             Type::Struct { def, .. } => {
@@ -763,6 +782,63 @@ def union_left(candidate, other)
     case (T, TVar) -> okay
     case (T1, T2) -> recurse
 */
+
+struct UnapplyType<'db, 'sess> {
+    database: &'db Database,
+    session: &'sess Session,
+}
+
+impl UnapplyType<'_, '_> {
+    fn unapply(&self, t1: Type, t2: Type) -> HashMap<usize, Type> {
+        use crate::v2::constraint_generation::Constraint;
+        let mut solver = ConstraintSolver::for_equality_constraint(
+            self.session,
+            self.database,
+            Constraint::Eq(t1, t2),
+        );
+        solver.solve();
+        solver.substitutions.into_iter().collect()
+    }
+}
+
+impl TypeFolder for UnapplyType<'_, '_> {
+    type Error = ();
+
+    fn fold_struct(
+        &mut self,
+        def: Id<DefinitionId>,
+        fields: Vec<(String, Type)>,
+    ) -> Result<Type, Self::Error> {
+        let original_type = self.database.get_definitions_type(def).cloned().unwrap();
+        if let typ @ Type::Scheme { prefex, .. } = &original_type {
+            let args = std::iter::repeat_with(|| Type::Fresh(self.session.id_provider().next()))
+                .take(prefex.len())
+                .collect::<Vec<_>>();
+            let pattern = Type::App {
+                typ: Box::new(typ.clone()),
+                args,
+            };
+            let mut result = self
+                .unapply(pattern, Type::Struct { def, fields })
+                .into_iter()
+                .collect::<Vec<_>>();
+            assert_eq!(prefex.len(), result.len());
+            result.sort_by(|(a, _), (b, _)| a.cmp(b));
+            let args = result
+                .into_iter()
+                .map(|(_, b)| b)
+                .map(|t| self.fold_type(t))
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap();
+            Ok(Type::App {
+                typ: Box::new(typ.clone()),
+                args,
+            })
+        } else {
+            crate::v2::ty::fold_struct(self, def, fields)
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -967,8 +1043,10 @@ mod tests {
         let types = get_types(&database);
         let method_blocks = get_method_blocks(&database);
         let scope = PrefexScope::with_empty_scope();
+        let session = Session::new("test");
         let mut resolver = MethodResolver::within_function(
             &database,
+            &session,
             &scope,
             Vec::new(),
             Vec::new(),
@@ -996,8 +1074,10 @@ mod tests {
         let types = get_types(&database);
         let method_blocks = get_method_blocks(&database);
         let scope = PrefexScope::with_empty_scope();
+        let session = Session::new("test");
         let mut resolver = MethodResolver::within_function(
             &database,
+            &session,
             &scope,
             Vec::new(),
             Vec::new(),
@@ -1047,8 +1127,10 @@ mod tests {
         let types = get_types(&database);
         let method_blocks = get_method_blocks(&database);
         let scope = PrefexScope::with_empty_scope();
+        let session = Session::new("test");
         let mut resolver = MethodResolver::within_function(
             &database,
+            &session,
             &scope,
             Vec::new(),
             Vec::new(),
@@ -1101,10 +1183,12 @@ mod tests {
         let types = get_types(&database);
         let method_blocks = get_method_blocks(&database);
 
+        let session = Session::new("test");
         let mut scope = PrefexScope::with_empty_scope();
         scope.add_type_var("a");
         let mut resolver = MethodResolver::within_function(
             &database,
+            &session,
             &scope,
             Vec::new(),
             Vec::new(),
@@ -1142,10 +1226,12 @@ mod tests {
         let (database, _) = setup_database(SOURCE_3);
         let types = get_types(&database);
         let method_blocks = get_method_blocks(&database);
+        let session = Session::new("test");
 
         let scope = PrefexScope::with_empty_scope();
         let mut resolver = MethodResolver::within_function(
             &database,
+            &session,
             &scope,
             Vec::new(),
             Vec::new(),
@@ -1188,9 +1274,11 @@ mod tests {
         let classes = get_classes(&database);
         let instances = get_instances(&database);
         let scope = PrefexScope::with_empty_scope();
+        let session = Session::new("test");
 
         let mut resolver = MethodResolver::within_function(
             &database,
+            &session,
             &scope,
             Vec::new(),
             instances,
@@ -1226,6 +1314,7 @@ mod tests {
         let method_blocks = get_method_blocks(&database);
         let classes = get_classes(&database);
         let instances = get_instances(&database);
+        let session = Session::new("test");
         let mut scope = PrefexScope::with_empty_scope();
         scope.add_type_var("a");
 
@@ -1241,6 +1330,7 @@ mod tests {
         ]];
         let mut resolver = MethodResolver::within_function(
             &database,
+            &session,
             &scope,
             constraints,
             instances,
@@ -1280,8 +1370,10 @@ mod tests {
         let classes = get_classes(&database);
         let instances = get_instances(&database);
         let scope = PrefexScope::with_empty_scope();
+        let session = Session::new("test");
         let mut resolver = MethodResolver::within_function(
             &database,
+            &session,
             &scope,
             Vec::new(),
             instances,
@@ -1318,6 +1410,7 @@ mod tests {
         let method_blocks = get_method_blocks(&database);
         let classes = get_classes(&database);
         let instances = get_instances(&database);
+        let session = Session::new("test");
         let mut scope = PrefexScope::with_empty_scope();
         scope.add_type_var("a");
 
@@ -1328,6 +1421,7 @@ mod tests {
 
         let mut resolver = MethodResolver::within_function(
             &database,
+            &session,
             &scope,
             constraints,
             instances,
@@ -1350,10 +1444,12 @@ mod tests {
         let method_blocks = get_method_blocks(&database);
         let classes = get_classes(&database);
         let instances = get_instances(&database);
+        let session = Session::new("test");
         let scope = PrefexScope::with_empty_scope();
 
         let mut resolver = MethodResolver::within_function(
             &database,
+            &session,
             &scope,
             Vec::new(),
             instances,
@@ -1386,11 +1482,13 @@ mod tests {
         let method_blocks = get_method_blocks(&database);
         let classes = get_classes(&database);
         let instances = get_instances(&database);
+        let session = Session::new("test");
         let scope = PrefexScope::without_scope();
         let constraints = vec![];
 
         let mut resolver = MethodResolver::within_function(
             &database,
+            &session,
             &scope,
             constraints,
             instances,
@@ -1446,6 +1544,7 @@ mod tests {
         let method_blocks = get_method_blocks(&database);
         let classes = get_classes(&database);
         let instances = get_instances(&database);
+        let session = Session::new("test");
         let mut scope = PrefexScope::with_empty_scope();
         scope.add_type_vars(&["a".into(), "b".into()]);
         scope.new_scope();
@@ -1469,6 +1568,7 @@ mod tests {
 
         let mut resolver = MethodResolver::within_function(
             &database,
+            &session,
             &scope,
             constraints,
             instances,

@@ -58,6 +58,26 @@ pub struct ConstraintSolver<'db, 'sess> {
 }
 
 impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
+    pub fn for_equality_constraint(
+        session: &'sess Session,
+        database: &'db Database,
+        constraint: Constraint,
+    ) -> Self {
+        assert!(matches!(constraint, Constraint::Eq(_, _)));
+        ConstraintSolver::new(
+            session,
+            database,
+            vec![],
+            PrefexScope::without_scope(),
+            vec![constraint],
+            FlatScope::new(),
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        )
+    }
+
     pub fn new(
         session: &'sess Session,
         database: &'db Database,
@@ -538,6 +558,7 @@ impl<'db, 'sess> ConstraintSolver<'db, 'sess> {
         let classes_in_scope = self.classes.clone();
         let mut method_resolver = MethodResolver::within_function(
             self.database,
+            self.session,
             &self.prefex_scope,
             generic_constraints,
             instances_in_scope,
