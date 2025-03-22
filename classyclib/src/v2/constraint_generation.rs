@@ -326,13 +326,21 @@ impl<'sess, 'db> Inferer<'sess, 'db> {
                             ty
                         }
                         None => {
-                            let (def, ty) = self
+                            let (def, mut ty) = self
                                 .database
                                 .resolve_unresolved_name(&self.current_namespace, path, identifier)
                                 .map(|(def, ty)| (def, ty.clone()))
                                 .unwrap_or_else(|| {
                                     panic!("Name {path:?}::{identifier} not found in database")
                                 });
+                            if let Type::Scheme { prefex, .. } = &ty {
+                                ty = Type::App {
+                                    typ: Box::new(ty.clone()),
+                                    args: std::iter::repeat_with(|| self.new_fresh_type())
+                                        .take(prefex.len())
+                                        .collect(),
+                                }
+                            }
                             self.trivial_name_resolutions.insert(
                                 ExprId(*id),
                                 ast::Name::Global {
