@@ -1,10 +1,9 @@
 use classy_syntax::ast;
 
-use crate::{session::Session, typecheck::type_context::TypCtx, v2::knowledge::Database};
+use crate::{session::Session, v2::knowledge::Database};
 
 pub mod assign_ast_ids;
 pub mod expand_namespace;
-pub mod func_to_struct_literal;
 pub mod func_to_struct_literal_db;
 pub mod gather_runtime_functions;
 pub mod implicit_forall;
@@ -56,13 +55,4 @@ pub fn run_befor_type_context_passes(ast: ast::SourceFile, session: &Session) ->
     let ast = move_const_init::MoveConstInit::new().run(ast, session);
 
     assign_ast_ids::AssignAstIds::new().run(ast, session)
-}
-
-pub fn run_before_typechecking_passes(
-    tctx: &TypCtx,
-    ast: ast::SourceFile,
-    session: &Session,
-) -> ast::SourceFile {
-    let ast = func_to_struct_literal::PromoteCallToStructLiteral::new(tctx).run(ast, session);
-    ast
 }
