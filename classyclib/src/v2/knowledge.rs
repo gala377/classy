@@ -9,13 +9,15 @@ use std::{
 use thiserror::Error;
 
 use classy_syntax::ast::{self, FunctionDefinition, Method, Name};
-use tracing_subscriber::registry::Data;
 
 use crate::{
     id_provider::UniqueId,
+    scope::PrefexScope,
     session::Session,
-    typecheck::{ast_to_type::PrefexScope, types::DeBruijn},
-    v2::{instance::UnificationError, ty::Type},
+    v2::{
+        instance::UnificationError,
+        ty::{DeBruijn, Type},
+    },
 };
 
 pub trait DatabaseFolder: ast::Folder {
@@ -2104,7 +2106,7 @@ impl Database {
     pub fn unwrap_poly_type<'a>(
         &'a self,
         typ: &'a ast::Typ,
-    ) -> Option<(&[String], &[ast::TypeBound], &ast::Typ)> {
+    ) -> Option<(&'a [String], &'a [ast::TypeBound], &'a ast::Typ)> {
         match typ {
             ast::Typ::Poly {
                 free_variables,

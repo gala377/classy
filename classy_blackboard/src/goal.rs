@@ -148,7 +148,7 @@ pub struct Canonicalize<'ctx> {
 }
 
 impl<'ctx> Canonicalize<'ctx> {
-    pub fn new(labeling: &'ctx dyn LabelingFunction) -> Canonicalize {
+    pub fn new(labeling: &'ctx dyn LabelingFunction) -> Canonicalize<'ctx> {
         Canonicalize {
             universes: BTreeSet::new(),
             variables: HashMap::new(),

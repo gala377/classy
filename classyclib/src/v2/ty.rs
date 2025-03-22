@@ -1,7 +1,46 @@
+use std::ops::{Add, AddAssign, Sub, SubAssign};
+
 use crate::{
-    typecheck::{type_context::Name, types::DeBruijn},
+    typecheck::type_context::Name,
     v2::knowledge::{DefinitionId, Id, TypeId},
 };
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
+pub struct DeBruijn(pub isize);
+
+impl DeBruijn {
+    pub fn zero() -> Self {
+        Self(0)
+    }
+}
+
+impl Add<isize> for DeBruijn {
+    type Output = Self;
+
+    fn add(self, rhs: isize) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
+
+impl Sub<isize> for DeBruijn {
+    type Output = Self;
+
+    fn sub(self, rhs: isize) -> Self::Output {
+        Self(self.0 - rhs)
+    }
+}
+
+impl AddAssign<isize> for DeBruijn {
+    fn add_assign(&mut self, rhs: isize) {
+        self.0 += rhs;
+    }
+}
+
+impl SubAssign<isize> for DeBruijn {
+    fn sub_assign(&mut self, rhs: isize) {
+        self.0 -= rhs;
+    }
+}
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub enum Type {

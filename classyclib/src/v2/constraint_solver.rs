@@ -1,14 +1,13 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::{
-    scope::FlatScope,
+    scope::{FlatScope, PrefexScope},
     session::Session,
-    typecheck::{ast_to_type::PrefexScope, types::DeBruijn},
     v2::{
         constraint_generation::Constraint,
         knowledge::{Database, DefinitionId, GenericConstraint, Id, TypeId},
         method_resolver::{MethodResolutionError, MethodResolver, ResolvedMethod},
-        ty::{Type, TypeFolder},
+        ty::{DeBruijn, Type, TypeFolder},
     },
 };
 

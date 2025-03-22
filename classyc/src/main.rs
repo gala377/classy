@@ -1,21 +1,9 @@
-use std::{
-    collections::{HashMap, HashSet},
-    mem::size_of,
-    path::Path,
-};
+use std::{collections::HashMap, path::Path};
 
 use clap::Parser;
-use colored::Colorize;
 
-use classy_syntax::ast::{self, Visitor};
-
-use classyclib::{
-    code::constant_pool::ConstantPool,
-    v2::knowledge::{Definition, DefinitionId, DefinitionKind, LocalId, PackageInfo, TypeId},
-};
-use classyvm::{
-    mem::{page::Page, ptr::NonNullPtr},
-    vm::{self, Vm},
+use classyclib::v2::knowledge::{
+    Definition, DefinitionId, DefinitionKind, LocalId, PackageInfo, TypeId,
 };
 
 const PAGE_SIZE: usize = 1 << 12;

@@ -3,9 +3,8 @@ use std::collections::{HashMap, HashSet};
 use classy_syntax::ast::{self, Pattern};
 
 use crate::{
-    scope::{FlatScope, FlatScopeExt},
+    scope::{FlatScope, FlatScopeExt, PrefexScope},
     session::Session,
-    typecheck::ast_to_type::PrefexScope,
     v2::{
         constraint_solver::ConstraintSolver,
         instance::instance,

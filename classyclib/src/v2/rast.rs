@@ -8,19 +8,17 @@ use classy_sexpr_proc_macro::sexpr;
 use classy_syntax::ast::{self, transformer::AstExprTransformer};
 
 use crate::{
-    scope::{FlatScope, FlatScopeExt},
-    typecheck::ast_to_type::PrefexScope,
-    v2::knowledge::{InstanceInfo, MethodBlockInfo},
-};
-
-use super::{
-    constraint_generation::ExprId,
-    constraint_solver::CallResolution,
-    knowledge::{
-        Database, DefinitionId, DefinitionKind, GenericConstraint, Id, LocalId, PackageId, TypeId,
-        CURRENT_PACKAGE_ID,
+    scope::{FlatScope, FlatScopeExt, PrefexScope},
+    v2::{
+        constraint_generation::ExprId,
+        constraint_solver::CallResolution,
+        knowledge::{
+            Database, DefinitionId, DefinitionKind, GenericConstraint, Id, LocalId, PackageId,
+            TypeId, CURRENT_PACKAGE_ID,
+        },
+        knowledge::{InstanceInfo, MethodBlockInfo},
+        ty::Type,
     },
-    ty::Type,
 };
 
 #[derive(Clone, Debug)]

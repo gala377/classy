@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, VecDeque},
-    iter::Successors,
-};
+use std::collections::HashMap;
 
 use classy_blackboard::{
     self as blackboard,
@@ -11,26 +8,18 @@ use classy_blackboard::{
     ty::Constraint,
     DomainGoal,
 };
-use classy_syntax::ast;
 
 use crate::{
-    scope::{FlatScope, FlatScopeExt},
+    scope::{FlatScope, FlatScopeExt, PrefexScope},
     session::Session,
-    typecheck::{ast_to_type::PrefexScope, types::DeBruijn},
     v2::{
-        instance::instance,
+        constraint_solver::ConstraintSolver,
         knowledge::{
-            self, ClassMethodBlock, DefinitionId, GenericConstraint, Id, InstanceMethodBlock,
-            MethodHandle,
+            self, ClassMethodBlock, Database, DefinitionId, GenericConstraint, Id,
+            InstanceMethodBlock, MethodHandle,
         },
-        ty::Type,
+        ty::{DeBruijn, Type, TypeFolder},
     },
-};
-
-use super::{
-    constraint_solver::ConstraintSolver,
-    knowledge::Database,
-    ty::{self, TypeFolder},
 };
 
 #[derive(Debug)]

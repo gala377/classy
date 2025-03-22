@@ -4,10 +4,9 @@ use thiserror::Error;
 
 use crate::{
     id_provider::UniqueId,
-    typecheck::types::DeBruijn,
     v2::{
         knowledge::{Database, Id, QueryError, TypeId},
-        ty::{Type, TypeFolder},
+        ty::{DeBruijn, Type, TypeFolder},
     },
 };
 
