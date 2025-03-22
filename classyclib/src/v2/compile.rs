@@ -99,6 +99,30 @@ impl Compiler {
         self.parse_source_files()?;
         println!("🦀After parsing passes");
         self.after_parsing_passes();
+        println!("🦀Preparing database");
+        self.prepare_database();
+        println!("🦀Running after database ready passes");
+        self.after_type_database_passes();
+        println!("🦀Running V2... typechecking, implicit arguments and call resolution");
+        let typechecking_result = self.typecheck();
+        println!("🦀Building RAST (Resolved Abstract Syntax Tree)");
+        let rast = build_rast(
+            &self.database,
+            &typechecking_result.expr_types,
+            &typechecking_result.call_resolutions,
+            &typechecking_result.name_resolutions,
+        );
+        println!("🦀Printing RAST");
+        classy_sexpr::pretty_print(&rast.to_sexpr());
+        println!("🐋 ... Running some passes on rast, maybe autoboxing?");
+        println!("🐋 ... Building cfg?");
+        println!("🐋 ... Doing cfg optimizations like dead code eliminations and so on?");
+        println!("🐋 ... Building IR I guess?");
+        //render::render_db(&self.database, "./render");
+        Ok(())
+    }
+
+    fn prepare_database(&mut self) {
         println!("🦀Populating db definitions");
         self.populate_db_definitions();
         println!("🦀Creating type and class stumps");
@@ -118,28 +142,9 @@ impl Compiler {
         // can go anywhere before typechecking
         println!("🦀Populating primitive types");
         self.populate_primitive_types();
-        println!("🦀Fold database");
-        self.fold_database();
-        println!("🦀Typechecking");
-        let typechecking_result = self.typecheck();
-        println!("🦀Building RAST");
-        let rast = build_rast(
-            &self.database,
-            &typechecking_result.expr_types,
-            &typechecking_result.call_resolutions,
-            &typechecking_result.name_resolutions,
-        );
-        println!("🦀Printing RAST");
-        classy_sexpr::pretty_print(&rast.to_sexpr());
-        //render::render_db(&self.database, "./render");
-        // generate constraints for all functions and methods in the database
-        // solve the constraints
-        // create resolved syntax tree for function and methods calls
-        // do more lowering later.
-        Ok(())
     }
 
-    pub fn fold_database(&mut self) {
+    pub fn after_type_database_passes(&mut self) {
         let commit = {
             let resolver = ast_passes::resolve_struct_literal_names::ResolveStructLiteralNames::new(
                 &self.database,
